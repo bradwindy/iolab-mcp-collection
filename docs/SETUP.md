@@ -120,6 +120,7 @@ page renders each command with the token missing:
 ```bash
 cd apps/portal
 printf '%s' "<your MCP_SHARED_TOKEN>" | pnpm exec wrangler secret put MCP_SHARED_TOKEN
+printf '%s' "<your ENCRYPTION_KEY>"   | pnpm exec wrangler secret put ENCRYPTION_KEY
 printf '%s' "yourdomain.com"          | pnpm exec wrangler secret put BASE_DOMAIN
 printf '%s' "you@yourdomain.com"      | pnpm exec wrangler secret put ACCESS_EMAIL
 cd ../..
