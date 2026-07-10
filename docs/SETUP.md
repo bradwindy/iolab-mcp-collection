@@ -112,13 +112,17 @@ printf '%s' "https://mcp.yourdomain.com" | pnpm exec wrangler secret put PORTAL_
 cd ../..
 ```
 
-The portal needs `ENCRYPTION_KEY`, `BASE_DOMAIN`, and `ACCESS_EMAIL`, but not `MCP_SHARED_TOKEN` or
-`PORTAL_URL` (it has no `/mcp` endpoint to gate, and doesn't link to itself):
+The portal needs `ENCRYPTION_KEY`, `MCP_SHARED_TOKEN`, `BASE_DOMAIN`, and `ACCESS_EMAIL`, but not
+`PORTAL_URL` (it has no `/mcp` endpoint to gate, and doesn't link to itself). It reads `MCP_SHARED_TOKEN`
+to render the live, ready-to-paste `claude mcp add` commands on its **Connect** page — without it, that
+page renders each command with the token missing:
 
 ```bash
 cd apps/portal
-printf '%s' "yourdomain.com"     | pnpm exec wrangler secret put BASE_DOMAIN
-printf '%s' "you@yourdomain.com" | pnpm exec wrangler secret put ACCESS_EMAIL
+printf '%s' "<your MCP_SHARED_TOKEN>" | pnpm exec wrangler secret put MCP_SHARED_TOKEN
+printf '%s' "<your ENCRYPTION_KEY>"   | pnpm exec wrangler secret put ENCRYPTION_KEY
+printf '%s' "yourdomain.com"          | pnpm exec wrangler secret put BASE_DOMAIN
+printf '%s' "you@yourdomain.com"      | pnpm exec wrangler secret put ACCESS_EMAIL
 cd ../..
 ```
 
