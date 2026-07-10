@@ -2,7 +2,7 @@ import { z } from "zod";
 import { attribution, jsonResult, missingCredentialError, toolError, type ToolTextResult } from "@nz-mcp/mcp-kit";
 import { buildBasemapUrl, supportsVectorStyle } from "../clients/linzBasemaps.js";
 import { MissingCredentialError, requireLinzCredential } from "../credentials.js";
-import { PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { SERVER_SLUG } from "../constants.js";
 
 export const getBasemapStyleUrlInputShape = {
   tileset: z
@@ -85,7 +85,7 @@ export async function getBasemapStyleUrlHandler(rawInput: unknown, env: Env): Pr
     });
   } catch (error) {
     if (error instanceof MissingCredentialError) {
-      return missingCredentialError(SERVER_SLUG, error.keyName, PORTAL_URL);
+      return missingCredentialError(SERVER_SLUG, error.keyName, env.PORTAL_URL);
     }
     throw error;
   }

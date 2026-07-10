@@ -4,5 +4,5 @@ import { renderConnect } from "../views/connect.js";
 
 export async function getConnect(c: Context<{ Bindings: Env }>) {
   c.header("Cache-Control", "no-store");
-  return c.html(await renderConnect(SERVERS, c.env.MCP_SHARED_TOKEN));
+  return c.html(await renderConnect(SERVERS, c.env.MCP_SHARED_TOKEN, c.env.BASE_DOMAIN, c.env.ACCESS_EMAIL));
 }

@@ -1,4 +1,3 @@
-export const PORTAL_URL = "https://mcp.example.invalid";
 
 /** Must exactly match wrangler.jsonc's top-level "name" — the credential store's partition key. */
 export const SERVER_SLUG = "nz-geo-mcp";

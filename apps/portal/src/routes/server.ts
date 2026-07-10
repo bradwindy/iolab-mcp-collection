@@ -19,7 +19,7 @@ export async function getServerPage(c: ServerRouteContext) {
   );
   const updatedKey = c.req.query("updated") ?? null;
 
-  return c.html(await renderServerPage(entry, statuses, updatedKey));
+  return c.html(await renderServerPage(entry, statuses, updatedKey, c.env.BASE_DOMAIN));
 }
 
 export async function postServerCredential(c: ServerRouteContext) {

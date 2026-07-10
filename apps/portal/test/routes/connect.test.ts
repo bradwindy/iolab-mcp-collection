@@ -11,7 +11,7 @@ describe("GET /connect", () => {
     expect(res.status).toBe(200);
     for (const server of SERVERS) {
       expect(body).toContain(
-        `claude mcp add --transport http ${server.slug} https://${server.subdomain}/mcp --header "Authorization: Bearer live-secret-token"`,
+        `claude mcp add --transport http ${server.slug} https://${server.subdomain}.example.com/mcp --header "Authorization: Bearer live-secret-token"`,
       );
     }
   });

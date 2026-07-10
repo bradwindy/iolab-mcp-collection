@@ -1,6 +1,6 @@
 import { getCredential } from "@nz-mcp/credentials";
 import { missingCredentialError, type ToolTextResult } from "@nz-mcp/mcp-kit";
-import { CREDENTIAL_SERVER_SLUG, PORTAL_URL, SUBSCRIPTION_KEY_NAME } from "./constants.js";
+import { CREDENTIAL_SERVER_SLUG, SUBSCRIPTION_KEY_NAME } from "./constants.js";
 
 export type CredentialResolution =
   | { ok: true; subscriptionKey: string }
@@ -18,7 +18,7 @@ export async function resolveSubscriptionKey(env: Env): Promise<CredentialResolu
     env.ENCRYPTION_KEY,
   );
   if (!subscriptionKey) {
-    return { ok: false, error: missingCredentialError(CREDENTIAL_SERVER_SLUG, SUBSCRIPTION_KEY_NAME, PORTAL_URL) };
+    return { ok: false, error: missingCredentialError(CREDENTIAL_SERVER_SLUG, SUBSCRIPTION_KEY_NAME, env.PORTAL_URL) };
   }
   return { ok: true, subscriptionKey };
 }

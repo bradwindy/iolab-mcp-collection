@@ -2,7 +2,6 @@
 // stored keys by this server slug.
 export const SERVER_SLUG = "nz-environment-mcp";
 
-export const PORTAL_URL = "https://mcp.example.invalid";
 
 // NIWA's developer portal ("developer.niwa.co.nz") issues one API key per registered
 // "app", and that single app can be subscribed to multiple API products (Tide, UV,

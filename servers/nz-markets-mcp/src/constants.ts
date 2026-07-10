@@ -15,4 +15,3 @@ export const EA_ICP_API_KEY = "EA_ICP_API_KEY";
  * gates the real-time dispatch API). See EA_ICP_API_KEY for why this is a separate key. */
 export const EA_DISPATCH_API_KEY = "EA_DISPATCH_API_KEY";
 
-export const PORTAL_URL = "https://mcp.example.invalid";

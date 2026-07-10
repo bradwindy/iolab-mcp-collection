@@ -11,7 +11,7 @@ import {
 } from "@nz-mcp/mcp-kit";
 import { getTideData } from "../clients/niwaTides.js";
 import { getNiwaApiKey } from "../clients/niwaCredentials.js";
-import { NIWA_API_KEY_NAME, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { NIWA_API_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 export const getTideForecastInputShape = {
   lat: z.number().min(-90).max(90).describe("Latitude in decimal degrees (negative for the Southern Hemisphere)."),
@@ -46,7 +46,7 @@ export async function getTideForecastHandler(rawInput: unknown, env: Env): Promi
   const input = inputSchema.parse(rawInput);
 
   const apiKey = await getNiwaApiKey(env);
-  if (!apiKey) return missingCredentialError(SERVER_SLUG, NIWA_API_KEY_NAME, PORTAL_URL);
+  if (!apiKey) return missingCredentialError(SERVER_SLUG, NIWA_API_KEY_NAME, env.PORTAL_URL);
 
   try {
     const cacheKey = `niwa:tides:${input.lat}:${input.long}:${input.days}:${input.start_date ?? ""}:${input.datum ?? ""}`;

@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://data.tepapa.govt.nz/collection";
 const SOURCE = "Te Papa Collections API";
-const USER_AGENT = "nz-mcp-collection/nz-culture-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-culture-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 /**
  * Field superset requested for concise search hits. Confirmed live (via a short-lived guest

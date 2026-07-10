@@ -35,15 +35,17 @@ export function renderServerPage(
   entry: ServerManifestEntry,
   statuses: readonly CredentialStatus[],
   updatedKey: string | null,
+  baseDomain: string,
 ) {
   const statusByKey = new Map(statuses.map((status) => [status.keyName, status]));
+  const url = `https://${entry.subdomain}.${baseDomain}/mcp`;
 
   return layout(
     entry.slug,
     html`
       <p><a href="/">&larr; Back to dashboard</a></p>
       <h1>${entry.slug}</h1>
-      <p class="url"><a href="https://${entry.subdomain}/mcp">https://${entry.subdomain}/mcp</a></p>
+      <p class="url"><a href="${url}">${url}</a></p>
       ${updatedKey ? html`<p class="flash">Saved <code>${updatedKey}</code>.</p>` : ""}
       ${
         entry.credentialKeys.length === 0

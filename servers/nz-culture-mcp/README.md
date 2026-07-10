@@ -35,8 +35,8 @@ DigitalNZ needs no signup at all. Te Papa does:
    Registration issues a permanent key sent to the registered email (no numeric quota is published;
    the API enforces a **10 requests/second** rate limit and returns HTTP 429 if exceeded — this
    server's client already backs off and retries on 429).
-3. Store the issued key as this server's `TE_PAPA_API_KEY` credential via the portal at
-   `https://mcp.example.invalid/servers/nz-culture-mcp`. Any tool call made before a key is stored returns
+3. Store the issued key as this server's `TE_PAPA_API_KEY` credential via your deployed portal at
+   `<your PORTAL_URL>/servers/nz-culture-mcp`. Any tool call made before a key is stored returns
    an actionable `missingCredentialError` pointing back to that portal URL.
 
 ## Example research questions

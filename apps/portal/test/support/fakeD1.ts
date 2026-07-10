@@ -62,10 +62,20 @@ export class FakeD1 implements D1LikeDatabase {
 /** Build a test Env. Loosely typed on purpose — Hono's `app.request(path, init, env)`
  * accepts `Bindings | {}`, so any shape is accepted; TypeScript inside route handlers still
  * sees the real `Env` type. */
-export function testEnv(overrides: { credentialsDb?: FakeD1; encryptionKey?: string; sharedToken?: string } = {}) {
+export function testEnv(
+  overrides: {
+    credentialsDb?: FakeD1;
+    encryptionKey?: string;
+    sharedToken?: string;
+    baseDomain?: string;
+    accessEmail?: string;
+  } = {},
+) {
   return {
     CREDENTIALS_DB: overrides.credentialsDb ?? new FakeD1(),
     ENCRYPTION_KEY: overrides.encryptionKey ?? "NOnV4EUJ4r07rvPzrNy6SGdvJPCoAJQL+j7i2004jpo=",
     MCP_SHARED_TOKEN: overrides.sharedToken ?? "test-shared-token",
+    BASE_DOMAIN: overrides.baseDomain ?? "example.com",
+    ACCESS_EMAIL: overrides.accessEmail ?? "you@example.com",
   };
 }

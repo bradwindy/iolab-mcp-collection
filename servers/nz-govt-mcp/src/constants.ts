@@ -3,4 +3,3 @@
 export const SCHOOLS_DIRECTORY_RESOURCE_ID = "4b292323-9fcc-41f8-814b-3c7b19cf14b3";
 export const ECE_DIRECTORY_RESOURCE_ID = "a9d65b07-8483-4b05-bdfd-d2abe4f38827";
 
-export const PORTAL_URL = "https://mcp.example.invalid";

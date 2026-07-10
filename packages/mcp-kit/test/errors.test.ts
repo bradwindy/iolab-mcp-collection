@@ -35,9 +35,9 @@ describe("upstreamError", () => {
 
 describe("missingCredentialError", () => {
   it("points at the portal page for the specific server", () => {
-    const result = missingCredentialError("nz-geo-mcp", "LINZ_API_KEY", "https://mcp.example.invalid");
+    const result = missingCredentialError("nz-geo-mcp", "LINZ_API_KEY", "https://mcp.example.com");
     expect(result.content[0]?.text).toBe(
-      "The upstream API key 'LINZ_API_KEY' is not configured for nz-geo-mcp. Set it at https://mcp.example.invalid/servers/nz-geo-mcp, then retry.",
+      "The upstream API key 'LINZ_API_KEY' is not configured for nz-geo-mcp. Set it at https://mcp.example.com/servers/nz-geo-mcp, then retry.",
     );
   });
 });

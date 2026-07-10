@@ -4,4 +4,3 @@ export const SERVER_SLUG = "nz-culture-mcp";
 
 export const TE_PAPA_API_KEY = "TE_PAPA_API_KEY";
 
-export const PORTAL_URL = "https://mcp.example.invalid";

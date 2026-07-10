@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://www.odata.charities.govt.nz";
 const SOURCE = "Charities Services Open Data";
-const USER_AGENT = "nz-mcp-collection/nz-govt-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-govt-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 export type CharityRecord = {
   OrganisationId: number;

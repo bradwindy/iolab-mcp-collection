@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://data.linz.govt.nz/services/query/v1/vector.json";
 const SOURCE = "LINZ Data Service";
-const USER_AGENT = "nz-mcp-collection/nz-geo-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-geo-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 export type LdsGeometry = { type?: string; coordinates?: unknown };
 

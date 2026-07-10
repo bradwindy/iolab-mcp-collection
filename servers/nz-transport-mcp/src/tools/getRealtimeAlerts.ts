@@ -23,7 +23,7 @@ import {
   type GtfsRtTranslatedString,
 } from "../clients/aucklandTransport.js";
 import { getAtSubscriptionKey } from "../clients/credentialStore.js";
-import { AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { AT_SUBSCRIPTION_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 const MAX_LIMIT = 100;
 
@@ -95,7 +95,7 @@ export async function getRealtimeAlertsHandler(rawInput: unknown, env: Env): Pro
   const input = inputSchema.parse(rawInput);
 
   const subscriptionKey = await getAtSubscriptionKey(env);
-  if (!subscriptionKey) return missingCredentialError(SERVER_SLUG, AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL);
+  if (!subscriptionKey) return missingCredentialError(SERVER_SLUG, AT_SUBSCRIPTION_KEY_NAME, env.PORTAL_URL);
 
   try {
     const feed = await cached(env.MCP_CACHE, "at:service-alerts", CACHE_TTL.NEAR_REALTIME, () =>

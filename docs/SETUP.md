@@ -51,7 +51,7 @@ Now update **every** `wrangler.jsonc` under `servers/*/` and `apps/portal/` — 
 A quick way to see every place that needs editing:
 
 ```bash
-grep -rn "bac29680ac6a419284c9a522b241ae8a\|5c6248bf-f226-46b0-aa2b-a6a9bc2ca790\|mcp.example.invalid" \
+grep -rn "bac29680ac6a419284c9a522b241ae8a\|5c6248bf-f226-46b0-aa2b-a6a9bc2ca790\|yourdomain.com" \
   servers/*/wrangler.jsonc apps/portal/wrangler.jsonc
 ```
 
@@ -69,6 +69,15 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
 Save both somewhere safe (a password manager, not a file in this repo) — you'll paste them in the next
 step, once per Worker.
+
+Three more secrets carry your domain and identity — deliberately never written to any file in this
+repo (not even `wrangler.jsonc`), since a fork's domain/email are that operator's own:
+- `PORTAL_URL` (every server): the full URL of your deployed portal, e.g. `https://mcp.yourdomain.com`
+  — used only to build the link in "missing credential" error messages.
+- `BASE_DOMAIN` (portal only): your bare base domain, e.g. `yourdomain.com` — combined with each
+  server's manifest entry to render live links on the dashboard and Connect page.
+- `ACCESS_EMAIL` (portal only): your email — shown as display text on the Connect page as a reminder
+  of who Cloudflare Access allows through; not itself an access control.
 
 ## 4. Set up Cloudflare Access for the portal
 
@@ -93,15 +102,25 @@ cd servers/nz-govt-mcp   # (or apps/portal)
 pnpm exec wrangler types      # generates worker-configuration.d.ts from your wrangler.jsonc
 pnpm exec wrangler deploy
 
-# Set secrets (every Worker needs MCP_SHARED_TOKEN; every Worker EXCEPT nz-govt-mcp
-# also needs ENCRYPTION_KEY, since nz-govt-mcp is the one server needing no upstream credentials):
+# Set secrets (every Worker needs MCP_SHARED_TOKEN and PORTAL_URL; every Worker EXCEPT
+# nz-govt-mcp also needs ENCRYPTION_KEY, since nz-govt-mcp is the one server needing no
+# upstream credentials):
 printf '%s' "<your MCP_SHARED_TOKEN>" | pnpm exec wrangler secret put MCP_SHARED_TOKEN
 printf '%s' "<your ENCRYPTION_KEY>"  | pnpm exec wrangler secret put ENCRYPTION_KEY
+printf '%s' "https://mcp.yourdomain.com" | pnpm exec wrangler secret put PORTAL_URL
 
 cd ../..
 ```
 
-The portal needs `ENCRYPTION_KEY` but not `MCP_SHARED_TOKEN` (it has no `/mcp` endpoint to gate).
+The portal needs `ENCRYPTION_KEY`, `BASE_DOMAIN`, and `ACCESS_EMAIL`, but not `MCP_SHARED_TOKEN` or
+`PORTAL_URL` (it has no `/mcp` endpoint to gate, and doesn't link to itself):
+
+```bash
+cd apps/portal
+printf '%s' "yourdomain.com"     | pnpm exec wrangler secret put BASE_DOMAIN
+printf '%s' "you@yourdomain.com" | pnpm exec wrangler secret put ACCESS_EMAIL
+cd ../..
+```
 
 ### If a custom domain's certificate gets stuck on "pending validation"
 

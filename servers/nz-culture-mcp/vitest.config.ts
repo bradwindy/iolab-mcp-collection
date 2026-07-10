@@ -6,7 +6,7 @@ export default defineConfig({
     cloudflareTest({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
-        bindings: { MCP_SHARED_TOKEN: "test-shared-token" },
+        bindings: { MCP_SHARED_TOKEN: "test-shared-token", PORTAL_URL: "https://mcp.example.com" },
       },
     }),
   ],

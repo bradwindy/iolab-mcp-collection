@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://nzxplorer.co.nz/api/v1";
 const SOURCE = "NZXplorer API";
-const USER_AGENT = "nz-mcp-collection/nz-markets-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-markets-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 /**
  * Free tier is 10 requests/minute (confirmed live: unauthenticated calls return

@@ -15,7 +15,7 @@ import {
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
 import { getCredential } from "@nz-mcp/credentials";
-import { NZXPLORER_API_KEY, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { NZXPLORER_API_KEY, SERVER_SLUG } from "../constants.js";
 import { searchAnnouncements as searchAnnouncementsClient } from "../clients/nzxplorer.js";
 
 /** Confirmed against the `type` query parameter description in NZXplorer's published OpenAPI spec. */
@@ -88,7 +88,7 @@ export async function searchMarketAnnouncementsHandler(rawInput: unknown, env: E
   const input = inputSchema.parse(rawInput);
 
   const apiKey = await getCredential(env.CREDENTIALS_DB, SERVER_SLUG, NZXPLORER_API_KEY, env.ENCRYPTION_KEY);
-  if (!apiKey) return missingCredentialError(SERVER_SLUG, NZXPLORER_API_KEY, PORTAL_URL);
+  if (!apiKey) return missingCredentialError(SERVER_SLUG, NZXPLORER_API_KEY, env.PORTAL_URL);
 
   if (!input.query && !input.ticker) {
     return toolError(

@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://api.geonet.org.nz";
 const SOURCE = "GeoNet API";
-const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 const GEOJSON_ACCEPT = "application/vnd.geo+json;version=2";
 
 type GeoJsonFeature<P> = {

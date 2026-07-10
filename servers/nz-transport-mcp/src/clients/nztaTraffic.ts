@@ -13,7 +13,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 const BASE = "https://trafficnz.info/service/traffic/rest/4";
 export const SOURCE = "Waka Kotahi NZTA Traffic and Travel API";
 export const CAMERA_IMAGE_HOST = "https://trafficnz.info";
-const USER_AGENT = "nz-mcp-collection/nz-transport-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-transport-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 export type NztaRegionRef = { id?: string; name?: string };
 export type NztaWayRef = { id?: string; name?: string };

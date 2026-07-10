@@ -11,7 +11,7 @@ import {
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
 import { getCredential } from "@nz-mcp/credentials";
-import { NZXPLORER_API_KEY, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { NZXPLORER_API_KEY, SERVER_SLUG } from "../constants.js";
 import { getCompany as getCompanyClient } from "../clients/nzxplorer.js";
 
 export const getCompanyInputShape = {
@@ -64,7 +64,7 @@ export async function getCompanyHandler(rawInput: unknown, env: Env): Promise<To
   const ticker = input.ticker.trim().toUpperCase();
 
   const apiKey = await getCredential(env.CREDENTIALS_DB, SERVER_SLUG, NZXPLORER_API_KEY, env.ENCRYPTION_KEY);
-  if (!apiKey) return missingCredentialError(SERVER_SLUG, NZXPLORER_API_KEY, PORTAL_URL);
+  if (!apiKey) return missingCredentialError(SERVER_SLUG, NZXPLORER_API_KEY, env.PORTAL_URL);
 
   try {
     const data = await cached(env.MCP_CACHE, `nz-markets:nzxplorer:company:${ticker}`, CACHE_TTL.SLOW_MOVING, () =>

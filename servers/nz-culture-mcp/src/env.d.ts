@@ -7,6 +7,11 @@ declare global {
     /** Shared bearer token every MCP client must present. Set via `wrangler secret put MCP_SHARED_TOKEN`. */
     MCP_SHARED_TOKEN: string;
     /**
+     * Base URL of the operator's deployed credential portal, used only to build the
+     * actionable link in missing-credential error messages. Set via `wrangler secret put PORTAL_URL`.
+     */
+    PORTAL_URL: string;
+    /**
      * Base64-encoded 32-byte AES-256-GCM key used to encrypt/decrypt credential values stored in
      * CREDENTIALS_DB (see @nz-mcp/credentials). Set via `wrangler secret put ENCRYPTION_KEY`.
      * Generate one with `generateEncryptionKey()` from @nz-mcp/credentials — it must be the SAME

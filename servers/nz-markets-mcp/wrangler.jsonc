@@ -16,6 +16,6 @@
       "database_id": "5c6248bf-f226-46b0-aa2b-a6a9bc2ca790",
     },
   ],
-  "routes": [{ "pattern": "nz-markets.mcp.example.invalid", "custom_domain": true }],
+  "routes": [{ "pattern": "nz-markets.mcp.yourdomain.com", "custom_domain": true }],
   "observability": { "enabled": true },
 }

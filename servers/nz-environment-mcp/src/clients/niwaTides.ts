@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://api.niwa.co.nz/tides";
 const SOURCE = "NIWA Tide Forecasting API";
-const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 export type TideValue = { time: string; value: number };
 export type TideDataResponse = { values: TideValue[] };

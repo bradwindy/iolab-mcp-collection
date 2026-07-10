@@ -9,6 +9,6 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["NzGovtMcp"] }],
   "kv_namespaces": [{ "binding": "MCP_CACHE", "id": "bac29680ac6a419284c9a522b241ae8a" }],
-  "routes": [{ "pattern": "nz-govt.mcp.example.invalid", "custom_domain": true }],
+  "routes": [{ "pattern": "nz-govt.mcp.yourdomain.com", "custom_domain": true }],
   "observability": { "enabled": true },
 }

@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://api.niwa.co.nz/uv";
 const SOURCE = "NIWA UV API";
-const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 /**
  * Fetch the raw UV forecast JSON for a location.

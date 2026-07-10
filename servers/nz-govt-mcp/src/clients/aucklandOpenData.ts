@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://data-aucklandcouncil.opendata.arcgis.com/api/search/v1";
 const SOURCE = "Auckland Council Open Data";
-const USER_AGENT = "nz-mcp-collection/nz-govt-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-govt-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 export type OpenDataItem = {
   id: string;

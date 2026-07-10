@@ -1,2 +1,5 @@
 # Copy to .dev.vars for local `wrangler dev`. Never commit the real file.
 MCP_SHARED_TOKEN=replace-with-a-long-random-string
+
+# Base URL of your deployed portal, used only in missing-credential error message links.
+PORTAL_URL=https://mcp.example.com

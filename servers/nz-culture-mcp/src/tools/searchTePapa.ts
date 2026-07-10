@@ -14,7 +14,7 @@ import {
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
 import { getCredential } from "@nz-mcp/credentials";
-import { PORTAL_URL, SERVER_SLUG, TE_PAPA_API_KEY } from "../constants.js";
+import { SERVER_SLUG, TE_PAPA_API_KEY } from "../constants.js";
 import { searchTePapa as searchTePapaClient, type TePapaRecord } from "../clients/tepapa.js";
 
 export const searchTePapaInputShape = {
@@ -81,7 +81,7 @@ export async function searchTePapaHandler(rawInput: unknown, env: Env): Promise<
   const input = inputSchema.parse(rawInput);
 
   const apiKey = await getCredential(env.CREDENTIALS_DB, SERVER_SLUG, TE_PAPA_API_KEY, env.ENCRYPTION_KEY);
-  if (!apiKey) return missingCredentialError(SERVER_SLUG, TE_PAPA_API_KEY, PORTAL_URL);
+  if (!apiKey) return missingCredentialError(SERVER_SLUG, TE_PAPA_API_KEY, env.PORTAL_URL);
 
   try {
     const { results, totalCount } = await searchTePapaClient({

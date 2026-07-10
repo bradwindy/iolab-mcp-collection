@@ -17,7 +17,7 @@ import {
 } from "@nz-mcp/mcp-kit";
 import { getAllStops, SOURCE, type GtfsStopAttributes } from "../clients/aucklandTransport.js";
 import { getAtSubscriptionKey } from "../clients/credentialStore.js";
-import { AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { AT_SUBSCRIPTION_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 const MAX_LIMIT = 100;
 
@@ -61,7 +61,7 @@ export async function searchGtfsStopsHandler(rawInput: unknown, env: Env): Promi
   const input = inputSchema.parse(rawInput);
 
   const subscriptionKey = await getAtSubscriptionKey(env);
-  if (!subscriptionKey) return missingCredentialError(SERVER_SLUG, AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL);
+  if (!subscriptionKey) return missingCredentialError(SERVER_SLUG, AT_SUBSCRIPTION_KEY_NAME, env.PORTAL_URL);
 
   try {
     // The stop list is effectively static day-to-day; cache the full fetch for 24h so repeated

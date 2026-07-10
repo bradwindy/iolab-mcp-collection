@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://service.geonet.org.nz/fdsnws";
 const SOURCE = "GeoNet FDSN Web Services";
-const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 /** [west, south, east, north] in decimal degrees. */
 export type BoundingBox = [number, number, number, number];

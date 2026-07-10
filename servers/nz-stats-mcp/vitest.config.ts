@@ -8,6 +8,7 @@ export default defineConfig({
       miniflare: {
         bindings: {
           MCP_SHARED_TOKEN: "test-shared-token",
+          PORTAL_URL: "https://mcp.example.com",
           // Test-only 32-byte AES-256-GCM key (base64), generated with generateEncryptionKey().
           // Never use this value outside of tests.
           ENCRYPTION_KEY: "I8nrTRRjuNtTIMGe1j5pyd5B1BekIrej5XbMrmSFFEI=",

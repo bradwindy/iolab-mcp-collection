@@ -44,7 +44,7 @@ research questions it can answer.
                     │   gates the portal only                  │
                     └───────────────────┬───────────────────────┘
                                         │
-                              https://mcp.example.invalid
+                            https://mcp.yourdomain.com
                     ┌───────────────────▼───────────────────────┐
                     │              apps/portal                   │
                     │  dashboard · per-server credential forms   │
@@ -90,7 +90,7 @@ research questions it can answer.
 Once deployed, add any server to Claude Code as a remote MCP server with a custom header:
 
 ```bash
-claude mcp add --transport http nz-transport-mcp https://nz-transport.mcp.example.invalid/mcp \
+claude mcp add --transport http nz-transport-mcp https://nz-transport.mcp.yourdomain.com/mcp \
   --header "Authorization: Bearer <your MCP_SHARED_TOKEN>"
 ```
 

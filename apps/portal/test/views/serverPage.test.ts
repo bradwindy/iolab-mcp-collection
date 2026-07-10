@@ -4,7 +4,7 @@ import type { ServerManifestEntry } from "../../src/manifest.js";
 
 const ENTRY: ServerManifestEntry = {
   slug: "nz-geo-mcp",
-  subdomain: "nz-geo.mcp.example.invalid",
+  subdomain: "nz-geo.mcp",
   credentialKeys: [
     { envName: "LINZ_API_KEY", label: "LINZ Data Service API key", signupUrl: "https://example.test/linz" },
     { envName: "LINZ_BASEMAPS_API_KEY", label: "LINZ Basemaps API key", signupUrl: "https://example.test/basemaps" },
@@ -13,7 +13,7 @@ const ENTRY: ServerManifestEntry = {
 
 describe("renderServerPage", () => {
   it("renders one password-type form per credential key, with a signup link", async () => {
-    const body = String(await renderServerPage(ENTRY, [], null));
+    const body = String(await renderServerPage(ENTRY, [], null, "example.com"));
 
     expect(body).toContain("LINZ_API_KEY");
     expect(body).toContain("LINZ_BASEMAPS_API_KEY");
@@ -30,6 +30,7 @@ describe("renderServerPage", () => {
         ENTRY,
         [{ keyName: "LINZ_API_KEY", isSet: true, updatedAt: "2026-07-01T00:00:00.000Z" }],
         null,
+        "example.com",
       ),
     );
 
@@ -40,7 +41,7 @@ describe("renderServerPage", () => {
 
   it("shows a 'no credentials required' message for a server with none", async () => {
     const body = String(
-      await renderServerPage({ ...ENTRY, credentialKeys: [] }, [], null),
+      await renderServerPage({ ...ENTRY, credentialKeys: [] }, [], null, "example.com"),
     );
 
     expect(body).toContain("needs no upstream API keys");
@@ -51,14 +52,14 @@ describe("renderServerPage", () => {
   });
 
   it("shows a flash message for the just-saved key", async () => {
-    const body = String(await renderServerPage(ENTRY, [], "LINZ_API_KEY"));
+    const body = String(await renderServerPage(ENTRY, [], "LINZ_API_KEY", "example.com"));
 
     expect(body).toContain("Saved");
     expect(body).toContain("LINZ_API_KEY");
   });
 
   it("escapes a malicious 'updated' flash value", async () => {
-    const body = String(await renderServerPage(ENTRY, [], "<script>alert(1)</script>"));
+    const body = String(await renderServerPage(ENTRY, [], "<script>alert(1)</script>", "example.com"));
 
     expect(body).not.toContain("<script>alert(1)</script>");
     expect(body).toContain("&lt;script&gt;");

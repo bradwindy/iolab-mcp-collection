@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 describe("bearer auth gate", () => {
   it("rejects requests with no Authorization header", async () => {
     const response = await exports.default.fetch(
-      new Request("https://nz-culture.mcp.example.invalid/mcp", {
+      new Request("https://nz-culture.mcp.example.com/mcp", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
@@ -15,7 +15,7 @@ describe("bearer auth gate", () => {
 
   it("rejects requests with the wrong token", async () => {
     const response = await exports.default.fetch(
-      new Request("https://nz-culture.mcp.example.invalid/mcp", {
+      new Request("https://nz-culture.mcp.example.com/mcp", {
         method: "POST",
         headers: { authorization: "Bearer wrong-token", "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
@@ -26,7 +26,7 @@ describe("bearer auth gate", () => {
 
   it("lets a request with the correct token reach the MCP server", async () => {
     const response = await exports.default.fetch(
-      new Request("https://nz-culture.mcp.example.invalid/mcp", {
+      new Request("https://nz-culture.mcp.example.com/mcp", {
         method: "POST",
         headers: {
           authorization: "Bearer test-shared-token",

@@ -11,7 +11,7 @@ import {
 } from "@nz-mcp/mcp-kit";
 import { getUvData } from "../clients/niwaUv.js";
 import { getNiwaApiKey } from "../clients/niwaCredentials.js";
-import { NIWA_API_KEY_NAME, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { NIWA_API_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 export const getUvForecastInputShape = {
   lat: z.number().min(-90).max(90).describe("Latitude in decimal degrees (negative for the Southern Hemisphere)."),
@@ -67,7 +67,7 @@ export async function getUvForecastHandler(rawInput: unknown, env: Env): Promise
   const input = inputSchema.parse(rawInput);
 
   const apiKey = await getNiwaApiKey(env);
-  if (!apiKey) return missingCredentialError(SERVER_SLUG, NIWA_API_KEY_NAME, PORTAL_URL);
+  if (!apiKey) return missingCredentialError(SERVER_SLUG, NIWA_API_KEY_NAME, env.PORTAL_URL);
 
   try {
     const cacheKey = `niwa:uv:${input.lat}:${input.long}`;

@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://catalogue.data.govt.nz/api/3/action";
 const SOURCE = "data.govt.nz";
-const USER_AGENT = "nz-mcp-collection/nz-govt-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-govt-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 /** Thrown by datastoreSearchSql's input guard — always a caller-actionable message. */
 export class SqlValidationError extends Error {}

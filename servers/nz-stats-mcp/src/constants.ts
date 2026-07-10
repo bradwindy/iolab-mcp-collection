@@ -2,7 +2,6 @@
 // Where a value could not be confirmed against a live authenticated response (no real
 // subscription key was available while building this server), that is called out explicitly.
 
-export const PORTAL_URL = "https://mcp.example.invalid";
 export const CREDENTIAL_SERVER_SLUG = "nz-stats-mcp";
 export const SUBSCRIPTION_KEY_NAME = "STATS_NZ_SUBSCRIPTION_KEY";
 

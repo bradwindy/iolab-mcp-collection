@@ -11,7 +11,7 @@ import {
 } from "@nz-mcp/mcp-kit";
 import { getBaringHeadInfoText, parseInfoText } from "../clients/niwaCo2.js";
 import { getNiwaApiKey } from "../clients/niwaCredentials.js";
-import { NIWA_API_KEY_NAME, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { NIWA_API_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 export const getCo2LatestInputShape = {};
 
@@ -28,7 +28,7 @@ export async function getCo2LatestHandler(rawInput: unknown, env: Env): Promise<
   inputSchema.parse(rawInput);
 
   const apiKey = await getNiwaApiKey(env);
-  if (!apiKey) return missingCredentialError(SERVER_SLUG, NIWA_API_KEY_NAME, PORTAL_URL);
+  if (!apiKey) return missingCredentialError(SERVER_SLUG, NIWA_API_KEY_NAME, env.PORTAL_URL);
 
   try {
     const text = await cached(env.MCP_CACHE, "niwa:co2:baringhead-info", CACHE_TTL.SLOW_MOVING, () =>

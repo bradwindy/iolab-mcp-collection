@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://ratesapi.nz/api/v1";
 const SOURCE = "Rates API";
-const USER_AGENT = "nz-mcp-collection/nz-markets-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-markets-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 /**
  * Field shapes confirmed live against https://ratesapi.nz/api/v1/{mortgage,personal-loan,car-loan,

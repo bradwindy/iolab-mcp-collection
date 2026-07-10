@@ -17,7 +17,7 @@ import {
 } from "@nz-mcp/mcp-kit";
 import { getVehiclePositions as fetchVehiclePositions, SOURCE, type VehicleFeedEntity } from "../clients/aucklandTransport.js";
 import { getAtSubscriptionKey } from "../clients/credentialStore.js";
-import { AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { AT_SUBSCRIPTION_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 const MAX_LIMIT = 200;
 
@@ -85,7 +85,7 @@ export async function getVehiclePositionsHandler(rawInput: unknown, env: Env): P
   const input = inputSchema.parse(rawInput);
 
   const subscriptionKey = await getAtSubscriptionKey(env);
-  if (!subscriptionKey) return missingCredentialError(SERVER_SLUG, AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL);
+  if (!subscriptionKey) return missingCredentialError(SERVER_SLUG, AT_SUBSCRIPTION_KEY_NAME, env.PORTAL_URL);
 
   try {
     const feed = await cached(env.MCP_CACHE, "at:vehicle-positions", CACHE_TTL.NEAR_REALTIME, () =>

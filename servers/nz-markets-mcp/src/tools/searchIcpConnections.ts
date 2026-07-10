@@ -15,7 +15,7 @@ import {
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
 import { getCredential } from "@nz-mcp/credentials";
-import { EA_ICP_API_KEY, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { EA_ICP_API_KEY, SERVER_SLUG } from "../constants.js";
 import {
   getIcpById,
   isValidIcpFormat,
@@ -94,7 +94,7 @@ export async function searchIcpConnectionsHandler(rawInput: unknown, env: Env): 
   const input = inputSchema.parse(rawInput);
 
   const apiKey = await getCredential(env.CREDENTIALS_DB, SERVER_SLUG, EA_ICP_API_KEY, env.ENCRYPTION_KEY);
-  if (!apiKey) return missingCredentialError(SERVER_SLUG, EA_ICP_API_KEY, PORTAL_URL);
+  if (!apiKey) return missingCredentialError(SERVER_SLUG, EA_ICP_API_KEY, env.PORTAL_URL);
 
   const trimmed = input.address_or_icp.trim();
   const isIcp = isValidIcpFormat(trimmed);

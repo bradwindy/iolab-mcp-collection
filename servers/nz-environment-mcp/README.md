@@ -5,7 +5,7 @@ earthquake/volcano feeds, the GeoNet FDSN seismic archive, and [NIWA](https://ni
 forecasting APIs. Part of the [nz-mcp-collection](../../README.md).
 
 Read-only, stateless, deployed as a Cloudflare Worker behind a shared bearer token at
-`https://nz-environment.mcp.example.invalid/mcp`.
+`https://nz-environment.mcp.yourdomain.com/mcp`.
 
 ## Tools
 
@@ -42,7 +42,7 @@ server includes in every response.
 2. Follow [Get started](https://developer.niwa.co.nz/get-started): register an "app" name to generate an
    API key.
 3. From your app's dashboard, subscribe that same app to the **Tide API**, **UV API**, and **CO2** products.
-4. Set the resulting key on this server via the portal at `https://mcp.example.invalid/servers/nz-environment-mcp`
+4. Set the resulting key on this server via your deployed portal at `<your PORTAL_URL>/servers/nz-environment-mcp`
    (or directly with `setCredential` from `@nz-mcp/credentials`) under the key name `NIWA_API_KEY`.
 
 **Design note on "one key or three":** NIWA's own catalog wording is identical across the Tide, UV, and

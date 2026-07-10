@@ -5,7 +5,7 @@ import type { ServerManifestEntry } from "../../src/manifest.js";
 function entry(overrides: Partial<ServerManifestEntry> = {}): ServerManifestEntry {
   return {
     slug: "nz-example-mcp",
-    subdomain: "nz-example.mcp.example.invalid",
+    subdomain: "nz-example.mcp",
     credentialKeys: [],
     ...overrides,
   };
@@ -14,22 +14,22 @@ function entry(overrides: Partial<ServerManifestEntry> = {}): ServerManifestEntr
 describe("renderDashboard", () => {
   it("lists every server with its slug and subdomain URL", async () => {
     const rows: DashboardServerRow[] = [
-      { entry: entry({ slug: "nz-geo-mcp", subdomain: "nz-geo.mcp.example.invalid" }), statuses: [] },
-      { entry: entry({ slug: "nz-govt-mcp", subdomain: "nz-govt.mcp.example.invalid" }), statuses: [] },
+      { entry: entry({ slug: "nz-geo-mcp", subdomain: "nz-geo.mcp" }), statuses: [] },
+      { entry: entry({ slug: "nz-govt-mcp", subdomain: "nz-govt.mcp" }), statuses: [] },
     ];
 
-    const body = String(await renderDashboard(rows));
+    const body = String(await renderDashboard(rows, "example.com"));
 
     expect(body).toContain("nz-geo-mcp");
-    expect(body).toContain("https://nz-geo.mcp.example.invalid/mcp");
+    expect(body).toContain("https://nz-geo.mcp.example.com/mcp");
     expect(body).toContain("nz-govt-mcp");
-    expect(body).toContain("https://nz-govt.mcp.example.invalid/mcp");
+    expect(body).toContain("https://nz-govt.mcp.example.com/mcp");
   });
 
   it("shows 'No credentials required' for a server with no credential keys", async () => {
     const rows: DashboardServerRow[] = [{ entry: entry({ credentialKeys: [] }), statuses: [] }];
 
-    const body = String(await renderDashboard(rows));
+    const body = String(await renderDashboard(rows, "example.com"));
 
     expect(body).toContain("No credentials required");
   });
@@ -50,7 +50,7 @@ describe("renderDashboard", () => {
       },
     ];
 
-    const body = String(await renderDashboard(rows));
+    const body = String(await renderDashboard(rows, "example.com"));
 
     // Match the full `class="badge badge-set"` attribute, not the bare "badge-set" substring —
     // the layout's shared <style> block always defines `.badge-set { ... }`, so a bare substring
@@ -67,7 +67,7 @@ describe("renderDashboard", () => {
       { entry: entry({ slug: "<script>alert(1)</script>" }), statuses: [] },
     ];
 
-    const body = String(await renderDashboard(rows));
+    const body = String(await renderDashboard(rows, "example.com"));
 
     expect(body).not.toContain("<script>alert(1)</script>");
     expect(body).toContain("&lt;script&gt;");
@@ -83,7 +83,7 @@ describe("renderDashboard", () => {
       },
     ];
 
-    const body = String(await renderDashboard(rows));
+    const body = String(await renderDashboard(rows, "example.com"));
 
     expect(body).not.toContain("<img src=x onerror=alert(1)>");
     expect(body).toContain("&lt;img");

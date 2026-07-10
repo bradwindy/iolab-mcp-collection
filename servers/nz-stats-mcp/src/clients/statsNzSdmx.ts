@@ -1,7 +1,7 @@
 import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 import { AGENCY_ID, SDMX_BASE_URL, SOURCE_NAME, SUBSCRIPTION_KEY_HEADER } from "../constants.js";
 
-const USER_AGENT = "nz-mcp-collection/nz-stats-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-stats-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 /** Generous headroom over queryDataflow's MAX_RAW_CHARS truncation so csv/xml formats can still
  * report a useful truncated preview; still far below the isolate's memory ceiling. */

@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://api.digitalnz.org/v3";
 const SOURCE = "DigitalNZ";
-const USER_AGENT = "nz-mcp-collection/nz-culture-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-culture-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 /**
  * Field superset requested for search hits: enough to build both the concise and detailed

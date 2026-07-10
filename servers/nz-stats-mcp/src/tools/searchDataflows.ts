@@ -88,7 +88,7 @@ export async function searchDataflowsHandler(rawInput: unknown, env: Env): Promi
       attribution: attribution(SOURCE_NAME, { url: SOURCE_URL }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return handleSdmxUpstreamError(error);
+    if (error instanceof UpstreamHttpError) return handleSdmxUpstreamError(error, env);
     throw error;
   }
 }

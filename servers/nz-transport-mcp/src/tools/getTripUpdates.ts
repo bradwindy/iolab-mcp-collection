@@ -17,7 +17,7 @@ import {
 } from "@nz-mcp/mcp-kit";
 import { getTripUpdates as fetchTripUpdates, SOURCE, toArray, type TripUpdateFeedEntity } from "../clients/aucklandTransport.js";
 import { getAtSubscriptionKey } from "../clients/credentialStore.js";
-import { AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { AT_SUBSCRIPTION_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 const MAX_LIMIT = 200;
 const MAX_STOP_UPDATES_DETAILED = 20;
@@ -97,7 +97,7 @@ export async function getTripUpdatesHandler(rawInput: unknown, env: Env): Promis
   const input = inputSchema.parse(rawInput);
 
   const subscriptionKey = await getAtSubscriptionKey(env);
-  if (!subscriptionKey) return missingCredentialError(SERVER_SLUG, AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL);
+  if (!subscriptionKey) return missingCredentialError(SERVER_SLUG, AT_SUBSCRIPTION_KEY_NAME, env.PORTAL_URL);
 
   try {
     const feed = await cached(env.MCP_CACHE, "at:trip-updates", CACHE_TTL.NEAR_REALTIME, () =>

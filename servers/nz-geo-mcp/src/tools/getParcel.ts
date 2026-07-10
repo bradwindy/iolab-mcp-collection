@@ -13,7 +13,7 @@ import {
 import { queryVector, type LdsFeature } from "../clients/linzDataService.js";
 import { summarizeGeoJsonGeometry } from "../geo.js";
 import { MissingCredentialError, requireLinzCredential } from "../credentials.js";
-import { LINZ_PRIMARY_PARCELS_LAYER_ID, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { LINZ_PRIMARY_PARCELS_LAYER_ID, SERVER_SLUG } from "../constants.js";
 
 export const getParcelInputShape = {
   lat: z.number().min(-90).max(90).describe("Latitude, WGS84 decimal degrees."),
@@ -110,7 +110,7 @@ export async function getParcelHandler(rawInput: unknown, env: Env): Promise<Too
     });
   } catch (error) {
     if (error instanceof MissingCredentialError) {
-      return missingCredentialError(SERVER_SLUG, error.keyName, PORTAL_URL);
+      return missingCredentialError(SERVER_SLUG, error.keyName, env.PORTAL_URL);
     }
     if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
     throw error;

@@ -19,5 +19,18 @@ declare global {
      * Access-gated portal. Set via `wrangler secret put MCP_SHARED_TOKEN`.
      */
     MCP_SHARED_TOKEN: string;
+    /**
+     * Bare base domain (no protocol, no subdomain) the operator's MCP servers are deployed
+     * behind, e.g. "example.com". Combined with each manifest entry's relative `subdomain`
+     * to build the live URLs shown on the dashboard and Connect page. Set via
+     * `wrangler secret put BASE_DOMAIN`.
+     */
+    BASE_DOMAIN: string;
+    /**
+     * The operator's email, shown on the Connect page as a reminder of who Cloudflare Access
+     * allows through — display text only, not itself an access control. Set via
+     * `wrangler secret put ACCESS_EMAIL`.
+     */
+    ACCESS_EMAIL: string;
   }
 }

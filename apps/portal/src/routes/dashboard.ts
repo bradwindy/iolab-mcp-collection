@@ -15,5 +15,5 @@ export async function getDashboard(c: Context<{ Bindings: Env }>) {
     })),
   );
 
-  return c.html(await renderDashboard(rows));
+  return c.html(await renderDashboard(rows, c.env.BASE_DOMAIN));
 }

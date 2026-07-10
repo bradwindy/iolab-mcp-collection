@@ -181,7 +181,7 @@ export async function queryDataflowHandler(rawInput: unknown, env: Env): Promise
       attribution: attribution(SOURCE_NAME, { url: SOURCE_URL }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return handleSdmxUpstreamError(error);
+    if (error instanceof UpstreamHttpError) return handleSdmxUpstreamError(error, env);
     if (error instanceof Error && error.message.includes("Unexpected SDMX-JSON")) {
       return toolError(error.message);
     }

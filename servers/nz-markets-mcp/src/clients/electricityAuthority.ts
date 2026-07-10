@@ -18,7 +18,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
  */
 const GATEWAY_BASE_URL = "https://emi.azure-api.net";
 const SOURCE = "Electricity Authority EMI APIs";
-const USER_AGENT = "nz-mcp-collection/nz-markets-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-markets-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 const SUBSCRIPTION_KEY_HEADER = "Ocp-Apim-Subscription-Key";
 
 async function gatewayFetch(url: URL, apiKey: string): Promise<Response> {

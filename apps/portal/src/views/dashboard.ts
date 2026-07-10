@@ -14,14 +14,15 @@ function statusBadge(status: CredentialStatus) {
     : html`<span class="badge badge-unset">not set</span>`;
 }
 
-function serverCard(row: DashboardServerRow) {
+function serverCard(row: DashboardServerRow, baseDomain: string) {
   const { entry, statuses } = row;
   const statusByKey = new Map(statuses.map((status) => [status.keyName, status]));
+  const url = `https://${entry.subdomain}.${baseDomain}/mcp`;
 
   return html`
     <article class="card">
       <h2><a href="/servers/${entry.slug}">${entry.slug}</a></h2>
-      <p class="url"><a href="https://${entry.subdomain}/mcp">https://${entry.subdomain}/mcp</a></p>
+      <p class="url"><a href="${url}">${url}</a></p>
       ${
         entry.credentialKeys.length === 0
           ? html`<p class="badge badge-none">No credentials required</p>`
@@ -37,7 +38,7 @@ function serverCard(row: DashboardServerRow) {
   `;
 }
 
-export function renderDashboard(rows: readonly DashboardServerRow[]) {
+export function renderDashboard(rows: readonly DashboardServerRow[], baseDomain: string) {
   return layout(
     "Dashboard",
     html`
@@ -47,7 +48,7 @@ export function renderDashboard(rows: readonly DashboardServerRow[]) {
         upstream API keys are set. See <a href="/connect">Connect</a> for how to add these to
         Claude Code or claude.ai.
       </p>
-      <div class="grid">${rows.map(serverCard)}</div>
+      <div class="grid">${rows.map((row) => serverCard(row, baseDomain))}</div>
     `,
   );
 }

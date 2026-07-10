@@ -11,7 +11,7 @@ import {
 import { queryVector } from "../clients/linzDataService.js";
 import { summarizeGeoJsonGeometry } from "../geo.js";
 import { MissingCredentialError, requireLinzCredential } from "../credentials.js";
-import { PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { SERVER_SLUG } from "../constants.js";
 
 export const queryLdsLayerInputShape = {
   layer_ids: z
@@ -103,7 +103,7 @@ export async function queryLdsLayerHandler(rawInput: unknown, env: Env): Promise
     });
   } catch (error) {
     if (error instanceof MissingCredentialError) {
-      return missingCredentialError(SERVER_SLUG, error.keyName, PORTAL_URL);
+      return missingCredentialError(SERVER_SLUG, error.keyName, env.PORTAL_URL);
     }
     if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
     throw error;

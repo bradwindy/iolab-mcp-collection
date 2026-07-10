@@ -2,7 +2,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 
 const BASE_URL = "https://api.niwa.co.nz/co2";
 const SOURCE = "NIWA CO2 API";
-const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 /**
  * Fetch the latest Baring Head CO2 reading as raw text.

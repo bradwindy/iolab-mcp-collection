@@ -2,11 +2,16 @@ import { html } from "hono/html";
 import type { ServerManifestEntry } from "../manifest.js";
 import { layout } from "./layout.js";
 
-function connectCommand(entry: ServerManifestEntry, token: string) {
-  return html`claude mcp add --transport http ${entry.slug} https://${entry.subdomain}/mcp --header "Authorization: Bearer ${token}"`;
+function connectCommand(entry: ServerManifestEntry, token: string, baseDomain: string) {
+  return html`claude mcp add --transport http ${entry.slug} https://${entry.subdomain}.${baseDomain}/mcp --header "Authorization: Bearer ${token}"`;
 }
 
-export function renderConnect(servers: readonly ServerManifestEntry[], token: string) {
+export function renderConnect(
+  servers: readonly ServerManifestEntry[],
+  token: string,
+  baseDomain: string,
+  accessEmail: string,
+) {
   return layout(
     "Connect",
     html`
@@ -19,10 +24,10 @@ export function renderConnect(servers: readonly ServerManifestEntry[], token: st
         connector in claude.ai.
       </p>
       <div class="commands">
-        ${servers.map((entry) => html`<pre><code>${connectCommand(entry, token)}</code></pre>`)}
+        ${servers.map((entry) => html`<pre><code>${connectCommand(entry, token, baseDomain)}</code></pre>`)}
       </div>
       <p class="meta">
-        This page is only reachable through Cloudflare Access (redacted@example.invalid). The token
+        This page is only reachable through Cloudflare Access (${accessEmail}). The token
         above is read live from this Worker's secret at request time — it is never stored in
         this repository and this response is never cached (<code>Cache-Control: no-store</code>).
       </p>

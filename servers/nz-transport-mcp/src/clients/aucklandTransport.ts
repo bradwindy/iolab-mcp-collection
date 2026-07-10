@@ -3,7 +3,7 @@ import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
 const REALTIME_BASE = "https://api.at.govt.nz/realtime/legacy";
 const GTFS_BASE = "https://api.at.govt.nz/gtfs/v3";
 export const SOURCE = "Auckland Transport";
-const USER_AGENT = "nz-mcp-collection/nz-transport-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-transport-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
 // --- GTFS-realtime (confirmed live via unauthenticated probes returning Azure APIM's
 // "missing subscription key" 401 body, not a 404, against api.at.govt.nz):

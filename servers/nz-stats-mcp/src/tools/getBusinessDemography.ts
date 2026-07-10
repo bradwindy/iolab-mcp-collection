@@ -166,7 +166,7 @@ export async function getBusinessDemographyHandler(rawInput: unknown, env: Env):
       attribution: attribution(SOURCE_NAME, { url: SOURCE_URL }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return handleSdmxUpstreamError(error);
+    if (error instanceof UpstreamHttpError) return handleSdmxUpstreamError(error, env);
     if (error instanceof Error && error.message.includes("Unexpected SDMX-JSON")) {
       return toolError(error.message);
     }

@@ -3,7 +3,7 @@ import { summarizeEsriGeometry, type GeometrySummary } from "../geo.js";
 
 const BASE_URL = "https://gis.ecan.govt.nz/arcgis/rest/services";
 const SOURCE = "Canterbury Maps (Environment Canterbury)";
-const USER_AGENT = "nz-mcp-collection/nz-geo-mcp (+https://mcp.example.invalid)";
+const USER_AGENT = "nz-mcp-collection/nz-geo-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 const SERVICES_CACHE_KEY = "nz-geo-mcp:canterbury:services:v1";
 const MAX_FOLDER_DEPTH = 3;
 

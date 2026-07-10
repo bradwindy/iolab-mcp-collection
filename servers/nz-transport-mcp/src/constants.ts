@@ -4,7 +4,6 @@ export const SERVER_SLUG = "nz-transport-mcp";
 /** Row key in the shared credentials table for the Auckland Transport subscription key. */
 export const AT_SUBSCRIPTION_KEY_NAME = "AT_SUBSCRIPTION_KEY";
 
-export const PORTAL_URL = "https://mcp.example.invalid";
 
 /**
  * Waka Kotahi NZTA's 14 traffic regions, as returned by the (undocumented but live-verified)

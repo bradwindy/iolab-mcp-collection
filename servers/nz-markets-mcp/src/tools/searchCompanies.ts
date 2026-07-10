@@ -16,7 +16,7 @@ import {
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
 import { getCredential } from "@nz-mcp/credentials";
-import { NZXPLORER_API_KEY, PORTAL_URL, SERVER_SLUG } from "../constants.js";
+import { NZXPLORER_API_KEY, SERVER_SLUG } from "../constants.js";
 import { listAllCompanies, type CompanySummary } from "../clients/nzxplorer.js";
 
 export const searchCompaniesInputShape = {
@@ -78,7 +78,7 @@ export async function searchCompaniesHandler(rawInput: unknown, env: Env): Promi
   const input = inputSchema.parse(rawInput);
 
   const apiKey = await getCredential(env.CREDENTIALS_DB, SERVER_SLUG, NZXPLORER_API_KEY, env.ENCRYPTION_KEY);
-  if (!apiKey) return missingCredentialError(SERVER_SLUG, NZXPLORER_API_KEY, PORTAL_URL);
+  if (!apiKey) return missingCredentialError(SERVER_SLUG, NZXPLORER_API_KEY, env.PORTAL_URL);
 
   try {
     const allCompanies = await cached(env.MCP_CACHE, "nz-markets:nzxplorer:companies:all", CACHE_TTL.METADATA, () =>

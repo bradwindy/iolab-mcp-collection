@@ -19,7 +19,11 @@ export type CredentialKeyDescriptor = {
 export type ServerManifestEntry = {
   /** Matches the server's wrangler.jsonc "name" and the `server` column in the shared credentials table. */
   slug: string;
-  /** Public hostname the deployed MCP server answers on (its /mcp endpoint lives at https://{subdomain}/mcp). */
+  /**
+   * Hostname prefix relative to the operator's base domain (itself never committed to this repo —
+   * read from the `BASE_DOMAIN` secret at request time). The server's /mcp endpoint lives at
+   * https://{subdomain}.{BASE_DOMAIN}/mcp.
+   */
   subdomain: string;
   credentialKeys: CredentialKeyDescriptor[];
 };
@@ -27,7 +31,7 @@ export type ServerManifestEntry = {
 export const SERVERS: readonly ServerManifestEntry[] = [
   {
     slug: "nz-culture-mcp",
-    subdomain: "nz-culture.mcp.example.invalid",
+    subdomain: "nz-culture.mcp",
     credentialKeys: [
       {
         envName: "TE_PAPA_API_KEY",
@@ -38,7 +42,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-stats-mcp",
-    subdomain: "nz-stats.mcp.example.invalid",
+    subdomain: "nz-stats.mcp",
     credentialKeys: [
       {
         envName: "STATS_NZ_SUBSCRIPTION_KEY",
@@ -49,7 +53,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-geo-mcp",
-    subdomain: "nz-geo.mcp.example.invalid",
+    subdomain: "nz-geo.mcp",
     credentialKeys: [
       {
         envName: "LINZ_API_KEY",
@@ -66,7 +70,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-environment-mcp",
-    subdomain: "nz-environment.mcp.example.invalid",
+    subdomain: "nz-environment.mcp",
     credentialKeys: [
       {
         envName: "NIWA_API_KEY",
@@ -77,7 +81,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-transport-mcp",
-    subdomain: "nz-transport.mcp.example.invalid",
+    subdomain: "nz-transport.mcp",
     credentialKeys: [
       {
         envName: "AT_SUBSCRIPTION_KEY",
@@ -88,7 +92,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-markets-mcp",
-    subdomain: "nz-markets.mcp.example.invalid",
+    subdomain: "nz-markets.mcp",
     credentialKeys: [
       {
         envName: "NZXPLORER_API_KEY",
@@ -109,7 +113,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-govt-mcp",
-    subdomain: "nz-govt.mcp.example.invalid",
+    subdomain: "nz-govt.mcp",
     credentialKeys: [],
   },
 ];

@@ -4,3 +4,8 @@
 ENCRYPTION_KEY=replace-with-output-of-generateEncryptionKey
 # Must be the SAME value every MCP server in the collection checks on its /mcp endpoint.
 MCP_SHARED_TOKEN=replace-with-a-long-random-string
+
+# Bare base domain your MCP servers are deployed behind (no protocol, no subdomain).
+BASE_DOMAIN=example.com
+# Shown on the Connect page as a reminder of who Cloudflare Access allows through.
+ACCESS_EMAIL=you@example.com
