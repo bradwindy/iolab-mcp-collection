@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nz-mcp-portal",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    { "binding": "CREDENTIALS_DB", "database_name": "nz-mcp-credentials", "database_id": "5c6248bf-f226-46b0-aa2b-a6a9bc2ca790" },
+  ],
+  "routes": [{ "pattern": "mcp.example.invalid", "custom_domain": true }],
+  "observability": { "enabled": true },
+}

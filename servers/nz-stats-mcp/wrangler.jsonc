@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nz-stats-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "NZ_STATS_MCP", "class_name": "NzStatsMcp" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["NzStatsMcp"] }],
+  "kv_namespaces": [{ "binding": "MCP_CACHE", "id": "bac29680ac6a419284c9a522b241ae8a" }],
+  "d1_databases": [
+    {
+      "binding": "CREDENTIALS_DB",
+      "database_name": "nz-mcp-credentials",
+      "database_id": "5c6248bf-f226-46b0-aa2b-a6a9bc2ca790",
+    },
+  ],
+  "routes": [{ "pattern": "nz-stats.mcp.example.invalid", "custom_domain": true }],
+  "observability": { "enabled": true },
+}

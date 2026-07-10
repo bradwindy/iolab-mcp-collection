@@ -1,0 +1,53 @@
+import { html } from "hono/html";
+import type { CredentialStatus } from "@nz-mcp/credentials";
+import type { ServerManifestEntry } from "../manifest.js";
+import { layout } from "./layout.js";
+
+export type DashboardServerRow = {
+  entry: ServerManifestEntry;
+  statuses: CredentialStatus[];
+};
+
+function statusBadge(status: CredentialStatus) {
+  return status.isSet
+    ? html`<span class="badge badge-set">set</span> <span class="meta">updated ${status.updatedAt ?? "unknown"}</span>`
+    : html`<span class="badge badge-unset">not set</span>`;
+}
+
+function serverCard(row: DashboardServerRow) {
+  const { entry, statuses } = row;
+  const statusByKey = new Map(statuses.map((status) => [status.keyName, status]));
+
+  return html`
+    <article class="card">
+      <h2><a href="/servers/${entry.slug}">${entry.slug}</a></h2>
+      <p class="url"><a href="https://${entry.subdomain}/mcp">https://${entry.subdomain}/mcp</a></p>
+      ${
+        entry.credentialKeys.length === 0
+          ? html`<p class="badge badge-none">No credentials required</p>`
+          : html`<ul class="cred-list">
+              ${entry.credentialKeys.map((key) => {
+                const status = statusByKey.get(key.envName);
+                return html`<li><code>${key.envName}</code> ${status ? statusBadge(status) : html`<span class="badge badge-unset">not set</span>`}</li>`;
+              })}
+            </ul>`
+      }
+      <p><a class="button" href="/servers/${entry.slug}">Manage credentials</a></p>
+    </article>
+  `;
+}
+
+export function renderDashboard(rows: readonly DashboardServerRow[]) {
+  return layout(
+    "Dashboard",
+    html`
+      <h1>MCP Server Dashboard</h1>
+      <p>
+        Every server in the nz-mcp-collection, its live MCP endpoint, and whether its required
+        upstream API keys are set. See <a href="/connect">Connect</a> for how to add these to
+        Claude Code or claude.ai.
+      </p>
+      <div class="grid">${rows.map(serverCard)}</div>
+    `,
+  );
+}

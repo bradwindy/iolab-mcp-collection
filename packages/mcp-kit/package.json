@@ -1,0 +1,21 @@
+{
+  "name": "@nz-mcp/mcp-kit",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Shared tool-building utilities for the nz-mcp-collection servers: pagination, response formatting, caching, retry/backoff, actionable errors, attribution, and bearer auth.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.1.10"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
