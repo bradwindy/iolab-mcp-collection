@@ -34,3 +34,41 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+  deploy:
+    name: Deploy (${{ matrix.package }})
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          - servers/nz-govt-mcp
+          - servers/nz-culture-mcp
+          - servers/nz-stats-mcp
+          - servers/nz-geo-mcp
+          - servers/nz-environment-mcp
+          - servers/nz-transport-mcp
+          - servers/nz-markets-mcp
+          - apps/portal
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEPLOY_DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
+        run: ./scripts/deploy.sh ${{ matrix.package }}

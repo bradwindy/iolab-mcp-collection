@@ -15,3 +15,4 @@ coverage/
 .vscode/*
 !.vscode/extensions.json
 worker-configuration.d.ts
+.wrangler-deploy.generated.jsonc

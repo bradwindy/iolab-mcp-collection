@@ -164,3 +164,21 @@ pnpm exec wrangler types && pnpm exec wrangler deploy
 ```
 
 Bindings and secrets persist across deploys — you only need to redo steps 2-4 once, at initial setup.
+
+## Optional: deploy automatically on push to main
+
+`.github/workflows/ci.yml` has a `deploy` job that redeploys every server and the portal whenever a
+push lands on `main` (after the build/lint/typecheck/test job passes). It's disabled by default in the
+sense that it fails fast without these repo secrets — add them under **Settings → Secrets and
+variables → Actions**:
+
+- `CLOUDFLARE_API_TOKEN` — a token scoped to **Workers Scripts: Edit** (account) and
+  **Workers Routes: Edit** (all zones); create one at **My Profile → API Tokens → Create Token**.
+- `CLOUDFLARE_ACCOUNT_ID` — from `wrangler whoami`.
+- `DEPLOY_DOMAIN` — your bare base domain (e.g. `yourdomain.com`), substituted into each
+  `wrangler.jsonc`'s `yourdomain.com` route placeholder at deploy time via `scripts/deploy.sh` (see that
+  script for the exact mechanism). Never committed anywhere in this repo.
+
+This job only deploys Worker code and the custom domain route — it never touches secrets
+(`MCP_SHARED_TOKEN`, `ENCRYPTION_KEY`, `PORTAL_URL`, `BASE_DOMAIN`, `ACCESS_EMAIL`), which persist from
+the manual initial setup above and don't need to be reset on every deploy.
