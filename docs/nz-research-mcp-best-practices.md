@@ -88,6 +88,35 @@ Agents have limited context; your server's job is to protect it.
 
 **Truncation with guidance:** if a response would be huge, truncate and say so in the payload: "Showing 50 of 4,102 crashes. Narrow with `severity` or `years` parameters."
 
+**Pagination must be stable — always pass an explicit sort:** `limit`/`offset` pagination is only
+correct if the upstream call also carries a deterministic sort/orderBy. SQL, Elasticsearch, Solr, and
+ArcGIS all make the same promise (or lack of one): without an explicit `ORDER BY`/`sort`, row order for
+`LIMIT`/`OFFSET` is *undefined*, not merely "insertion order" or "whatever's fastest." In practice this
+silently duplicates rows on one page and drops them from another — confirmed live against `nz-govt-mcp`'s
+use of CKAN's `datastore_search` (a Postgres-backed full-text search with no default sort): the exact same
+paginated query, re-run with an unchanged `offset`, returned a different slice of rows, and manually
+paginating + deduplicating an entire dataset still undercounted the true total by ~10%. The fix costs one
+line — pass a stable tiebreak field (an internal id, or `score desc, <field> asc` for a ranked search) —
+and belongs in the client function itself, not something every tool author has to remember per call.
+Before assuming an upstream is safe, verify rather than guess: some APIs reject a `sort` param outright
+(confirmed for the ArcGIS Hub / OGC-API-Records search this collection's `nz-govt-mcp` Auckland open-data
+tool hits — `sort` isn't a recognized queryable there), and some already default to a reasonable order
+(CKAN's `package_search` defaults to `score desc, metadata_modified desc`) but still benefit from an
+explicit tiebreak once you have two datasets that could tie on both. Test the specific upstream before
+trusting or fixing it.
+
+**Prefer structured filters over free text for fields with a small, fixed vocabulary:** if an upstream
+field only ever takes one of a handful of known values (e.g. a school's funding authority, a charity's
+registration status), expose it as a `z.enum([...])` parameter using the upstream's native exact-match
+mechanism (SQL `filters`, OData `$filter ... eq`, etc.) rather than folding it into a free-text search
+term. Free text is fine for names/titles where partial matches are the point, but folding a categorical
+filter into full-text search means the agent can't reliably narrow to "exactly this category" — it's
+scoped by relevance ranking, not a boolean AND — and answering a question like "how many state-integrated
+schools are in Christchurch" then requires paginating through every record in the surrounding region and
+filtering client-side, which is exactly the failure mode above. Confirm the vocabulary is actually
+small and fixed against the live upstream (e.g. `SELECT DISTINCT` on the backing field) before hard-coding
+an enum — don't guess at the value set from a handful of sample records.
+
 **Structured output:** define `outputSchema` and return `structuredContent` (supported in current SDKs) so clients and code-execution harnesses can process results programmatically.
 
 **Actionable errors:** errors are prompts. Return tool-execution errors (not protocol errors) with a specific fix: `"Unknown area code 'Coatsville'. Did you mean 'Coatesville' (SA2 117300)? Use nz_geo_search_addresses to resolve names."` The 2025-11-25 spec explicitly clarified that input-validation failures should be tool-execution errors so the model can self-correct.

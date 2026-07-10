@@ -58,6 +58,11 @@ export async function searchDatasets(params: {
     q: params.query,
     rows: String(params.rows),
     start: String(params.start),
+    // CKAN's own default is "score desc, metadata_modified desc" — reproduced explicitly here
+    // plus a `name asc` tiebreak, so two datasets tied on both score and modified timestamp
+    // (common for a batch import) still paginate deterministically instead of relying on
+    // Solr's undocumented tie-break order.
+    sort: "score desc, metadata_modified desc, name asc",
   });
 }
 
@@ -78,6 +83,23 @@ export async function datastoreSearch(params: {
     resource_id: params.resourceId,
     limit: String(params.limit),
     offset: String(params.offset),
+    // CKAN's datastore_search gives NO ordering guarantee for LIMIT/OFFSET without an explicit
+    // `sort` — confirmed live: the same paginated query re-run with an unchanged offset can
+    // return a different slice of rows, which silently duplicates some records across pages and
+    // drops others entirely. `_id` is the datastore's always-present internal primary key, so
+    // it's a safe, stable tiebreak for every resource regardless of whether `q` is also set.
+    //
+    // Trade-off, deliberately accepted: when `q` is set, this discards CKAN's implicit
+    // relevance ordering (confirmed live — `sort=rank`/`sort=rank desc` is rejected as an
+    // invalid sort value, so relevance can't be combined with a stable tiebreak the way
+    // `score desc, name asc` works for `searchDatasets` above). A broad single-word `q` can
+    // therefore return its best match outside the first page. Correctness wins here: the
+    // alternative (no explicit sort when `q` is set) reproduces the exact bug this fixes —
+    // confirmed live for `q=Canterbury`, where many rows tie on relevance and Postgres' tie-break
+    // order for LIMIT/OFFSET is undefined, silently corrupting counts across pages. A broad
+    // free-text search still surfaces `total_count`/the truncation notice so a caller can narrow
+    // further; a silently incomplete or duplicated result set gives no such signal.
+    sort: "_id",
   };
   if (params.query) query.q = params.query;
   if (params.filters) query.filters = JSON.stringify(params.filters);
