@@ -1,0 +1,22 @@
+{
+  "name": "@nz-mcp/portal",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Credential-management dashboard for the nz-mcp-collection: set/update each MCP server's upstream API keys, view credential status, and get ready-to-run `claude mcp add` commands for every deployed server.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@nz-mcp/credentials": "workspace:*",
+    "hono": "^4.12.28"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.110.0"
+  }
+}

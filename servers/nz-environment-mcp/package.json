@@ -1,0 +1,26 @@
+{
+  "name": "@nz-mcp/nz-environment-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MCP server for NZ environmental hazard and climate research: GeoNet earthquake/volcano feeds, GeoNet FDSN seismic archive services, and NIWA tide/UV/CO2 forecasting APIs.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@nz-mcp/credentials": "workspace:*",
+    "@nz-mcp/mcp-kit": "workspace:*",
+    "agents": "^0.17.3",
+    "zod": "^4.1.10"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.110.0"
+  }
+}
