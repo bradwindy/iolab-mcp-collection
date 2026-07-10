@@ -123,6 +123,14 @@ describe("nz_govt_search_schools", () => {
     expect(result.structuredContent?.notice).toContain("case-sensitive");
   });
 
+  it("does not blame city-casing when another filter is also active and returns nothing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
+
+    const result = await searchSchoolsHandler({ city: "Christchurch", authority: "Charter School" });
+
+    expect(result.structuredContent?.notice).not.toContain("case-sensitive");
+  });
+
   it("includes contact details in detailed format", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([SAMPLE_SCHOOL], 1)));
 
@@ -190,6 +198,14 @@ describe("nz_govt_search_early_childhood_services", () => {
     const result = await searchEarlyChildhoodServicesHandler({ city: "christchurch" });
 
     expect(result.structuredContent?.notice).toContain("case-sensitive");
+  });
+
+  it("does not blame city-casing when another filter is also active and returns nothing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
+
+    const result = await searchEarlyChildhoodServicesHandler({ city: "Christchurch", region: "Wellington" });
+
+    expect(result.structuredContent?.notice).not.toContain("case-sensitive");
   });
 
   it("includes the 20 Hours ECE flag in detailed format", async () => {

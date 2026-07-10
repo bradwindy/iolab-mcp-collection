@@ -119,8 +119,9 @@ export async function searchSchoolsHandler(rawInput: unknown): Promise<ToolTextR
     const page = describePage({ returned: records.length, total_count: total, offset: input.offset });
     const items = records.map((record) => selectFormat(input.response_format, toConcise(record), toDetailed(record)));
 
+    const cityIsSoleFilter = Boolean(input.city) && !input.query && !input.region && !input.authority;
     const notice =
-      total === 0 && input.city
+      total === 0 && cityIsSoleFilter
         ? "No results — `city` is an exact, case-sensitive match (e.g. 'Christchurch', not 'christchurch'). Try `query` or `region` for partial matches."
         : truncationNotice(input.offset + records.length, total, "Narrow with `query`, `region`, `authority`, or `city`.");
 
