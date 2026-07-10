@@ -71,6 +71,16 @@ describe("nz_govt_search_datasets", () => {
 
     await expect(searchDatasetsHandler({ query: "x" })).rejects.toThrow(/boom/);
   });
+
+  it("requests a deterministic tiebreak sort, so tied datasets still paginate stably", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(ckanResponse({ count: 1, results: [SAMPLE_PACKAGE] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchDatasetsHandler({ query: "school directory" });
+
+    const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(requestedUrl.searchParams.get("sort")).toBe("score desc, metadata_modified desc, name asc");
+  });
 });
 
 describe("nz_govt_get_dataset", () => {

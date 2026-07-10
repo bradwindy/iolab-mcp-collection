@@ -76,6 +76,61 @@ describe("nz_govt_search_schools", () => {
     expect(requestedUrl.searchParams.get("q")).toBe("College Northland");
   });
 
+  it("always requests a stable sort, so paginated calls can't skip or duplicate rows", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchSchoolsHandler({ query: "College" });
+
+    const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(requestedUrl.searchParams.get("sort")).toBe("_id");
+  });
+
+  it("accepts authority or city alone, without query or region", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await searchSchoolsHandler({ authority: "State : Integrated" });
+
+    expect(result.isError).toBeUndefined();
+    const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(requestedUrl.searchParams.get("filters")).toBe(JSON.stringify({ Authority: "State : Integrated" }));
+    expect(requestedUrl.searchParams.has("q")).toBe(false);
+  });
+
+  it("combines authority and city into exact-match filters alongside a free-text query", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchSchoolsHandler({ region: "Canterbury", authority: "State : Integrated", city: "Christchurch" });
+
+    const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(requestedUrl.searchParams.get("q")).toBe("Canterbury");
+    expect(requestedUrl.searchParams.get("filters")).toBe(
+      JSON.stringify({ Authority: "State : Integrated", Add1_City: "Christchurch" }),
+    );
+  });
+
+  it("rejects an authority value outside the confirmed enum", async () => {
+    await expect(searchSchoolsHandler({ authority: "Integrated" })).rejects.toThrow();
+  });
+
+  it("hints at case-sensitivity when a `city` filter returns nothing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
+
+    const result = await searchSchoolsHandler({ city: "christchurch" });
+
+    expect(result.structuredContent?.notice).toContain("case-sensitive");
+  });
+
+  it("does not blame city-casing when another filter is also active and returns nothing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
+
+    const result = await searchSchoolsHandler({ city: "Christchurch", authority: "Charter School" });
+
+    expect(result.structuredContent?.notice).not.toContain("case-sensitive");
+  });
+
   it("includes contact details in detailed format", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([SAMPLE_SCHOOL], 1)));
 
@@ -109,6 +164,48 @@ describe("nz_govt_search_early_childhood_services", () => {
         region: "Wellington Region",
       },
     ]);
+  });
+
+  it("always requests a stable sort, so paginated calls can't skip or duplicate rows", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchEarlyChildhoodServicesHandler({ region: "Wellington" });
+
+    const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(requestedUrl.searchParams.get("sort")).toBe("_id");
+  });
+
+  it("accepts authority or city alone, without query or region", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await searchEarlyChildhoodServicesHandler({ city: "Christchurch" });
+
+    expect(result.isError).toBeUndefined();
+    const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
+    expect(requestedUrl.searchParams.get("filters")).toBe(JSON.stringify({ Add1_City: "Christchurch" }));
+    expect(requestedUrl.searchParams.has("q")).toBe(false);
+  });
+
+  it("rejects an authority value outside the confirmed enum", async () => {
+    await expect(searchEarlyChildhoodServicesHandler({ authority: "State" })).rejects.toThrow();
+  });
+
+  it("hints at case-sensitivity when a `city` filter returns nothing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
+
+    const result = await searchEarlyChildhoodServicesHandler({ city: "christchurch" });
+
+    expect(result.structuredContent?.notice).toContain("case-sensitive");
+  });
+
+  it("does not blame city-casing when another filter is also active and returns nothing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
+
+    const result = await searchEarlyChildhoodServicesHandler({ city: "Christchurch", region: "Wellington" });
+
+    expect(result.structuredContent?.notice).not.toContain("case-sensitive");
   });
 
   it("includes the 20 Hours ECE flag in detailed format", async () => {

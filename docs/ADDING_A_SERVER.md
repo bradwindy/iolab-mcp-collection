@@ -68,6 +68,13 @@ servers/nz-{domain}-mcp/
 - [ ] `nz_{domain}_verb_noun` naming, `snake_case`.
 - [ ] Search-shaped, not 1:1 endpoint wraps — consolidate list+get where the list only ever feeds the get.
 - [ ] Every list-shaped tool: `limit`/`offset` in, `total_count`/`has_more`/`next_offset` out.
+- [ ] Any upstream call that paginates server-side (SQL, Elasticsearch, ArcGIS, OData, etc.) passes an
+  explicit, deterministic sort/orderBy — see best-practices doc §4 "Pagination must be stable". Without
+  one, `LIMIT`/`OFFSET`-style pagination is not guaranteed stable and can silently duplicate or drop rows
+  across pages (confirmed live against CKAN's `datastore_search`, see `nz-govt-mcp`'s `datagovt.ts`).
+- [ ] A field with a small, confirmed, fixed set of values (verified against the live upstream, not
+  guessed) gets a `z.enum([...])` filter using the upstream's native exact-match/filter mechanism, not
+  folded into a free-text search param — see best-practices doc §4 "Structured filters over free text".
 - [ ] `response_format: "concise" | "detailed"` — only include it if the two modes are genuinely
   different; don't add it as a no-op.
 - [ ] Geospatial tools: never return raw geometry by default — centroid/bbox summaries only.
