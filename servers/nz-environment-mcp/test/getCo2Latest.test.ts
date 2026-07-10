@@ -31,6 +31,24 @@ describe("nz_env_get_co2_latest", () => {
     expect(result.structuredContent?.raw_text).toBe("Latest: 424.7\nDate: 2026-07-08\n");
   });
 
+  it("parses NIWA's real pipe-delimited baringhead.txt format", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        textResponse("2026-07-08\nLatest daily average|424.7\nOne year ago|423.3\nOne decade ago|401.1\n"),
+      ),
+    );
+    const env = await createFakeEnv({ niwaApiKey: "secret-niwa-key" });
+
+    const result = await getCo2LatestHandler({}, env);
+
+    expect(result.structuredContent?.parsed).toEqual({
+      "Latest daily average": "424.7",
+      "One year ago": "423.3",
+      "One decade ago": "401.1",
+    });
+  });
+
   it("warns and leaves parsed empty when the text doesn't look like key/value lines", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(textResponse("424.7 ppm as of 8 July 2026")));
     const env = await createFakeEnv({ niwaApiKey: "secret-niwa-key" });

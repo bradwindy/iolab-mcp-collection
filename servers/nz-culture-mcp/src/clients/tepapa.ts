@@ -85,11 +85,12 @@ export async function searchTePapa(params: {
   if (!response.ok) throw new UpstreamHttpError(SOURCE, response);
 
   const body = (await response.json()) as {
-    results: TePapaRecord[];
+    results?: TePapaRecord[];
     _metadata: { resultset: { count: number; from: number; size: number } };
   };
 
-  return { results: body.results, totalCount: body._metadata.resultset.count };
+  // Confirmed live: a zero-hit search omits `results` entirely rather than returning `[]`.
+  return { results: body.results ?? [], totalCount: body._metadata.resultset.count };
 }
 
 /**

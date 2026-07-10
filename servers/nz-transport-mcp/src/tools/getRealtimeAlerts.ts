@@ -15,7 +15,13 @@ import {
   upstreamError,
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
-import { getServiceAlerts, SOURCE, type AlertFeedEntity } from "../clients/aucklandTransport.js";
+import {
+  getServiceAlerts,
+  SOURCE,
+  toArray,
+  type AlertFeedEntity,
+  type GtfsRtTranslatedString,
+} from "../clients/aucklandTransport.js";
 import { getAtSubscriptionKey } from "../clients/credentialStore.js";
 import { AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL, SERVER_SLUG } from "../constants.js";
 
@@ -51,30 +57,37 @@ function epochToIso(value: number | string | undefined): string | null {
 }
 
 function affectedRoutes(entity: AlertFeedEntity): string[] {
-  const ids = (entity.alert?.informed_entity ?? []).map((e) => e.route_id).filter((v): v is string => Boolean(v));
+  const ids = toArray(entity.alert?.informed_entity)
+    .map((e) => e.route_id)
+    .filter((v): v is string => Boolean(v));
   return Array.from(new Set(ids));
+}
+
+function firstTranslation(translated: GtfsRtTranslatedString | undefined): string | null {
+  return toArray(translated?.translation)[0]?.text ?? null;
 }
 
 function toConcise(entity: AlertFeedEntity) {
   const alert = entity.alert;
+  const activePeriod = toArray(alert?.active_period)[0];
   return {
     id: entity.id,
     cause: alert?.cause ?? null,
     effect: alert?.effect ?? null,
-    header: alert?.header_text?.translation?.[0]?.text ?? null,
+    header: firstTranslation(alert?.header_text),
     affected_routes: affectedRoutes(entity),
-    active_from: epochToIso(alert?.active_period?.[0]?.start),
-    active_to: epochToIso(alert?.active_period?.[0]?.end),
+    active_from: epochToIso(activePeriod?.start),
+    active_to: epochToIso(activePeriod?.end),
   };
 }
 
 function toDetailed(entity: AlertFeedEntity) {
   return {
     ...toConcise(entity),
-    description: entity.alert?.description_text?.translation?.[0]?.text ?? null,
+    description: firstTranslation(entity.alert?.description_text),
     severity_level: entity.alert?.severity_level ?? null,
-    url: entity.alert?.url?.translation?.[0]?.text ?? null,
-    informed_entities: entity.alert?.informed_entity ?? [],
+    url: firstTranslation(entity.alert?.url),
+    informed_entities: toArray(entity.alert?.informed_entity),
   };
 }
 
@@ -90,7 +103,7 @@ export async function getRealtimeAlertsHandler(rawInput: unknown, env: Env): Pro
     );
     const allEntities = feed.entity ?? [];
     const filtered = input.route
-      ? allEntities.filter((e) => (e.alert?.informed_entity ?? []).some((ie) => ie.route_id === input.route))
+      ? allEntities.filter((e) => toArray(e.alert?.informed_entity).some((ie) => ie.route_id === input.route))
       : allEntities;
 
     const page = paginate(filtered, { limit: input.limit, offset: input.offset }, { maxLimit: MAX_LIMIT });

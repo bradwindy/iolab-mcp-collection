@@ -15,7 +15,7 @@ import {
   upstreamError,
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
-import { getTripUpdates as fetchTripUpdates, SOURCE, type TripUpdateFeedEntity } from "../clients/aucklandTransport.js";
+import { getTripUpdates as fetchTripUpdates, SOURCE, toArray, type TripUpdateFeedEntity } from "../clients/aucklandTransport.js";
 import { getAtSubscriptionKey } from "../clients/credentialStore.js";
 import { AT_SUBSCRIPTION_KEY_NAME, PORTAL_URL, SERVER_SLUG } from "../constants.js";
 
@@ -53,7 +53,7 @@ function epochToIso(value: number | string | undefined): string | null {
 
 function toConcise(entity: TripUpdateFeedEntity) {
   const tu = entity.trip_update;
-  const stopUpdates = tu?.stop_time_update ?? [];
+  const stopUpdates = toArray(tu?.stop_time_update);
   const next = stopUpdates[0];
   return {
     trip_id: tu?.trip?.trip_id ?? null,
@@ -74,7 +74,7 @@ function toConcise(entity: TripUpdateFeedEntity) {
 
 function toDetailed(entity: TripUpdateFeedEntity) {
   const tu = entity.trip_update;
-  const stopUpdates = tu?.stop_time_update ?? [];
+  const stopUpdates = toArray(tu?.stop_time_update);
   return {
     ...toConcise(entity),
     direction_id: tu?.trip?.direction_id ?? null,

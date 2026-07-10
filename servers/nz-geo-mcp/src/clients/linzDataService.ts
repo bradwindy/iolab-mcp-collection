@@ -36,9 +36,8 @@ export type VectorQueryParams = {
  * Shape of a Koordinates-family vector query JSON response (LDS is a white-label Koordinates
  * instance — confirmed via the `server: Koordinates` response header). Documented at
  * https://help.koordinates.com/query-api-and-web-services/vector-query/ and
- * https://support.koordinates.com/hc/en-us/articles/200421184-Vector-Query. This exact shape was
- * NOT independently verified against a live authenticated response (no API key is available in
- * this build environment) — the parsing below is deliberately defensive (optional chaining,
+ * https://support.koordinates.com/hc/en-us/articles/200421184-Vector-Query. Confirmed live
+ * against a real API key — the parsing below stays deliberately defensive (optional chaining,
  * empty-array fallbacks) so a minor shape mismatch degrades to "no features" rather than throwing.
  */
 type VectorQueryResponse = {
@@ -66,7 +65,8 @@ type VectorQueryResponse = {
  */
 export async function queryVector(params: VectorQueryParams): Promise<LdsLayerResult[]> {
   const url = new URL(BASE_URL);
-  url.searchParams.set("api_key", params.apiKey);
+  // Confirmed live: this Koordinates-family query endpoint reads the key as `key`, not `api_key`.
+  url.searchParams.set("key", params.apiKey);
   for (const layerId of params.layerIds) url.searchParams.append("layer", String(layerId));
   url.searchParams.set("x", String(params.lon));
   url.searchParams.set("y", String(params.lat));

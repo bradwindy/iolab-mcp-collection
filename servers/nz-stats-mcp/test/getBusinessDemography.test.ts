@@ -5,37 +5,44 @@ import { clearCache } from "./helpers/cache.js";
 import { ensureCredentialsTable, seedSubscriptionKey } from "./helpers/credentials.js";
 
 /**
- * A plausible SDMX-JSON 2.1 data message for BDS_BDS_004, built against the documented
- * SDMX-JSON shape (see clients/statsNzSdmx.ts). One year (2024) x one industry (TOTAL) x
- * two measures (enterprise count, employee count).
+ * A plausible SDMX-JSON data message for BDS_BDS_004, built against the real Aotearoa Data
+ * Explorer envelope confirmed live 2026-07-10 (see clients/statsNzSdmx.ts): `{meta, data:
+ * {dataSets, structures}}`, no series-level dimensions — all three dimensions, in real
+ * keyPosition order ANZSIC06, YEAR, MEASURE, live in `structures[0].dimensions.observation[]`,
+ * with values in a flat `dataSets[0].observations` map. One year (2024) x one industry (TOTAL)
+ * x two measures (enterprise count, employee count).
  */
 function fakeSdmxJson() {
   return {
-    header: { id: "test", prepared: "2026-07-09T00:00:00Z" },
-    dataSets: [
-      {
-        series: {
-          "0:0": { observations: { "0": [612345], "1": [2456789] } },
+    meta: { id: "test", prepared: "2026-07-09T00:00:00Z" },
+    data: {
+      dataSets: [
+        {
+          observations: {
+            "0:0:0": [612345],
+            "0:0:1": [2456789],
+          },
         },
-      },
-    ],
-    structure: {
-      dimensions: {
-        series: [
-          { id: "YEAR_BDS_BDS_004", name: "Year", values: [{ id: "2024", name: "2024" }] },
-          { id: "ANZSIC06_BDS_BDS_004", name: "Industry", values: [{ id: "TOTAL", name: "All industries" }] },
-        ],
-        observation: [
-          {
-            id: "MEASURE_BDS_BDS_004",
-            name: "Measure",
-            values: [
-              { id: "ECOUNT", name: "Geographic units count" },
-              { id: "EMPCOUNT", name: "Employee count" },
+      ],
+      structures: [
+        {
+          dimensions: {
+            series: [],
+            observation: [
+              { id: "ANZSIC06_BDS_BDS_004", name: "Industry", values: [{ id: "TOTAL", name: "All industries" }] },
+              { id: "YEAR_BDS_BDS_004", name: "Year", values: [{ id: "2024", name: "2024" }] },
+              {
+                id: "MEASURE_BDS_BDS_004",
+                name: "Measure",
+                values: [
+                  { id: "ECOUNT", name: "Geographic units count" },
+                  { id: "EMPCOUNT", name: "Employee count" },
+                ],
+              },
             ],
           },
-        ],
-      },
+        },
+      ],
     },
   };
 }
@@ -85,7 +92,7 @@ describe("nz_stats_get_business_demography", () => {
     await getBusinessDemographyHandler({ start_year: 2024, end_year: 2024 }, env);
 
     const requestedUrl = String((fetchMock.mock.calls[0]?.[0] as URL | string) ?? "");
-    expect(requestedUrl).toContain("/data/STATSNZ,BDS_BDS_004,1.0/2024.TOTAL.");
+    expect(requestedUrl).toContain("/data/STATSNZ,BDS_BDS_004,1.0/TOTAL.2024.");
   });
 
   it("rejects a year outside the dataflow's documented range", async () => {

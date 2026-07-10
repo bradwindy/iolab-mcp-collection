@@ -3,10 +3,11 @@ import { getVehiclePositionsHandler } from "../src/tools/getVehiclePositions.js"
 import { makeTestEnv } from "./helpers/env.js";
 
 function feedResponse(entities: unknown[]) {
-  return new Response(JSON.stringify({ header: { gtfs_realtime_version: "2.0" }, entity: entities }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  // Confirmed live 2026-07-10: AT wraps the GTFS-realtime message in an outer {status, response} envelope.
+  return new Response(
+    JSON.stringify({ status: "OK", response: { header: { gtfs_realtime_version: "2.0" }, entity: entities } }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
 }
 
 function sampleVehicle(id: string, routeId: string) {

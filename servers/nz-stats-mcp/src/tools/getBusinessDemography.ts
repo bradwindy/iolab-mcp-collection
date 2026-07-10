@@ -125,9 +125,11 @@ export async function getBusinessDemographyHandler(rawInput: unknown, env: Env):
     );
   }
 
-  // Dimension order is YEAR.ANZSIC06.MEASURE (row-then-column, per the dataflow's own
-  // LAYOUT annotations — see constants.ts). MEASURE is left blank ("all measures").
-  const key = `${yearCodes.join("+")}.${industryCode}.`;
+  // Dimension order is ANZSIC06.YEAR.MEASURE — confirmed live 2026-07-10 via a CSV probe
+  // (`format=csv` header came back "ANZSIC06_BDS_BDS_004,YEAR_BDS_BDS_004,MEASURE_BDS_BDS_004").
+  // This does NOT match the row-then-column order the LAYOUT_ROW/LAYOUT_COLUMN annotations in
+  // constants.ts implied — that assumption was wrong. MEASURE is left blank ("all measures").
+  const key = `${industryCode}.${yearCodes.join("+")}.`;
 
   try {
     const result = await cached(env.MCP_CACHE, `nz-stats:bds_bds_004:${key}`, CACHE_TTL.METADATA, () =>

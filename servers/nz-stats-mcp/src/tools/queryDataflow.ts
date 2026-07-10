@@ -109,7 +109,10 @@ export async function queryDataflowHandler(rawInput: unknown, env: Env): Promise
   if (!credential.ok) return credential.error;
 
   const agencyId = input.agency_id?.trim() || AGENCY_ID;
-  const version = input.version?.trim() || "latest";
+  // Requested version, if any — passed through as-is to fetchSdmxData, which omits the version
+  // segment entirely when this is undefined (confirmed live: the literal string "latest" 400s).
+  const requestedVersion = input.version?.trim() || undefined;
+  const version = requestedVersion ?? "latest";
   const key = input.dimension_key?.trim() || "all";
   const extraQuery: Record<string, string> = {
     ...(input.start_period ? { startPeriod: input.start_period } : {}),
@@ -126,7 +129,7 @@ export async function queryDataflowHandler(rawInput: unknown, env: Env): Promise
           subscriptionKey: credential.subscriptionKey,
           agencyId,
           dataflowId: input.dataflow_id,
-          version,
+          ...(requestedVersion ? { version: requestedVersion } : {}),
           key,
           format: input.format,
           extraQuery,

@@ -7,14 +7,9 @@ const USER_AGENT = "nz-mcp-collection/nz-environment-mcp (+https://mcp.example.i
 /**
  * Fetch the raw UV forecast JSON for a location.
  *
- * NOTE ON FIELD NAMES: NIWA's `/uv/data` route requires an API key, and its interactive
- * docs at developer.niwa.co.nz are a client-rendered SPA that resists automated fetching
- * (confirmed: the server returns only an empty `<app>` shell to non-browser clients, and
- * no third-party open-source client for this specific endpoint could be found, unlike the
- * Tide API which two independent GitHub projects document). The catalog's sample request
- * (`lat`, `long`, `apikey`) is confirmed; the exact JSON response shape is not. This
- * returns the parsed JSON untouched — see getUvForecast.ts for the defensive shape-sniffing
- * applied on top of it, and README.md for how to confirm/fix this once a real key exists.
+ * Confirmed live 2026-07-10 against a real key: `{ products: [{ name, values: [{time, value}] }], coord }`,
+ * with two products (`cloudy_sky_uv_index`, `clear_sky_uv_index`), each a ~73-hour series. This
+ * returns the parsed JSON untouched — see getUvForecast.ts for how it's flattened into `forecast[]`.
  */
 export async function getUvData(params: { apiKey: string; lat: number; long: number }): Promise<unknown> {
   const url = new URL(`${BASE_URL}/data`);

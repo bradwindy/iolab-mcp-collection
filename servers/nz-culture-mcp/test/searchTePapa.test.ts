@@ -100,6 +100,21 @@ describe("nz_culture_search_te_papa", () => {
     expect(requestedUrl.searchParams.get("q")).toBe("kiwi AND (type:Person OR type:Organisation)");
   });
 
+  it("returns an empty item list when the upstream omits `results` entirely on a zero-hit search", async () => {
+    const env = await fakeEnv("guest-key-123");
+    const zeroHitResponse = new Response(
+      JSON.stringify({ facets: {}, _metadata: { resultset: { count: 0, from: 0, size: 0, truncated: false } } }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(zeroHitResponse));
+
+    const result = await searchTePapaHandler({ query: "zzzznonexistentzzzz" }, env);
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent?.items).toEqual([]);
+    expect(result.structuredContent?.total_count).toBe(0);
+  });
+
   it("returns an actionable error on upstream HTTP failure", async () => {
     const env = await fakeEnv("guest-key-123");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("down", { status: 401, statusText: "Unauthorized" })));

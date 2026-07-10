@@ -56,7 +56,7 @@ describe("nz_geo_query_layer", () => {
     expect(features[0]?.geometry_summary).toBeUndefined();
 
     const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
-    expect(requestedUrl.searchParams.get("api_key")).toBe("test-linz-key");
+    expect(requestedUrl.searchParams.get("key")).toBe("test-linz-key");
     expect(requestedUrl.searchParams.getAll("layer")).toEqual(["50772"]);
   });
 

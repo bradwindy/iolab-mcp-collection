@@ -3,10 +3,11 @@ import { getTripUpdatesHandler } from "../src/tools/getTripUpdates.js";
 import { makeTestEnv } from "./helpers/env.js";
 
 function feedResponse(entities: unknown[]) {
-  return new Response(JSON.stringify({ header: { gtfs_realtime_version: "2.0" }, entity: entities }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  // Confirmed live 2026-07-10: AT wraps the GTFS-realtime message in an outer {status, response} envelope.
+  return new Response(
+    JSON.stringify({ status: "OK", response: { header: { gtfs_realtime_version: "2.0" }, entity: entities } }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
 }
 
 function sampleTripUpdate(id: string, routeId: string, stopUpdateCount = 2) {
@@ -21,7 +22,9 @@ function sampleTripUpdate(id: string, routeId: string, stopUpdateCount = 2) {
     trip_update: {
       trip: { trip_id: `trip-${id}`, route_id: routeId },
       vehicle: { id: `veh-${id}` },
-      stop_time_update: stopTimeUpdate,
+      // Confirmed live 2026-07-10: AT's serializer collapses a single-item repeated field to a
+      // bare object rather than a one-element array — reproduce that shape here, not just the array.
+      stop_time_update: stopUpdateCount === 1 ? stopTimeUpdate[0] : stopTimeUpdate,
       timestamp: 1750000000,
     },
   };
@@ -54,6 +57,17 @@ describe("nz_transport_get_trip_updates", () => {
         last_updated: new Date(1750000000 * 1000).toISOString(),
       },
     ]);
+  });
+
+  it("handles a single stop_time_update arriving as a bare object, not an array", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(feedResponse([sampleTripUpdate("1", "70-202", 1)])));
+    const env = await makeTestEnv({ atSubscriptionKey: "secret-key" });
+
+    const result = await getTripUpdatesHandler({}, env);
+
+    const item = (result.structuredContent?.items as Array<Record<string, unknown>>)[0];
+    expect(item?.stop_updates_count).toBe(1);
+    expect(item?.next_stop).toEqual({ stop_id: "stop-1", arrival_delay_seconds: 60, departure_delay_seconds: 65 });
   });
 
   it("filters to the requested route", async () => {

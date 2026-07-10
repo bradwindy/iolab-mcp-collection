@@ -6,14 +6,20 @@ import { ensureCredentialsTable, seedSubscriptionKey } from "./helpers/credentia
 
 function fakeSdmxJson() {
   return {
-    dataSets: [{ series: { "0": { observations: { "0": [42] } } } }],
-    structure: {
-      dimensions: {
-        series: [
-          { id: "FORESTRY_AGR_AGR_001", name: "Forestry", values: [{ id: "1", name: "Exotic" }] },
-        ],
-        observation: [{ id: "YEAR_AGR_AGR_001", name: "Year", values: [{ id: "2018", name: "2018" }] }],
-      },
+    meta: { id: "test" },
+    data: {
+      dataSets: [{ observations: { "0:0": [42] } }],
+      structures: [
+        {
+          dimensions: {
+            series: [],
+            observation: [
+              { id: "FORESTRY_AGR_AGR_001", name: "Forestry", values: [{ id: "1", name: "Exotic" }] },
+              { id: "YEAR_AGR_AGR_001", name: "Year", values: [{ id: "2018", name: "2018" }] },
+            ],
+          },
+        },
+      ],
     },
   };
 }
@@ -49,16 +55,20 @@ describe("nz_stats_query_dataflow", () => {
     expect(result.structuredContent?.raw).toBeNull();
   });
 
-  it("defaults dimension_key to 'all', version to 'latest', and agency_id to STATSNZ", async () => {
+  it("defaults dimension_key to 'all' and agency_id to STATSNZ, omitting the version segment for 'latest'", async () => {
     await seedSubscriptionKey(env);
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse());
     vi.stubGlobal("fetch", fetchMock);
 
-    await queryDataflowHandler({ dataflow_id: "AGR_AGR_001" }, env);
+    const result = await queryDataflowHandler({ dataflow_id: "AGR_AGR_001" }, env);
 
+    // Confirmed live 2026-07-10: the literal string "latest" 400s against Stats NZ's gateway —
+    // the version segment must be omitted from the resource triple entirely to mean "latest".
     const requestedUrl = String((fetchMock.mock.calls[0]?.[0] as URL | string) ?? "");
-    expect(requestedUrl).toContain("/data/STATSNZ,AGR_AGR_001,latest/all");
+    expect(requestedUrl).toContain("/data/STATSNZ,AGR_AGR_001/all");
+    expect(requestedUrl).not.toContain("latest");
     expect(requestedUrl).toContain("format=jsondata");
+    expect(result.structuredContent?.version).toBe("latest");
   });
 
   it("passes through a custom dimension_key, agency_id, and version", async () => {

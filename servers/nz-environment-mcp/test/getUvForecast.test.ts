@@ -34,6 +34,30 @@ describe("nz_env_get_uv_forecast", () => {
     expect(result.structuredContent?.notice).toBe("");
   });
 
+  it("extracts NIWA's real 'products' shape (cloudy-sky and clear-sky series) without a fallback notice", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          products: [
+            { name: "cloudy_sky_uv_index", values: [{ time: "2026-07-10T12:00:00Z", value: 6.2 }] },
+            { name: "clear_sky_uv_index", values: [{ time: "2026-07-10T12:00:00Z", value: 7.1 }] },
+          ],
+          coord: { lat: -41.2865, long: 174.7762 },
+        }),
+      ),
+    );
+    const env = await createFakeEnv({ niwaApiKey: "secret-niwa-key" });
+
+    const result = await getUvForecastHandler({ lat: -41.2865, long: 174.7762 }, env);
+
+    expect(result.structuredContent?.forecast).toEqual([
+      { product: "cloudy_sky_uv_index", values: [{ time: "2026-07-10T12:00:00Z", value: 6.2 }] },
+      { product: "clear_sky_uv_index", values: [{ time: "2026-07-10T12:00:00Z", value: 7.1 }] },
+    ]);
+    expect(result.structuredContent?.notice).toBe("");
+  });
+
   it("falls back to the raw payload and warns when the shape is unrecognised", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ somethingUnexpected: true })));
     const env = await createFakeEnv({ niwaApiKey: "secret-niwa-key" });

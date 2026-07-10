@@ -127,7 +127,12 @@ export async function getPopulationByAreaHandler(rawInput: unknown, env: Env): P
     }
   }
 
-  const key = `${areaCodes.join("+")}.${POPULATION_SEX_TOTAL_CODE}.${POPULATION_AGE_TOTAL_CODE}.${yearCodes.join("+")}`;
+  // Dimension order is YEAR.SEX.AGE.AREA — confirmed live 2026-07-10 via a CSV probe
+  // (`format=csv` header came back "YEAR_POPES_SUB_004,SEX_POPES_SUB_004,AGE_POPES_SUB_004,
+  // AREA_POPES_SUB_004"). This does NOT match the row-then-column order the LAYOUT_ROW/
+  // LAYOUT_COLUMN annotations in constants.ts implied (AREA.SEX.AGE.YEAR) — that assumption
+  // was wrong; LAYOUT annotations do not reliably predict REST key segment order.
+  const key = `${yearCodes.join("+")}.${POPULATION_SEX_TOTAL_CODE}.${POPULATION_AGE_TOTAL_CODE}.${areaCodes.join("+")}`;
 
   try {
     const result = await cached(env.MCP_CACHE, `nz-stats:popes_sub_004:${key}`, CACHE_TTL.METADATA, () =>

@@ -3,10 +3,17 @@ import { getRealtimeAlertsHandler } from "../src/tools/getRealtimeAlerts.js";
 import { makeTestEnv } from "./helpers/env.js";
 
 function feedResponse(entities: unknown[]) {
-  return new Response(JSON.stringify({ header: { gtfs_realtime_version: "2.0", timestamp: 1750000000 }, entity: entities }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  // Confirmed live 2026-07-10: AT wraps the GTFS-realtime message in an outer {status, response}
+  // envelope. Each "repeated" field below is also a bare object rather than a one-element array —
+  // AT's serializer collapses single-item repeated fields, which is the real shape a typical alert
+  // (one language, one active period, one informed route) arrives in.
+  return new Response(
+    JSON.stringify({
+      status: "OK",
+      response: { header: { gtfs_realtime_version: "2.0", timestamp: 1750000000 }, entity: entities },
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
 }
 
 function sampleAlert(id: string, routeId: string) {
@@ -15,10 +22,10 @@ function sampleAlert(id: string, routeId: string) {
     alert: {
       cause: "CONSTRUCTION",
       effect: "DETOUR",
-      header_text: { translation: [{ text: `Detour on ${routeId}`, language: "en" }] },
-      description_text: { translation: [{ text: "Long-form description", language: "en" }] },
-      active_period: [{ start: 1750000000, end: 1750100000 }],
-      informed_entity: [{ route_id: routeId }],
+      header_text: { translation: { text: `Detour on ${routeId}`, language: "en" } },
+      description_text: { translation: { text: "Long-form description", language: "en" } },
+      active_period: { start: 1750000000, end: 1750100000 },
+      informed_entity: { route_id: routeId },
     },
   };
 }

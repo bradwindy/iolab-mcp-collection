@@ -24,16 +24,17 @@ export async function getBaringHeadInfoText(apiKey: string): Promise<string> {
 }
 
 /**
- * Best-effort parse of `key: value` / `key = value` style lines out of the info text.
- * Returns {} if the text doesn't look like that at all — callers should always also
- * surface the raw text so no information is lost regardless of the actual format.
+ * Best-effort parse of `key: value` / `key = value` / `key|value` style lines out of the info
+ * text. Confirmed live: NIWA's actual baringhead.txt is pipe-delimited (`Latest daily average|424.7`),
+ * not `key: value` as originally guessed. Returns {} if the text doesn't look like any of these —
+ * callers should always also surface the raw text so no information is lost regardless of format.
  */
 export function parseInfoText(text: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
-    const match = /^([^:=]{1,60}?)\s*[:=]\s*(.+)$/.exec(line);
+    const match = /^([^|:=]{1,60}?)\s*[|:=]\s*(.+)$/.exec(line);
     if (!match) continue;
     const key = match[1]?.trim();
     const value = match[2]?.trim();

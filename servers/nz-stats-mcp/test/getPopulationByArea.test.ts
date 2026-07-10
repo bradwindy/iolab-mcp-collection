@@ -5,46 +5,54 @@ import { clearCache } from "./helpers/cache.js";
 import { ensureCredentialsTable, seedSubscriptionKey } from "./helpers/credentials.js";
 
 /**
- * A plausible SDMX-JSON 2.1 data message for POPES_SUB_004, built against the documented
- * SDMX-JSON shape (see clients/statsNzSdmx.ts). Two areas (Northland, Auckland) x two years
- * (2023, 2024), sex/age fixed at their "Total" codes.
+ * A plausible SDMX-JSON data message for POPES_SUB_004, built against the real Aotearoa Data
+ * Explorer envelope confirmed live 2026-07-10 (see clients/statsNzSdmx.ts): `{meta, data: {
+ * dataSets, structures}}`, no series-level dimensions — every dimension (in real keyPosition
+ * order YEAR, SEX, AGE, AREA) lives in `structures[0].dimensions.observation[]`, and values sit in
+ * a flat `dataSets[0].observations` map keyed "yearIdx:sexIdx:ageIdx:areaIdx". Two areas
+ * (Northland, Auckland) x two years (2023, 2024), sex/age fixed at their "Total" codes.
  */
 function fakeSdmxJson() {
   return {
-    header: { id: "test", prepared: "2026-07-09T00:00:00Z" },
-    dataSets: [
-      {
-        series: {
-          "0:0:0": { observations: { "0": [1234], "1": [1250] } },
-          "1:0:0": { observations: { "0": [5000], "1": [5100] } },
+    meta: { id: "test", prepared: "2026-07-09T00:00:00Z" },
+    data: {
+      dataSets: [
+        {
+          observations: {
+            "0:0:0:0": [1234],
+            "1:0:0:0": [1250],
+            "0:0:0:1": [5000],
+            "1:0:0:1": [5100],
+          },
         },
-      },
-    ],
-    structure: {
-      dimensions: {
-        series: [
-          {
-            id: "AREA_POPES_SUB_004",
-            name: "Area",
-            values: [
-              { id: "01", name: "Northland region" },
-              { id: "02", name: "Auckland region" },
+      ],
+      structures: [
+        {
+          dimensions: {
+            series: [],
+            observation: [
+              {
+                id: "YEAR_POPES_SUB_004",
+                name: "Year",
+                values: [
+                  { id: "2023", name: "2023" },
+                  { id: "2024", name: "2024" },
+                ],
+              },
+              { id: "SEX_POPES_SUB_004", name: "Sex", values: [{ id: "3", name: "Total" }] },
+              { id: "AGE_POPES_SUB_004", name: "Age", values: [{ id: "999999", name: "Total all ages" }] },
+              {
+                id: "AREA_POPES_SUB_004",
+                name: "Area",
+                values: [
+                  { id: "01", name: "Northland region" },
+                  { id: "02", name: "Auckland region" },
+                ],
+              },
             ],
           },
-          { id: "SEX_POPES_SUB_004", name: "Sex", values: [{ id: "3", name: "Total" }] },
-          { id: "AGE_POPES_SUB_004", name: "Age", values: [{ id: "999999", name: "Total all ages" }] },
-        ],
-        observation: [
-          {
-            id: "YEAR_POPES_SUB_004",
-            name: "Year",
-            values: [
-              { id: "2023", name: "2023" },
-              { id: "2024", name: "2024" },
-            ],
-          },
-        ],
-      },
+        },
+      ],
     },
   };
 }
@@ -100,7 +108,8 @@ describe("nz_stats_get_population_by_area", () => {
     await getPopulationByAreaHandler({ area_code: "02" }, env);
 
     const requestedUrl = String((fetchMock.mock.calls[0]?.[0] as URL | string) ?? "");
-    expect(requestedUrl).toContain("/data/STATSNZ,POPES_SUB_004,1.0/02.3.999999.");
+    expect(requestedUrl).toContain("/data/STATSNZ,POPES_SUB_004,1.0/");
+    expect(requestedUrl).toContain(".3.999999.02");
   });
 
   it("rejects a year outside the dataflow's available years", async () => {

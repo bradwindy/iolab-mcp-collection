@@ -34,8 +34,12 @@ export type GtfsRtPosition = {
   odometer?: number;
 };
 
+export type GtfsRtTranslation = { text: string; language?: string };
+
 export type GtfsRtTranslatedString = {
-  translation?: Array<{ text: string; language?: string }>;
+  // See toArray() below: may collapse to a single object when there's exactly one translation
+  // (the common case for NZ-only alerts, which only ever have an English string).
+  translation?: GtfsRtTranslation | GtfsRtTranslation[];
 };
 
 export type GtfsRtEntitySelector = {
@@ -46,9 +50,13 @@ export type GtfsRtEntitySelector = {
   stop_id?: string;
 };
 
+export type GtfsRtActivePeriod = { start?: number | string; end?: number | string };
+
 export type GtfsRtAlert = {
-  active_period?: Array<{ start?: number | string; end?: number | string }>;
-  informed_entity?: GtfsRtEntitySelector[];
+  // See toArray() below: AT's serializer collapses a single-item repeated field to a bare
+  // object rather than a one-element array, so these may arrive as a lone object.
+  active_period?: GtfsRtActivePeriod | GtfsRtActivePeriod[];
+  informed_entity?: GtfsRtEntitySelector | GtfsRtEntitySelector[];
   cause?: string;
   effect?: string;
   header_text?: GtfsRtTranslatedString;
@@ -82,10 +90,25 @@ export type GtfsRtStopTimeUpdate = {
 export type GtfsRtTripUpdate = {
   trip?: GtfsRtTripDescriptor;
   vehicle?: GtfsRtVehicleDescriptor;
-  stop_time_update?: GtfsRtStopTimeUpdate[];
+  // See toArray() below: AT's serializer collapses a single-item repeated field to a bare
+  // object rather than a one-element array, so this may arrive as a lone object.
+  stop_time_update?: GtfsRtStopTimeUpdate | GtfsRtStopTimeUpdate[];
   timestamp?: number | string;
   delay?: number;
 };
+
+/**
+ * Confirmed live 2026-07-10 (a trip_update with exactly one pending stop came back as a bare
+ * `stop_time_update` object rather than `[{...}]`): AT's realtime JSON serializer collapses a
+ * single-item repeated field instead of keeping the one-element array the GTFS-realtime JSON
+ * mapping implies. Use this wherever a GTFS-RT field is nominally "repeated" — informed_entity,
+ * active_period, stop_time_update — so a count of exactly one doesn't silently drop data or
+ * throw when callers `.map`/`.filter`/`.slice` it.
+ */
+export function toArray<T>(value: T | T[] | undefined): T[] {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
 
 export type GtfsRtFeedEntity<K extends string, T> = { id: string; is_deleted?: boolean } & { [P in K]?: T };
 
@@ -112,16 +135,28 @@ async function getJson<T>(url: string, subscriptionKey: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * Confirmed live 2026-07-10: the "legacy" realtime endpoints wrap the GTFS-realtime JSON
+ * message in an outer `{status, response}` envelope — `{"status":"OK","response":{"header":
+ * {...},"entity":[...]}}` — rather than returning `{header, entity}` at the top level as the
+ * official GTFS-realtime JSON mapping would suggest. Unwrap it here so callers see the plain
+ * FeedMessage shape.
+ */
+async function getRealtimeFeed<E>(url: string, subscriptionKey: string): Promise<GtfsRtFeedMessage<E>> {
+  const wrapped = await getJson<{ status?: string; response?: GtfsRtFeedMessage<E> }>(url, subscriptionKey);
+  return wrapped.response ?? { header: {}, entity: [] };
+}
+
 export async function getServiceAlerts(subscriptionKey: string): Promise<GtfsRtFeedMessage<AlertFeedEntity>> {
-  return getJson(`${REALTIME_BASE}/servicealerts`, subscriptionKey);
+  return getRealtimeFeed(`${REALTIME_BASE}/servicealerts`, subscriptionKey);
 }
 
 export async function getVehiclePositions(subscriptionKey: string): Promise<GtfsRtFeedMessage<VehicleFeedEntity>> {
-  return getJson(`${REALTIME_BASE}/vehiclelocations`, subscriptionKey);
+  return getRealtimeFeed(`${REALTIME_BASE}/vehiclelocations`, subscriptionKey);
 }
 
 export async function getTripUpdates(subscriptionKey: string): Promise<GtfsRtFeedMessage<TripUpdateFeedEntity>> {
-  return getJson(`${REALTIME_BASE}/tripupdates`, subscriptionKey);
+  return getRealtimeFeed(`${REALTIME_BASE}/tripupdates`, subscriptionKey);
 }
 
 // --- Static GTFS (JSON:API). Confirmed live and registered (401-not-404) at:

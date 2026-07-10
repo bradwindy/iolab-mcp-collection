@@ -3,6 +3,13 @@ import { AGENCY_ID, SDMX_BASE_URL, SOURCE_NAME, SUBSCRIPTION_KEY_HEADER } from "
 
 const USER_AGENT = "nz-mcp-collection/nz-stats-mcp (+https://mcp.example.invalid)";
 
+/** Generous headroom over queryDataflow's MAX_RAW_CHARS truncation so csv/xml formats can still
+ * report a useful truncated preview; still far below the isolate's memory ceiling. */
+const MAX_RAW_TEXT_BYTES = 500_000;
+/** jsondata must parse as valid JSON, so there's no "truncate and preview" fallback — cap well
+ * below the isolate's memory ceiling and fail cleanly if exceeded. */
+const MAX_JSON_BODY_BYTES = 8_000_000;
+
 function buildHeaders(subscriptionKey: string): Record<string, string> {
   return {
     [SUBSCRIPTION_KEY_HEADER]: subscriptionKey,
@@ -87,7 +94,11 @@ export async function fetchSdmxData(params: {
   subscriptionKey: string;
   agencyId: string;
   dataflowId: string;
-  version: string;
+  /** Omit (or pass "") for the newest version. Confirmed live 2026-07-10: this gateway 400s on
+   * the literal string "latest" — the SDMX REST convention it actually honours is dropping the
+   * version segment from the resource triple entirely (`{agency},{resource}` rather than
+   * `{agency},{resource},{version}`). */
+  version?: string;
   key: string;
   format?: string;
   extraQuery?: Record<string, string>;
@@ -97,9 +108,10 @@ export async function fetchSdmxData(params: {
     .split(".")
     .map((segment) => segment.split("+").map(encodeURIComponent).join("+"))
     .join(".");
-  const url = new URL(
-    `${SDMX_BASE_URL}/data/${params.agencyId},${params.dataflowId},${params.version}/${encodedKey}`,
-  );
+  const resourceId = params.version
+    ? `${params.agencyId},${params.dataflowId},${params.version}`
+    : `${params.agencyId},${params.dataflowId}`;
+  const url = new URL(`${SDMX_BASE_URL}/data/${resourceId}/${encodedKey}`);
   url.searchParams.set("format", format);
   for (const [name, value] of Object.entries(params.extraQuery ?? {})) {
     url.searchParams.set(name, value);
@@ -110,22 +122,60 @@ export async function fetchSdmxData(params: {
 
   const contentType = response.headers.get("content-type") ?? "";
   if (format === "jsondata") {
-    return { contentType, body: await response.json(), isJson: true };
+    // An unconstrained ("all") key against a large dataflow can produce a body of tens of MB —
+    // well past what a Workers isolate can buffer via response.json(). Read (capped) then parse,
+    // so an oversized response fails as a clean error rather than an isolate OOM.
+    const { text, truncated } = await readBodyCapped(response, MAX_JSON_BODY_BYTES);
+    if (truncated) {
+      throw new Error(
+        `SDMX-JSON response exceeded ${MAX_JSON_BODY_BYTES.toLocaleString()} bytes before EOF — the ` +
+          `query is too unconstrained for this dataflow. Narrow the dimension key (avoid 'all' on ` +
+          `large dataflows), or use start_period/end_period, or try format='csv' to inspect a smaller ` +
+          `payload first.`,
+      );
+    }
+    return { contentType, body: JSON.parse(text) as unknown, isJson: true };
   }
-  return { contentType, body: await response.text(), isJson: false };
+  const { text } = await readBodyCapped(response, MAX_RAW_TEXT_BYTES);
+  return { contentType, body: text, isJson: false };
+}
+
+/** Read a response body up to `maxBytes`, cancelling the stream early rather than fully
+ * buffering an arbitrarily large upstream payload (SDMX responses for unconstrained queries
+ * can run tens of MB, well past what a Workers isolate can hold). */
+async function readBodyCapped(response: Response, maxBytes: number): Promise<{ text: string; truncated: boolean }> {
+  const reader = response.body?.getReader();
+  if (!reader) return { text: await response.text(), truncated: false };
+
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytesRead = 0;
+  let truncated = false;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytesRead += value.byteLength;
+    text += decoder.decode(value, { stream: true });
+    if (bytesRead >= maxBytes) {
+      truncated = true;
+      await reader.cancel();
+      break;
+    }
+  }
+  return { text, truncated };
 }
 
 // ---------------------------------------------------------------------------------
-// SDMX-JSON (SDMX 2.1 "data message") flattening.
+// SDMX-JSON (SDMX 2.0.0, per data-message/tools/schemas/2.0.0) flattening.
 // ---------------------------------------------------------------------------------
-// Built against the documented SDMX-JSON 2.1 shape used by SDMX 2.1-compliant national
-// statistics agencies (ECB, OECD, INSEE, and others): a `dataSets[0].series` map keyed by
-// colon-separated dimension-value indexes, cross-referenced against
-// `structure.dimensions.series[]` / `structure.dimensions.observation[]`, each entry
-// carrying its own `values[]` code/label list. This has NOT been validated against a real
-// authenticated Aotearoa Data Explorer response (no subscription key was available while
-// building this server) — see README.md "Research notes" for how to verify and adjust this
-// if Stats NZ's concrete implementation differs.
+// Confirmed live 2026-07-10 against real Aotearoa Data Explorer responses: the envelope is
+// `{ meta, data: { dataSets: [...], structures: [...] }, errors }` — NOT the bare top-level
+// `dataSets`/`structure` used by SDMX 2.1-compliant agencies (ECB, OECD). Dimensions are split
+// across `data.structures[0].dimensions.series[]` / `.observation[]` per the official field guide
+// (github.com/sdmx-twg/sdmx-json data-message/docs/1-sdmx-json-field-guide.md). When a dataflow has
+// no series-level dimensions (as with every STATSNZ dataflow checked so far), all dimensions land
+// in `observation[]` and data sits in a flat `dataSet.observations` map rather than nested under
+// `dataSet.series[...].observations`; this flattener handles both shapes.
 
 export type SdmxDimensionValue = { id: string; code: string; label: string };
 export type SdmxObservation = { dims: SdmxDimensionValue[]; value: number | string | null };
@@ -133,14 +183,17 @@ export type SdmxObservation = { dims: SdmxDimensionValue[]; value: number | stri
 type SdmxDimensionDef = { id: string; name?: string; values?: Array<{ id: string; name?: string }> };
 
 type SdmxJsonBody = {
-  dataSets?: Array<{
-    series?: Record<string, { observations?: Record<string, unknown[]> }>;
-  }>;
-  structure?: {
-    dimensions?: {
-      series?: SdmxDimensionDef[];
-      observation?: SdmxDimensionDef[];
-    };
+  data?: {
+    dataSets?: Array<{
+      series?: Record<string, { observations?: Record<string, unknown[]> }>;
+      observations?: Record<string, unknown[]>;
+    }>;
+    structures?: Array<{
+      dimensions?: {
+        series?: SdmxDimensionDef[];
+        observation?: SdmxDimensionDef[];
+      };
+    }>;
   };
 };
 
@@ -151,6 +204,11 @@ function resolveDim(dim: SdmxDimensionDef, index: number | undefined): SdmxDimen
   return { id: dim.id, code: value.id, label: value.name ?? value.id };
 }
 
+function extractObsValue(obsArray: unknown): number | string | null {
+  const rawValue = Array.isArray(obsArray) ? obsArray[0] : null;
+  return typeof rawValue === "number" || typeof rawValue === "string" || rawValue === null ? rawValue : null;
+}
+
 /**
  * Flatten an SDMX-JSON data message into one row per observation, each carrying every
  * dimension's resolved {id, code, label}. Dimension ids retain their Stats NZ-specific
@@ -159,11 +217,11 @@ function resolveDim(dim: SdmxDimensionDef, index: number | undefined): SdmxDimen
  */
 export function flattenSdmxJson(body: unknown): SdmxObservation[] {
   const root = body as SdmxJsonBody;
-  const dataset = root.dataSets?.[0];
-  const dimensions = root.structure?.dimensions;
+  const dataset = root.data?.dataSets?.[0];
+  const dimensions = root.data?.structures?.[0]?.dimensions;
   if (!dataset || !dimensions) {
     throw new Error(
-      "Unexpected SDMX-JSON response shape: missing dataSets[0] or structure.dimensions. " +
+      "Unexpected SDMX-JSON response shape: missing data.dataSets[0] or data.structures[0].dimensions. " +
         "The upstream response format may differ from what this server expects — " +
         "try nz_stats_query_dataflow with format='xml' to inspect the raw structure.",
     );
@@ -173,26 +231,32 @@ export function flattenSdmxJson(body: unknown): SdmxObservation[] {
   const obsDims = dimensions.observation ?? [];
   const rows: SdmxObservation[] = [];
 
-  for (const [seriesKey, seriesEntry] of Object.entries(dataset.series ?? {})) {
-    const seriesIndexes = seriesKey.split(":").map((s) => Number(s));
-    const seriesResolved = seriesDims
-      .map((dim, i) => resolveDim(dim, seriesIndexes[i]))
-      .filter((d): d is SdmxDimensionValue => d !== null);
-
-    for (const [obsKey, obsArray] of Object.entries(seriesEntry.observations ?? {})) {
-      const obsIndexes = obsKey.split(":").map((s) => Number(s));
-      const obsResolved = obsDims
-        .map((dim, i) => resolveDim(dim, obsIndexes[i]))
+  if (dataset.series) {
+    for (const [seriesKey, seriesEntry] of Object.entries(dataset.series)) {
+      const seriesIndexes = seriesKey.split(":").map((s) => Number(s));
+      const seriesResolved = seriesDims
+        .map((dim, i) => resolveDim(dim, seriesIndexes[i]))
         .filter((d): d is SdmxDimensionValue => d !== null);
 
-      const rawValue = Array.isArray(obsArray) ? obsArray[0] : null;
-      const value =
-        typeof rawValue === "number" || typeof rawValue === "string" || rawValue === null
-          ? rawValue
-          : null;
+      for (const [obsKey, obsArray] of Object.entries(seriesEntry.observations ?? {})) {
+        const obsIndexes = obsKey.split(":").map((s) => Number(s));
+        const obsResolved = obsDims
+          .map((dim, i) => resolveDim(dim, obsIndexes[i]))
+          .filter((d): d is SdmxDimensionValue => d !== null);
 
-      rows.push({ dims: [...seriesResolved, ...obsResolved], value });
+        rows.push({ dims: [...seriesResolved, ...obsResolved], value: extractObsValue(obsArray) });
+      }
     }
+    return rows;
+  }
+
+  for (const [obsKey, obsArray] of Object.entries(dataset.observations ?? {})) {
+    const obsIndexes = obsKey.split(":").map((s) => Number(s));
+    const obsResolved = obsDims
+      .map((dim, i) => resolveDim(dim, obsIndexes[i]))
+      .filter((d): d is SdmxDimensionValue => d !== null);
+
+    rows.push({ dims: obsResolved, value: extractObsValue(obsArray) });
   }
 
   return rows;

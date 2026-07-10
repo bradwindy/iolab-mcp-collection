@@ -30,12 +30,26 @@ const inputSchema = z.object(getUvForecastInputShape);
 const KNOWN_SERIES_KEYS = ["values", "data", "forecast", "series"];
 
 /**
- * Defensive shape-sniffing: NIWA's UV `/data` JSON schema could not be confirmed against
- * primary docs or a third-party client (see clients/niwaUv.ts). Try the field names other
- * NIWA weather APIs use; if none match, wrap the whole raw payload so nothing is lost.
+ * Confirmed live 2026-07-10: NIWA's UV `/data` response is
+ * `{ products: [{ name: "cloudy_sky_uv_index" | "clear_sky_uv_index", values: [{time, value}] }], coord }`
+ * — two named series (cloudy-sky and clear-sky forecasts), not a single flat series. Each
+ * product is surfaced as one `forecast[]` entry carrying its `product` name alongside its
+ * `values`. The KNOWN_SERIES_KEYS fallback below is kept for defensiveness only, in case NIWA
+ * changes shape again; a genuinely unrecognised shape still falls through to `raw_response` so
+ * no information is lost.
  */
 function extractForecastSeries(raw: unknown): { series: Array<Record<string, unknown>>; matchedKnownShape: boolean } {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const products = (raw as Record<string, unknown>).products;
+    if (
+      Array.isArray(products) &&
+      products.every((p) => p && typeof p === "object" && Array.isArray((p as Record<string, unknown>).values))
+    ) {
+      return {
+        series: (products as Array<Record<string, unknown>>).map((p) => ({ product: p.name ?? null, values: p.values })),
+        matchedKnownShape: true,
+      };
+    }
     for (const key of KNOWN_SERIES_KEYS) {
       const candidate = (raw as Record<string, unknown>)[key];
       if (Array.isArray(candidate)) {
