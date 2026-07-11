@@ -77,6 +77,14 @@ describe("nz_govt_search_datasets", () => {
     expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
   });
 
+  it("surfaces a network-level fetch failure as a tool error, not an unhandled rejection", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    const result = await searchDatasetsHandler({ query: "x" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("could not be reached") });
+  });
+
   it("requests a deterministic tiebreak sort, so tied datasets still paginate stably", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ckanResponse({ count: 1, results: [SAMPLE_PACKAGE] }));
     vi.stubGlobal("fetch", fetchMock);
@@ -117,5 +125,16 @@ describe("nz_govt_get_dataset", () => {
     const result = await getDatasetHandler({ id_or_slug: "x" });
     expect(result.isError).toBe(true);
     expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
+  });
+
+  it("surfaces a malformed (non-JSON) upstream response as a tool error, not an unhandled rejection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("<html>502 Bad Gateway</html>", { status: 200 })),
+    );
+
+    const result = await getDatasetHandler({ id_or_slug: "x" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("could not be reached") });
   });
 });

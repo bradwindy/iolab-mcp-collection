@@ -61,6 +61,17 @@ describe("nz_govt_query_open_data_sql", () => {
     expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("relation not found") });
   });
 
+  it("surfaces a malformed (non-JSON) upstream response as a tool error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("<html>502 Bad Gateway</html>", { status: 200 })),
+    );
+
+    const result = await queryOpenDataSqlHandler({ sql: 'SELECT * FROM "resource-id"' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("could not be reached") });
+  });
+
   it("truncates and notes when more than 200 rows come back", async () => {
     const manyRows = Array.from({ length: 250 }, (_, i) => ({ i }));
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreSqlResponse(manyRows)));

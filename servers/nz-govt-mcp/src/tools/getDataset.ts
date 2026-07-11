@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { attribution, jsonResult, toolError, UpstreamHttpError, upstreamError, type ToolTextResult } from "@nz-mcp/mcp-kit";
-import { getDataset as getDatasetClient, UpstreamActionError } from "../clients/datagovt.js";
+import { getDataset as getDatasetClient, UpstreamActionError, UpstreamFetchError } from "../clients/datagovt.js";
 
 export const getDatasetInputShape = {
   id_or_slug: z
@@ -60,6 +60,9 @@ export async function getDatasetHandler(rawInput: unknown): Promise<ToolTextResu
     if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
     if (error instanceof UpstreamActionError) {
       return toolError(error.message, "Verify the id_or_slug and retry; this is data.govt.nz's own error, not a network failure.");
+    }
+    if (error instanceof UpstreamFetchError) {
+      return toolError(error.message, "This looks like a transient network issue reaching data.govt.nz; retry in a moment.");
     }
     throw error;
   }

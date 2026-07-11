@@ -13,7 +13,7 @@ import {
   upstreamError,
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
-import { datastoreSearch, UpstreamActionError, type DatastoreRecord } from "../clients/datagovt.js";
+import { datastoreSearch, UpstreamActionError, UpstreamFetchError, type DatastoreRecord } from "../clients/datagovt.js";
 import { ECE_DIRECTORY_RESOURCE_ID } from "../constants.js";
 
 /**
@@ -133,6 +133,9 @@ export async function searchEarlyChildhoodServicesHandler(rawInput: unknown): Pr
     if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
     if (error instanceof UpstreamActionError) {
       return toolError(error.message, "This is data.govt.nz's own error, not a network failure; verify the filters and retry.");
+    }
+    if (error instanceof UpstreamFetchError) {
+      return toolError(error.message, "This looks like a transient network issue reaching data.govt.nz; retry in a moment.");
     }
     throw error;
   }

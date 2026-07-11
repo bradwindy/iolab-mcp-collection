@@ -28,6 +28,26 @@ export class UpstreamActionError extends Error {
   }
 }
 
+/**
+ * Thrown when the request to CKAN never produced a usable response at all: fetchWithBackoff
+ * exhausted its retries on a network-level failure (DNS, TLS, connection reset, or the platform's
+ * own subrequest timeout), or the response body wasn't valid JSON (a truncated response, or CKAN
+ * serving an HTML error page instead of its usual envelope). Previously this was neither caught
+ * nor logged anywhere in callAction — it just propagated as a bare, unlogged exception, which is
+ * indistinguishable from a crash to both the caller and to Workers Logs. Every tool handler that
+ * calls into this client must catch it alongside UpstreamHttpError and UpstreamActionError.
+ */
+export class UpstreamFetchError extends Error {
+  constructor(
+    public readonly source: string,
+    public readonly action: string,
+    cause: unknown,
+  ) {
+    super(`${source} action '${action}' could not be reached: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "UpstreamFetchError";
+  }
+}
+
 export type CkanResource = {
   id: string;
   name: string | null;
@@ -62,7 +82,18 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
 
   console.log(`[datagovt] ${action} request:`, url.toString());
 
-  const response = await fetchWithBackoff(url, { headers: { "User-Agent": USER_AGENT } });
+  let response: Response;
+  try {
+    response = await fetchWithBackoff(url, { headers: { "User-Agent": USER_AGENT } });
+  } catch (error) {
+    console.error(
+      `[datagovt] ${action} fetch failed:`,
+      error instanceof Error ? error.message : String(error),
+      `url=${url.toString()}`,
+    );
+    throw new UpstreamFetchError(SOURCE, action, error);
+  }
+
   if (!response.ok) {
     console.error(
       `[datagovt] ${action} upstream HTTP error:`,
@@ -72,7 +103,18 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
     throw new UpstreamHttpError(SOURCE, response);
   }
 
-  const body = (await response.json()) as CkanResponse<T>;
+  let body: CkanResponse<T>;
+  try {
+    body = (await response.json()) as CkanResponse<T>;
+  } catch (error) {
+    console.error(
+      `[datagovt] ${action} response was not valid JSON:`,
+      error instanceof Error ? error.message : String(error),
+      `url=${url.toString()}`,
+    );
+    throw new UpstreamFetchError(SOURCE, action, error);
+  }
+
   if (!body.success) {
     const message = body.error?.message ?? "unknown error";
     console.error(`[datagovt] ${action} CKAN reported failure:`, message, `url=${url.toString()}`);

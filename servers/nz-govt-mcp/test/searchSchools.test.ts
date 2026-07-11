@@ -153,6 +153,17 @@ describe("nz_govt_search_schools", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
   });
+
+  it("surfaces a malformed (non-JSON) upstream response as a tool error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("<html>502 Bad Gateway</html>", { status: 200 })),
+    );
+
+    const result = await searchSchoolsHandler({ query: "Okaihau" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("could not be reached") });
+  });
 });
 
 describe("nz_govt_search_early_childhood_services", () => {
@@ -241,5 +252,16 @@ describe("nz_govt_search_early_childhood_services", () => {
     const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington" });
     expect(result.isError).toBe(true);
     expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
+  });
+
+  it("surfaces a malformed (non-JSON) upstream response as a tool error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("<html>502 Bad Gateway</html>", { status: 200 })),
+    );
+
+    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("could not be reached") });
   });
 });
