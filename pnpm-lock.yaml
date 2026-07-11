@@ -57,6 +57,12 @@ importers:
 
   packages/mcp-kit:
     dependencies:
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.8.1
+        version: 0.8.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       zod:
         specifier: ^4.1.10
         version: 4.4.3
@@ -89,6 +95,12 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.8.1
+        version: 0.8.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -120,6 +132,12 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.8.1
+        version: 0.8.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -151,6 +169,12 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.8.1
+        version: 0.8.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -179,6 +203,12 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.8.1
+        version: 0.8.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -210,6 +240,12 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.8.1
+        version: 0.8.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -241,6 +277,12 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.8.1
+        version: 0.8.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -272,6 +314,12 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.8.1
+        version: 0.8.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -464,6 +512,9 @@ packages:
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
+
+  '@cloudflare/workers-oauth-provider@0.8.1':
+    resolution: {integrity: sha512-zB4In0X1O5Vhc+Eb1s3ZP8wiqxLt2Hg1cqkLjZE2qQW1LNc4cOs1YEqYqtIKqG91yEBgpFIMBNYiafHk3OWj4Q==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2422,6 +2473,8 @@ snapshots:
 
   '@cloudflare/workerd-windows-64@1.20260708.1':
     optional: true
+
+  '@cloudflare/workers-oauth-provider@0.8.1': {}
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:

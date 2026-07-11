@@ -8,7 +8,12 @@
     "bindings": [{ "name": "NZ_CULTURE_MCP", "class_name": "NzCultureMcp" }],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["NzCultureMcp"] }],
-  "kv_namespaces": [{ "binding": "MCP_CACHE", "id": "bac29680ac6a419284c9a522b241ae8a" }],
+  "kv_namespaces": [
+    { "binding": "MCP_CACHE", "id": "bac29680ac6a419284c9a522b241ae8a" },
+    // Per-server namespace for @cloudflare/workers-oauth-provider's token/grant/DCR-client storage.
+    // Create with `wrangler kv namespace create OAUTH_KV` and paste the id here — see docs/SETUP.md.
+    { "binding": "OAUTH_KV", "id": "REPLACE_WITH_OAUTH_KV_NAMESPACE_ID" },
+  ],
   "d1_databases": [
     {
       "binding": "CREDENTIALS_DB",

@@ -19,4 +19,14 @@ describe("renderConnect", () => {
     expect(body).not.toContain("<script>alert(1)</script>");
     expect(body).toContain("&lt;script&gt;");
   });
+
+  it("renders the bare /mcp URL for every server, for claude.ai's custom-connector flow", async () => {
+    const body = String(await renderConnect(SERVERS, "my-shared-token", "example.com", "you@example.com"));
+
+    for (const server of SERVERS) {
+      const url = `https://${server.subdomain}.example.com/mcp`;
+      expect(body).toContain(`<pre><code>${url}</code></pre>`);
+    }
+    expect(body).toContain("Add custom connector");
+  });
 });

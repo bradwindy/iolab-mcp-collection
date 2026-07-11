@@ -11,10 +11,26 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 /**
- * Validate the shared bearer token on the MCP protocol endpoint. This is the only
- * gate on `/mcp` — Cloudflare Access protects the human-facing portal separately,
- * since MCP clients (Claude Code, claude.ai connectors) connect server-to-server
- * and cannot complete an interactive Access login.
+ * Checks whether `request` carries an `Authorization: Bearer <expectedToken>` header
+ * matching `expectedToken` exactly (constant-time comparison). Used both by
+ * {@link requireBearerToken} (servers without OAuth) and by the OAuth wrapper in
+ * `oauth.ts`, which bypasses the OAuth provider entirely for requests presenting the
+ * static shared token — see `buildOAuthMcpWorker`.
+ */
+export function bearerTokenMatches(request: Request, expectedToken: string | undefined): boolean {
+  if (!expectedToken) return false;
+  const header = request.headers.get("authorization") ?? "";
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  const provided = match?.[1];
+  return provided !== undefined && timingSafeEqual(provided, expectedToken);
+}
+
+/**
+ * Validate the shared bearer token on the MCP protocol endpoint. Servers that also
+ * wire up OAuth (see `oauth.ts`) don't call this directly — they use
+ * {@link bearerTokenMatches} as a bypass check in front of the OAuth provider so the
+ * shared token keeps working for server-to-server clients (Claude Code) that can't
+ * complete an interactive Access login.
  *
  * Returns a Response to send immediately (401/500), or null to continue routing.
  */
@@ -22,10 +38,7 @@ export function requireBearerToken(request: Request, expectedToken: string | und
   if (!expectedToken) {
     return new Response("Server misconfigured: MCP_SHARED_TOKEN is not set.", { status: 500 });
   }
-  const header = request.headers.get("authorization") ?? "";
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  const provided = match?.[1];
-  if (!provided || !timingSafeEqual(provided, expectedToken)) {
+  if (!bearerTokenMatches(request, expectedToken)) {
     return new Response("Unauthorized", {
       status: 401,
       headers: { "www-authenticate": "Bearer" },

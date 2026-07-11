@@ -7,3 +7,4 @@ export * from "./cache.js";
 export * from "./retry.js";
 export * from "./auth.js";
 export * from "./schemas.js";
+export * from "./oauth.js";
