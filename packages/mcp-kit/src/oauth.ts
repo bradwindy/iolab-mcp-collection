@@ -72,10 +72,18 @@ function extractAccessJwt(request: Request): string | null {
  * `iss`/`aud`, and that the token's email matches the single allowed operator. Returns `null`
  * on any failure — never trust `Cf-Access-Authenticated-User-Email` alone, since only the JWT
  * signature proves Access actually issued it.
+ *
+ * Logs the specific failure reason (never the token or a mismatched email itself) so a rejected
+ * request is diagnosable from Workers Logs — "no token present" (Access misconfigured to not
+ * reach this path, or session expired), a `jose` verification error (expired/bad signature/wrong
+ * audience), and "email mismatch" are otherwise indistinguishable from the outside.
  */
 export async function verifyAccessJwt(request: Request, env: AccessJwtEnv): Promise<{ email: string } | null> {
   const token = extractAccessJwt(request);
-  if (!token) return null;
+  if (!token) {
+    console.warn("[access-jwt] no Cf-Access-Jwt-Assertion header or CF_Authorization cookie on request.");
+    return null;
+  }
 
   try {
     const jwks = getJwks(env.ACCESS_TEAM_DOMAIN);
@@ -85,9 +93,17 @@ export async function verifyAccessJwt(request: Request, env: AccessJwtEnv): Prom
       audience: env.ACCESS_AUD,
     });
     const email = typeof payload.email === "string" ? payload.email : null;
-    if (!email || email !== env.ACCESS_EMAIL) return null;
+    if (!email) {
+      console.warn("[access-jwt] token verified but has no email claim.");
+      return null;
+    }
+    if (email !== env.ACCESS_EMAIL) {
+      console.warn("[access-jwt] token verified but its email does not match ACCESS_EMAIL.");
+      return null;
+    }
     return { email };
-  } catch {
+  } catch (err) {
+    console.warn("[access-jwt] verification threw:", err instanceof Error ? `${err.name}: ${err.message}` : err);
     return null;
   }
 }
@@ -111,6 +127,11 @@ function extractCsrfCookie(request: Request): string | null {
   return match?.[1] ?? null;
 }
 
+/** Short id for correlating a GET's log line with its POST's, and for a user to quote back when reporting a problem. */
+function generateFlowRef(): string {
+  return crypto.randomUUID().slice(0, 8);
+}
+
 /**
  * Renders a consent page for `GET /authorize`: the caller is already Access-authenticated (verified
  * by the handler below before this runs), but has not yet said *which* client they mean to authorize.
@@ -122,30 +143,42 @@ function extractCsrfCookie(request: Request): string | null {
  * submit cookie" pattern) additionally stops a forged cross-site POST from skipping the click entirely.
  */
 async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request, env: Env): Promise<Response> {
+  const ref = generateFlowRef();
+
   let oauthReqInfo: AuthRequest;
   try {
     oauthReqInfo = await env.OAUTH_PROVIDER.parseAuthRequest(request);
   } catch (err) {
-    return new Response(`Invalid authorization request: ${err instanceof Error ? err.message : "unknown error"}`, {
-      status: 400,
-    });
+    console.error(`[authorize:${ref}] GET: parseAuthRequest failed:`, err instanceof Error ? err.message : err);
+    return new Response(
+      `Invalid authorization request: ${err instanceof Error ? err.message : "unknown error"} (ref: ${ref})`,
+      { status: 400 },
+    );
   }
 
   const clientInfo = await env.OAUTH_PROVIDER.lookupClient(oauthReqInfo.clientId);
   const clientName = clientInfo?.clientName || oauthReqInfo.clientId;
 
+  console.log(
+    `[authorize:${ref}] GET: rendering consent page.`,
+    `client_id=${oauthReqInfo.clientId}`,
+    `redirect_uri=${oauthReqInfo.redirectUri}`,
+  );
+
   // Echo every original query param back verbatim as hidden fields (not just the ones the parsed
   // AuthRequest names) so a repeated param like `resource` round-trips exactly, and so the POST
   // handler can re-run parseAuthRequest on the reconstructed URL instead of re-deriving it by hand.
-  // A crafted link could itself carry a `csrf_token` param, which would render a hidden field ahead
-  // of the real one and shadow it on submit (formData.get() returns the first match) — fail closed
-  // but an annoying self-DoS, so it's dropped here; the one appended below is the only one that counts.
+  // A crafted link could itself carry a `csrf_token`/`flow_ref` param, which would render a hidden
+  // field ahead of the real one and shadow it on submit (formData.get() returns the first match) —
+  // fail closed but an annoying self-DoS, so both are dropped here; the ones appended below (the
+  // only ones that count) always come last in the form.
   const hiddenInputs = [...new URL(request.url).searchParams.entries()]
-    .filter(([name]) => name !== "csrf_token")
+    .filter(([name]) => name !== "csrf_token" && name !== "flow_ref")
     .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}" />`)
     .join("\n      ");
 
   const csrfToken = crypto.randomUUID();
+  const nonce = crypto.randomUUID();
   const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -157,11 +190,28 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request
     <p><strong>${escapeHtml(clientName)}</strong> (client ID <code>${escapeHtml(oauthReqInfo.clientId)}</code>)
       wants to connect to this MCP server as <strong>${escapeHtml(env.ACCESS_EMAIL)}</strong>.</p>
     <p>It will be redirected to: <code>${escapeHtml(oauthReqInfo.redirectUri)}</code></p>
-    <form method="POST" action="/authorize">
+    <form method="POST" action="/authorize" id="authorize-form" data-ref="${escapeHtml(ref)}">
       ${hiddenInputs}
       <input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}" />
-      <button type="submit">Approve</button>
+      <input type="hidden" name="flow_ref" value="${escapeHtml(ref)}" />
+      <button type="submit" id="approve-button">Approve</button>
+      <span id="approve-status" role="status"></span>
     </form>
+    <p><small>Reference: <code>${escapeHtml(ref)}</code></small></p>
+    <script nonce="${nonce}">
+      (function () {
+        var form = document.getElementById("authorize-form");
+        var button = document.getElementById("approve-button");
+        var status = document.getElementById("approve-status");
+        var ref = form.getAttribute("data-ref");
+        console.log("[oauth-consent] page loaded", { ref: ref, time: new Date().toISOString() });
+        form.addEventListener("submit", function () {
+          console.log("[oauth-consent] approve clicked, submitting form", { ref: ref, time: new Date().toISOString() });
+          button.disabled = true;
+          status.textContent = " Submitting…";
+        });
+      })();
+    </script>
   </body>
 </html>`;
 
@@ -175,7 +225,10 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request
       // is normal, and a token that expired mid-read reads to them as "the button does nothing."
       "Set-Cookie": `${CSRF_COOKIE_NAME}=${csrfToken}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`,
       "X-Frame-Options": "DENY",
-      "Content-Security-Policy": "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      // 'script-src nonce-...' (not 'none'): the inline script below only logs client-side
+      // diagnostics and shows submit feedback — nothing it does touches untrusted data (clientName/
+      // clientId/redirectUri are rendered as escaped text elsewhere, never interpolated into script).
+      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
     },
   });
 }
@@ -187,27 +240,40 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
   identity: { email: string },
 ): Promise<Response> {
   const formData = await request.formData();
+  const flowRef = formData.get("flow_ref");
+  // Reuse the GET's ref so its log line and this one correlate under one grep; if it's missing
+  // (tampered or pre-dates this field), fall back to a fresh one so this attempt is still traceable.
+  const ref = typeof flowRef === "string" && flowRef ? flowRef : generateFlowRef();
 
   const cookieToken = extractCsrfCookie(request);
   const formToken = formData.get("csrf_token");
   if (!cookieToken || typeof formToken !== "string" || formToken !== cookieToken) {
-    // Never log the token values themselves — just enough to tell a stale-page resubmission
-    // (the common case: the consent page was loaded more than once, and the wrong tab's form was
-    // submitted) apart from a cookie never arriving at all (Access/proxy stripping it — a config
-    // problem worth escalating).
+    // Never log the token values themselves — just enough to tell a stale-page resubmission (the
+    // common case: the consent page was loaded/rendered more than once, e.g. via browser back or a
+    // duplicate tab, and an older copy's form was submitted after a newer one already consumed and
+    // cleared the cookie) apart from the cookie never arriving at all (Access/proxy stripping it —
+    // a config problem worth escalating) by listing which cookie *names* (not values) were present.
+    const cookieNames = (request.headers.get("Cookie") ?? "")
+      .split(";")
+      .map((c) => c.trim().split("=")[0])
+      .filter(Boolean);
     console.warn(
-      "OAuth /authorize consent POST rejected: CSRF token mismatch.",
+      `[authorize:${ref}] POST rejected: CSRF token mismatch.`,
       `cookiePresent=${cookieToken !== null}`,
       `formTokenPresent=${typeof formToken === "string"}`,
+      `cookieNamesOnRequest=${JSON.stringify(cookieNames)}`,
     );
-    return new Response("Forbidden: missing or invalid CSRF token. Restart the authorization flow.", {
-      status: 403,
-    });
+    return new Response(
+      "Forbidden: missing or invalid CSRF token. This usually means the consent page was opened more " +
+        "than once (e.g. via browser back, or a duplicate tab) and an already-used copy was submitted — " +
+        `go back to claude.ai, remove this connector attempt, and add it again fresh. (ref: ${ref})`,
+      { status: 403 },
+    );
   }
 
   const reconstructedUrl = new URL("/authorize", request.url);
   for (const [name, value] of formData.entries()) {
-    if (name === "csrf_token") continue;
+    if (name === "csrf_token" || name === "flow_ref") continue;
     reconstructedUrl.searchParams.append(name, String(value));
   }
 
@@ -215,18 +281,28 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
   try {
     oauthReqInfo = await env.OAUTH_PROVIDER.parseAuthRequest(new Request(reconstructedUrl));
   } catch (err) {
-    return new Response(`Invalid authorization request: ${err instanceof Error ? err.message : "unknown error"}`, {
-      status: 400,
-    });
+    console.error(`[authorize:${ref}] POST: parseAuthRequest failed:`, err instanceof Error ? err.message : err);
+    return new Response(
+      `Invalid authorization request: ${err instanceof Error ? err.message : "unknown error"} (ref: ${ref})`,
+      { status: 400 },
+    );
   }
 
-  const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
-    request: oauthReqInfo,
-    userId: identity.email,
-    scope: oauthReqInfo.scope,
-    metadata: { label: identity.email },
-    props: { email: identity.email } satisfies OAuthProps,
-  });
+  let redirectTo: string;
+  try {
+    ({ redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
+      request: oauthReqInfo,
+      userId: identity.email,
+      scope: oauthReqInfo.scope,
+      metadata: { label: identity.email },
+      props: { email: identity.email } satisfies OAuthProps,
+    }));
+  } catch (err) {
+    console.error(`[authorize:${ref}] POST: completeAuthorization threw:`, err instanceof Error ? err.message : err);
+    return new Response(`Server error completing authorization. (ref: ${ref})`, { status: 500 });
+  }
+
+  console.log(`[authorize:${ref}] POST: approved, redirecting.`, `client_id=${oauthReqInfo.clientId}`, `to=${redirectTo}`);
 
   return new Response(null, {
     status: 302,
@@ -253,9 +329,17 @@ export function createAccessAuthorizeHandler<Env extends AuthorizeEnv>(): {
         return new Response("Not found", { status: 404 });
       }
 
+      console.log(`[authorize] ${request.method} request received.`);
+
       const identity = await verifyAccessJwt(request, env);
       if (!identity) {
-        return new Response("Forbidden: Cloudflare Access did not authenticate this request.", { status: 403 });
+        // verifyAccessJwt already logged the specific reason (no token / verification error / email
+        // mismatch); this response only needs a ref so the operator can point back at that log line.
+        const ref = generateFlowRef();
+        console.warn(`[authorize:${ref}] ${request.method}: rejected — Cloudflare Access did not authenticate this request.`);
+        return new Response(`Forbidden: Cloudflare Access did not authenticate this request. (ref: ${ref})`, {
+          status: 403,
+        });
       }
 
       if (request.method === "GET") return renderAuthorizeConsent(request, env);

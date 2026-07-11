@@ -113,11 +113,12 @@ describe("OAuth (buildOAuthMcpWorker)", () => {
     expect(metadata.authorization_servers?.length).toBeGreaterThan(0);
   });
 
-  it("rejects /authorize with no Access JWT", async () => {
+  it("rejects /authorize with no Access JWT, including a diagnostic reference", async () => {
     const response = await exports.default.fetch(
       new Request(`${ORIGIN}/authorize?response_type=code&client_id=x&redirect_uri=https://client.example.com/cb`),
     );
     expect(response.status).toBe(403);
+    expect(await response.text()).toMatch(/\(ref: [0-9a-f-]+\)/);
   });
 
   it("rejects /authorize with an Access JWT for the wrong email", async () => {
@@ -154,6 +155,39 @@ describe("OAuth (buildOAuthMcpWorker)", () => {
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).toContain("&lt;script&gt;");
     expect(extractCsrfToken(consentResponse)).toBeTruthy();
+  });
+
+  it("includes a diagnostic reference on the consent page (visible text, hidden field, and CSP nonce script)", async () => {
+    const client = await registerClient({});
+    const [redirectUri] = client.redirect_uris;
+    if (!redirectUri) throw new Error("registration response missing redirect_uris");
+
+    const accessJwt = await signAccessJwt();
+    const authorizeUrl = new URL(`${ORIGIN}/authorize`);
+    authorizeUrl.searchParams.set("response_type", "code");
+    authorizeUrl.searchParams.set("client_id", client.client_id);
+    authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+    authorizeUrl.searchParams.set("state", "ref-state");
+    authorizeUrl.searchParams.set("code_challenge", await base64UrlSha256("ref-test-verifier-1234567890"));
+    authorizeUrl.searchParams.set("code_challenge_method", "S256");
+
+    const consentResponse = await exports.default.fetch(
+      new Request(authorizeUrl, { headers: { "Cf-Access-Jwt-Assertion": accessJwt } }),
+    );
+    expect(consentResponse.status).toBe(200);
+    const csp = consentResponse.headers.get("content-security-policy") ?? "";
+    expect(csp).toMatch(/script-src 'nonce-[0-9a-f-]+'/);
+    expect(csp).not.toContain("script-src 'none'");
+
+    const html = await consentResponse.text();
+    // Visible reference text a human can read/report, and the matching hidden field the browser
+    // will actually submit — both must carry the same value for GET/POST log correlation to work.
+    const visibleRefMatch = /Reference: <code>([0-9a-f]+)<\/code>/.exec(html);
+    expect(visibleRefMatch?.[1]).toBeTruthy();
+    expect(html).toContain(`<input type="hidden" name="flow_ref" value="${visibleRefMatch?.[1]}" />`);
+    expect(html).toContain(`data-ref="${visibleRefMatch?.[1]}"`);
+    // The inline diagnostic script is present and nonce-scoped (not blocked by the CSP above).
+    expect(html).toContain("[oauth-consent] page loaded");
   });
 
   it("doesn't let a crafted csrf_token query param shadow the real one on the consent page", async () => {
@@ -200,6 +234,7 @@ describe("OAuth (buildOAuthMcpWorker)", () => {
       }),
     );
     expect(response.status).toBe(403);
+    expect(await response.text()).toMatch(/\(ref: [0-9a-f-]+\)/);
   });
 
   it("rejects POST /authorize when the CSRF cookie is present but doesn't match the form token", async () => {
@@ -247,6 +282,7 @@ describe("OAuth (buildOAuthMcpWorker)", () => {
       }),
     );
     expect(response.status).toBe(400);
+    expect(await response.text()).toMatch(/\(ref: [0-9a-f-]+\)/);
   });
 
   it("completes the authorization flow end-to-end via the consent page for a valid Access identity", async () => {
@@ -275,10 +311,14 @@ describe("OAuth (buildOAuthMcpWorker)", () => {
     );
     expect(consentResponse.status).toBe(200);
     const csrfToken = extractCsrfToken(consentResponse);
+    const flowRef = /name="flow_ref" value="([0-9a-f]+)"/.exec(await consentResponse.clone().text())?.[1];
+    expect(flowRef).toBeTruthy();
 
-    // 4. POST — the consent form's own submit — completes the grant.
+    // 4. POST — the consent form's own submit — completes the grant, echoing flow_ref exactly as
+    // the real hidden field would (so the GET and POST log lines correlate under the same ref).
     const approveBody = new URLSearchParams(authorizeUrl.searchParams);
     approveBody.set("csrf_token", csrfToken);
+    approveBody.set("flow_ref", flowRef as string);
     const authorizeResponse = await exports.default.fetch(
       new Request(`${ORIGIN}/authorize`, {
         method: "POST",
