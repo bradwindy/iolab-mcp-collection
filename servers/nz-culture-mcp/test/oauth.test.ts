@@ -190,6 +190,30 @@ describe("OAuth (buildOAuthMcpWorker)", () => {
     expect(html).toContain("[oauth-consent] page loaded");
   });
 
+  it("allows the client's redirect_uri origin in the consent page's form-action CSP (regression: Chrome/Safari block a cross-origin redirect from a form submission unless its target is explicitly allowlisted, even though the submission itself is same-origin)", async () => {
+    const client = await registerClient({});
+    const [redirectUri] = client.redirect_uris;
+    if (!redirectUri) throw new Error("registration response missing redirect_uris");
+    const redirectOrigin = new URL(redirectUri).origin;
+
+    const accessJwt = await signAccessJwt();
+    const authorizeUrl = new URL(`${ORIGIN}/authorize`);
+    authorizeUrl.searchParams.set("response_type", "code");
+    authorizeUrl.searchParams.set("client_id", client.client_id);
+    authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+    authorizeUrl.searchParams.set("state", "form-action-state");
+    authorizeUrl.searchParams.set("code_challenge", await base64UrlSha256("form-action-test-verifier-1234567890"));
+    authorizeUrl.searchParams.set("code_challenge_method", "S256");
+
+    const consentResponse = await exports.default.fetch(
+      new Request(authorizeUrl, { headers: { "Cf-Access-Jwt-Assertion": accessJwt } }),
+    );
+    expect(consentResponse.status).toBe(200);
+    const csp = consentResponse.headers.get("content-security-policy") ?? "";
+    const formAction = /form-action ([^;]+);/.exec(csp)?.[1] ?? "";
+    expect(formAction.split(" ")).toEqual(expect.arrayContaining(["'self'", redirectOrigin]));
+  });
+
   it("doesn't let a crafted csrf_token query param shadow the real one on the consent page", async () => {
     const client = await registerClient({});
     const [redirectUri] = client.redirect_uris;

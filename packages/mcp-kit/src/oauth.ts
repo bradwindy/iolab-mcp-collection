@@ -177,6 +177,22 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request
     .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}" />`)
     .join("\n      ");
 
+  // Chrome and Safari (unlike Firefox) re-check `form-action` against each hop of a redirect chain
+  // that results from a form submission, not just the submission's own same-origin URL — so a POST
+  // to /authorize that succeeds and 302s to the client's (cross-origin) redirect_uri gets silently
+  // blocked by a bare `form-action 'self'`, with no visible error on the page (confirmed: this is
+  // exactly what left a real, successfully-granted authorization stuck on this page — the server-side
+  // logs showed the 302 was issued correctly). oauthReqInfo.redirectUri is already validated by
+  // parseAuthRequest against the registered client's redirect_uris above, so it's safe to allowlist.
+  let redirectOrigin: string | null = null;
+  try {
+    redirectOrigin = new URL(oauthReqInfo.redirectUri).origin;
+  } catch {
+    // Shouldn't happen — parseAuthRequest already validated this as an absolute URI — but fail
+    // closed to 'self' only rather than throwing and losing the whole consent page over it.
+  }
+  const formActionSources = ["'self'", ...(redirectOrigin ? [redirectOrigin] : [])].join(" ");
+
   const csrfToken = crypto.randomUUID();
   const nonce = crypto.randomUUID();
   const html = `<!DOCTYPE html>
@@ -228,7 +244,8 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request
       // 'script-src nonce-...' (not 'none'): the inline script below only logs client-side
       // diagnostics and shows submit feedback — nothing it does touches untrusted data (clientName/
       // clientId/redirectUri are rendered as escaped text elsewhere, never interpolated into script).
-      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
+      // 'form-action' includes the validated redirect_uri's origin, not just 'self' — see above.
+      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action ${formActionSources}; frame-ancestors 'none'; base-uri 'none'`,
     },
   });
 }
