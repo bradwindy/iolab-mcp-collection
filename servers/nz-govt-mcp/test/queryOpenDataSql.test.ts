@@ -46,6 +46,21 @@ describe("nz_govt_query_open_data_sql", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("surfaces a CKAN-level action failure (e.g. a resource that isn't datastore-enabled) as a tool error", async () => {
+    // CKAN responds 2xx with its own {success: false} envelope for this — e.g. querying a resource
+    // id that isn't datastore-enabled, or a syntax error in the SQL itself.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ success: false, error: { message: "relation not found" } }), { status: 200 }),
+      ),
+    );
+
+    const result = await queryOpenDataSqlHandler({ sql: 'SELECT * FROM "not-a-real-resource"' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("relation not found") });
+  });
+
   it("truncates and notes when more than 200 rows come back", async () => {
     const manyRows = Array.from({ length: 250 }, (_, i) => ({ i }));
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreSqlResponse(manyRows)));

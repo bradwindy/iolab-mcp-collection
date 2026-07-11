@@ -7,12 +7,13 @@ import {
   offsetParam,
   responseFormatParam,
   selectFormat,
+  toolError,
   truncationNotice,
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
-import { searchDatasets as searchDatasetsClient, type CkanPackage } from "../clients/datagovt.js";
+import { searchDatasets as searchDatasetsClient, UpstreamActionError, type CkanPackage } from "../clients/datagovt.js";
 
 export const searchDatasetsInputShape = {
   query: z.string().min(1).max(200).describe("Free-text search across dataset titles, descriptions, and tags."),
@@ -79,6 +80,9 @@ export async function searchDatasetsHandler(rawInput: unknown): Promise<ToolText
     });
   } catch (error) {
     if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
+    if (error instanceof UpstreamActionError) {
+      return toolError(error.message, "Verify the query/id and retry; this is data.govt.nz's own error, not a network failure.");
+    }
     throw error;
   }
 }

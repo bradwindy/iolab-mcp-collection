@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { attribution, jsonResult, UpstreamHttpError, upstreamError, type ToolTextResult } from "@nz-mcp/mcp-kit";
-import { getDataset as getDatasetClient } from "../clients/datagovt.js";
+import { attribution, jsonResult, toolError, UpstreamHttpError, upstreamError, type ToolTextResult } from "@nz-mcp/mcp-kit";
+import { getDataset as getDatasetClient, UpstreamActionError } from "../clients/datagovt.js";
 
 export const getDatasetInputShape = {
   id_or_slug: z
@@ -58,6 +58,9 @@ export async function getDatasetHandler(rawInput: unknown): Promise<ToolTextResu
     });
   } catch (error) {
     if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
+    if (error instanceof UpstreamActionError) {
+      return toolError(error.message, "Verify the id_or_slug and retry; this is data.govt.nz's own error, not a network failure.");
+    }
     throw error;
   }
 }

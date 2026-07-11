@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { attribution, jsonResult, toolError, UpstreamHttpError, upstreamError, type ToolTextResult } from "@nz-mcp/mcp-kit";
-import { datastoreSearchSql, SqlValidationError } from "../clients/datagovt.js";
+import { datastoreSearchSql, SqlValidationError, UpstreamActionError } from "../clients/datagovt.js";
 
 const MAX_ROWS_RETURNED = 200;
 
@@ -44,6 +44,12 @@ export async function queryOpenDataSqlHandler(rawInput: unknown): Promise<ToolTe
   } catch (error) {
     if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
     if (error instanceof SqlValidationError) return toolError(error.message);
+    if (error instanceof UpstreamActionError) {
+      return toolError(
+        error.message,
+        "This is data.govt.nz's own error (e.g. a malformed query or a resource id that isn't datastore-enabled), not a network failure — verify the resource with nz_govt_get_dataset and check the SQL syntax.",
+      );
+    }
     throw error;
   }
 }

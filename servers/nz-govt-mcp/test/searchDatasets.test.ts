@@ -61,7 +61,7 @@ describe("nz_govt_search_datasets", () => {
     expect((item?.resources as unknown[]).length).toBe(1);
   });
 
-  it("surfaces a CKAN-level action failure", async () => {
+  it("surfaces a CKAN-level action failure as a tool error, not an unhandled rejection", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -69,7 +69,12 @@ describe("nz_govt_search_datasets", () => {
       ),
     );
 
-    await expect(searchDatasetsHandler({ query: "x" })).rejects.toThrow(/boom/);
+    // Per MCP guidance (and this repo's own toolError() convention), a tool execution failure
+    // must come back as an isError:true result the model can see and react to — not a thrown
+    // exception, which would surface as an opaque, unformatted, unlogged protocol-level failure.
+    const result = await searchDatasetsHandler({ query: "x" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
   });
 
   it("requests a deterministic tiebreak sort, so tied datasets still paginate stably", async () => {
@@ -101,5 +106,16 @@ describe("nz_govt_get_dataset", () => {
     const result = await getDatasetHandler({ id_or_slug: "does-not-exist" });
 
     expect(result.isError).toBe(true);
+  });
+
+  it("surfaces a CKAN-level action failure as a tool error, not an unhandled rejection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: false, error: { message: "boom" } }), { status: 200 })),
+    );
+
+    const result = await getDatasetHandler({ id_or_slug: "x" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
   });
 });

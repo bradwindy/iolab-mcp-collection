@@ -7,6 +7,27 @@ const USER_AGENT = "nz-mcp-collection/nz-govt-mcp (+https://github.com/bradwindy
 /** Thrown by datastoreSearchSql's input guard — always a caller-actionable message. */
 export class SqlValidationError extends Error {}
 
+/**
+ * Thrown when CKAN's action API responds 2xx but its own `{success: false}` envelope reports a
+ * failure — a malformed SQL query, a resource that isn't datastore-enabled, an invalid filter,
+ * etc. Distinct from UpstreamHttpError (a non-2xx HTTP status): there's no bad status to report
+ * here, only CKAN's own error message. Every tool handler that calls into this client must catch
+ * it alongside UpstreamHttpError — previously only UpstreamHttpError was caught, so this case
+ * fell through as an unformatted, unlogged exception (confirmed as the cause of "server error on
+ * every call" reports for search_datasets/get_dataset/query_open_data_sql/search_schools/
+ * search_early_childhood_services, all five of which share this client).
+ */
+export class UpstreamActionError extends Error {
+  constructor(
+    public readonly source: string,
+    public readonly action: string,
+    public readonly ckanMessage: string,
+  ) {
+    super(`${source} action '${action}' failed: ${ckanMessage}`);
+    this.name = "UpstreamActionError";
+  }
+}
+
 export type CkanResource = {
   id: string;
   name: string | null;
@@ -39,13 +60,26 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
   const url = new URL(`${BASE_URL}/${action}`);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
 
+  console.log(`[datagovt] ${action} request:`, url.toString());
+
   const response = await fetchWithBackoff(url, { headers: { "User-Agent": USER_AGENT } });
-  if (!response.ok) throw new UpstreamHttpError(SOURCE, response);
+  if (!response.ok) {
+    console.error(
+      `[datagovt] ${action} upstream HTTP error:`,
+      `status=${response.status} ${response.statusText}`,
+      `url=${url.toString()}`,
+    );
+    throw new UpstreamHttpError(SOURCE, response);
+  }
 
   const body = (await response.json()) as CkanResponse<T>;
   if (!body.success) {
-    throw new Error(`${SOURCE} action '${action}' failed: ${body.error?.message ?? "unknown error"}`);
+    const message = body.error?.message ?? "unknown error";
+    console.error(`[datagovt] ${action} CKAN reported failure:`, message, `url=${url.toString()}`);
+    throw new UpstreamActionError(SOURCE, action, message);
   }
+
+  console.log(`[datagovt] ${action} succeeded.`);
   return body.result;
 }
 

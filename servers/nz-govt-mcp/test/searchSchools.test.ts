@@ -140,6 +140,19 @@ describe("nz_govt_search_schools", () => {
     expect(item?.email).toBe("admin@okaihau-college.school.nz");
     expect(item?.coed_status).toBe("Co-Educational");
   });
+
+  it("surfaces a CKAN-level action failure as a tool error, not an unhandled rejection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ success: false, error: { message: "boom" } }), { status: 200 }),
+      ),
+    );
+
+    const result = await searchSchoolsHandler({ query: "Okaihau" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
+  });
 });
 
 describe("nz_govt_search_early_childhood_services", () => {
@@ -215,5 +228,18 @@ describe("nz_govt_search_early_childhood_services", () => {
     const item = (result.structuredContent?.items as Array<Record<string, unknown>>)[0];
 
     expect(item?.hours_20_ece).toBe("Yes");
+  });
+
+  it("surfaces a CKAN-level action failure as a tool error, not an unhandled rejection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ success: false, error: { message: "boom" } }), { status: 200 }),
+      ),
+    );
+
+    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
   });
 });
