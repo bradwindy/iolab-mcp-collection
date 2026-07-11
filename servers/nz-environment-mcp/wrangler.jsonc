@@ -11,8 +11,7 @@
   "kv_namespaces": [
     { "binding": "MCP_CACHE", "id": "bac29680ac6a419284c9a522b241ae8a" },
     // Per-server namespace for @cloudflare/workers-oauth-provider's token/grant/DCR-client storage.
-    // Create with `wrangler kv namespace create OAUTH_KV` and paste the id here — see docs/SETUP.md.
-    { "binding": "OAUTH_KV", "id": "REPLACE_WITH_OAUTH_KV_NAMESPACE_ID" },
+    { "binding": "OAUTH_KV", "id": "bd2fb721e80b4f138416db973b797197" },
   ],
   "d1_databases": [
     {
