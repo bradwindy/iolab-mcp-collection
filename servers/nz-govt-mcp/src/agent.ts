@@ -49,7 +49,7 @@ export class NzGovtMcp extends McpAgent<Env, Record<string, never>, OAuthProps> 
         outputSchema: searchDatasetsOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "Search Open Data Catalogue" },
       },
-      searchDatasetsHandler,
+      (rawInput) => searchDatasetsHandler(rawInput, this.env),
     );
 
     this.server.registerTool(
@@ -60,7 +60,7 @@ export class NzGovtMcp extends McpAgent<Env, Record<string, never>, OAuthProps> 
         outputSchema: getDatasetOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "Get Dataset" },
       },
-      getDatasetHandler,
+      (rawInput) => getDatasetHandler(rawInput, this.env),
     );
 
     this.server.registerTool(
@@ -82,7 +82,7 @@ export class NzGovtMcp extends McpAgent<Env, Record<string, never>, OAuthProps> 
         outputSchema: searchSchoolsOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "Search Schools" },
       },
-      searchSchoolsHandler,
+      (rawInput) => searchSchoolsHandler(rawInput, this.env),
     );
 
     this.server.registerTool(
@@ -94,7 +94,7 @@ export class NzGovtMcp extends McpAgent<Env, Record<string, never>, OAuthProps> 
         outputSchema: searchEarlyChildhoodServicesOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "Search Early Childhood Services" },
       },
-      searchEarlyChildhoodServicesHandler,
+      (rawInput) => searchEarlyChildhoodServicesHandler(rawInput, this.env),
     );
 
     this.server.registerTool(
@@ -107,7 +107,7 @@ export class NzGovtMcp extends McpAgent<Env, Record<string, never>, OAuthProps> 
         outputSchema: queryOpenDataSqlOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "Raw Open Data SQL Query" },
       },
-      queryOpenDataSqlHandler,
+      (rawInput) => queryOpenDataSqlHandler(rawInput, this.env),
     );
   }
 }

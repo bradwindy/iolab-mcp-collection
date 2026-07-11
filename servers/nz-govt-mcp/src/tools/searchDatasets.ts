@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   attribution,
+  cached,
+  CACHE_TTL,
   describePage,
   jsonResult,
   limitParam,
@@ -14,6 +16,7 @@ import {
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
 import {
+  ckanCacheKey,
   searchDatasets as searchDatasetsClient,
   UpstreamActionError,
   UpstreamFetchError,
@@ -64,15 +67,22 @@ function toDetailed(pkg: CkanPackage) {
   };
 }
 
-export async function searchDatasetsHandler(rawInput: unknown): Promise<ToolTextResult> {
+export async function searchDatasetsHandler(rawInput: unknown, env: Env): Promise<ToolTextResult> {
   const input = inputSchema.parse(rawInput);
 
   try {
-    const { results, count } = await searchDatasetsClient({
-      query: input.query,
-      rows: input.limit,
-      start: input.offset,
+    const cacheKey = await ckanCacheKey("package_search", {
+      q: input.query,
+      rows: String(input.limit),
+      start: String(input.offset),
     });
+    const { results, count } = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.SLOW_MOVING, () =>
+      searchDatasetsClient({
+        query: input.query,
+        rows: input.limit,
+        start: input.offset,
+      }),
+    );
 
     const page = describePage({ returned: results.length, total_count: count, offset: input.offset });
     const items = results.map((pkg) => selectFormat(input.response_format, toConcise(pkg), toDetailed(pkg)));

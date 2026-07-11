@@ -2,10 +2,33 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { searchSchoolsHandler } from "../src/tools/searchSchools.js";
 import { searchEarlyChildhoodServicesHandler } from "../src/tools/searchEarlyChildhoodServices.js";
 
+function createFakeCache() {
+  const store = new Map<string, string>();
+  return {
+    async get(key: string) {
+      return store.get(key) ?? null;
+    },
+    async put(key: string, value: string) {
+      store.set(key, value);
+    },
+  };
+}
+
+function fakeEnv(): Env {
+  return { MCP_CACHE: createFakeCache() } as unknown as Env;
+}
+
 function datastoreResponse(records: unknown[], total: number) {
   return new Response(JSON.stringify({ success: true, result: { total, records } }), {
     status: 200,
     headers: { "content-type": "application/json" },
+  });
+}
+
+function htmlErrorPageResponse() {
+  return new Response("<!DOCTYPE html><html><body>502 Bad Gateway</body></html>", {
+    status: 200,
+    headers: { "content-type": "text/html" },
   });
 }
 
@@ -46,14 +69,14 @@ describe("nz_govt_search_schools", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("errors when neither query nor region is provided", async () => {
-    const result = await searchSchoolsHandler({});
+    const result = await searchSchoolsHandler({}, fakeEnv());
     expect(result.isError).toBe(true);
   });
 
   it("returns concise school records", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([SAMPLE_SCHOOL], 1)));
 
-    const result = await searchSchoolsHandler({ query: "Okaihau" });
+    const result = await searchSchoolsHandler({ query: "Okaihau" }, fakeEnv());
 
     expect(result.structuredContent?.items).toEqual([
       {
@@ -70,7 +93,7 @@ describe("nz_govt_search_schools", () => {
     const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
     vi.stubGlobal("fetch", fetchMock);
 
-    await searchSchoolsHandler({ query: "College", region: "Northland" });
+    await searchSchoolsHandler({ query: "College", region: "Northland" }, fakeEnv());
 
     const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
     expect(requestedUrl.searchParams.get("q")).toBe("College Northland");
@@ -80,7 +103,7 @@ describe("nz_govt_search_schools", () => {
     const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
     vi.stubGlobal("fetch", fetchMock);
 
-    await searchSchoolsHandler({ query: "College" });
+    await searchSchoolsHandler({ query: "College" }, fakeEnv());
 
     const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
     expect(requestedUrl.searchParams.get("sort")).toBe("_id");
@@ -90,7 +113,7 @@ describe("nz_govt_search_schools", () => {
     const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await searchSchoolsHandler({ authority: "State : Integrated" });
+    const result = await searchSchoolsHandler({ authority: "State : Integrated" }, fakeEnv());
 
     expect(result.isError).toBeUndefined();
     const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
@@ -102,7 +125,7 @@ describe("nz_govt_search_schools", () => {
     const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
     vi.stubGlobal("fetch", fetchMock);
 
-    await searchSchoolsHandler({ region: "Canterbury", authority: "State : Integrated", city: "Christchurch" });
+    await searchSchoolsHandler({ region: "Canterbury", authority: "State : Integrated", city: "Christchurch" }, fakeEnv());
 
     const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
     expect(requestedUrl.searchParams.get("q")).toBe("Canterbury");
@@ -112,13 +135,13 @@ describe("nz_govt_search_schools", () => {
   });
 
   it("rejects an authority value outside the confirmed enum", async () => {
-    await expect(searchSchoolsHandler({ authority: "Integrated" })).rejects.toThrow();
+    await expect(searchSchoolsHandler({ authority: "Integrated" }, fakeEnv())).rejects.toThrow();
   });
 
   it("hints at case-sensitivity when a `city` filter returns nothing", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
 
-    const result = await searchSchoolsHandler({ city: "christchurch" });
+    const result = await searchSchoolsHandler({ city: "christchurch" }, fakeEnv());
 
     expect(result.structuredContent?.notice).toContain("case-sensitive");
   });
@@ -126,7 +149,7 @@ describe("nz_govt_search_schools", () => {
   it("does not blame city-casing when another filter is also active and returns nothing", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
 
-    const result = await searchSchoolsHandler({ city: "Christchurch", authority: "Charter School" });
+    const result = await searchSchoolsHandler({ city: "Christchurch", authority: "Charter School" }, fakeEnv());
 
     expect(result.structuredContent?.notice).not.toContain("case-sensitive");
   });
@@ -134,7 +157,7 @@ describe("nz_govt_search_schools", () => {
   it("includes contact details in detailed format", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([SAMPLE_SCHOOL], 1)));
 
-    const result = await searchSchoolsHandler({ query: "Okaihau", response_format: "detailed" });
+    const result = await searchSchoolsHandler({ query: "Okaihau", response_format: "detailed" }, fakeEnv());
     const item = (result.structuredContent?.items as Array<Record<string, unknown>>)[0];
 
     expect(item?.email).toBe("admin@okaihau-college.school.nz");
@@ -149,20 +172,28 @@ describe("nz_govt_search_schools", () => {
       ),
     );
 
-    const result = await searchSchoolsHandler({ query: "Okaihau" });
+    const result = await searchSchoolsHandler({ query: "Okaihau" }, fakeEnv());
     expect(result.isError).toBe(true);
     expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
   });
 
   it("surfaces a malformed (non-JSON) upstream response as a tool error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("<html>502 Bad Gateway</html>", { status: 200 })),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(htmlErrorPageResponse()));
 
-    const result = await searchSchoolsHandler({ query: "Okaihau" });
+    const result = await searchSchoolsHandler({ query: "Okaihau" }, fakeEnv());
     expect(result.isError).toBe(true);
     expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("could not be reached") });
+  });
+
+  it("caches the upstream fetch across calls for the same filters", async () => {
+    const env = fakeEnv();
+    const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([SAMPLE_SCHOOL], 1));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchSchoolsHandler({ query: "Okaihau" }, env);
+    await searchSchoolsHandler({ query: "Okaihau" }, env);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -170,14 +201,14 @@ describe("nz_govt_search_early_childhood_services", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("errors when neither query nor region is provided", async () => {
-    const result = await searchEarlyChildhoodServicesHandler({});
+    const result = await searchEarlyChildhoodServicesHandler({}, fakeEnv());
     expect(result.isError).toBe(true);
   });
 
   it("returns concise ECE records", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([SAMPLE_ECE], 1)));
 
-    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington" });
+    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington" }, fakeEnv());
 
     expect(result.structuredContent?.items).toEqual([
       {
@@ -194,7 +225,7 @@ describe("nz_govt_search_early_childhood_services", () => {
     const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
     vi.stubGlobal("fetch", fetchMock);
 
-    await searchEarlyChildhoodServicesHandler({ region: "Wellington" });
+    await searchEarlyChildhoodServicesHandler({ region: "Wellington" }, fakeEnv());
 
     const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
     expect(requestedUrl.searchParams.get("sort")).toBe("_id");
@@ -204,7 +235,7 @@ describe("nz_govt_search_early_childhood_services", () => {
     const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([], 0));
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await searchEarlyChildhoodServicesHandler({ city: "Christchurch" });
+    const result = await searchEarlyChildhoodServicesHandler({ city: "Christchurch" }, fakeEnv());
 
     expect(result.isError).toBeUndefined();
     const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
@@ -213,13 +244,13 @@ describe("nz_govt_search_early_childhood_services", () => {
   });
 
   it("rejects an authority value outside the confirmed enum", async () => {
-    await expect(searchEarlyChildhoodServicesHandler({ authority: "State" })).rejects.toThrow();
+    await expect(searchEarlyChildhoodServicesHandler({ authority: "State" }, fakeEnv())).rejects.toThrow();
   });
 
   it("hints at case-sensitivity when a `city` filter returns nothing", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
 
-    const result = await searchEarlyChildhoodServicesHandler({ city: "christchurch" });
+    const result = await searchEarlyChildhoodServicesHandler({ city: "christchurch" }, fakeEnv());
 
     expect(result.structuredContent?.notice).toContain("case-sensitive");
   });
@@ -227,7 +258,7 @@ describe("nz_govt_search_early_childhood_services", () => {
   it("does not blame city-casing when another filter is also active and returns nothing", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([], 0)));
 
-    const result = await searchEarlyChildhoodServicesHandler({ city: "Christchurch", region: "Wellington" });
+    const result = await searchEarlyChildhoodServicesHandler({ city: "Christchurch", region: "Wellington" }, fakeEnv());
 
     expect(result.structuredContent?.notice).not.toContain("case-sensitive");
   });
@@ -235,7 +266,7 @@ describe("nz_govt_search_early_childhood_services", () => {
   it("includes the 20 Hours ECE flag in detailed format", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(datastoreResponse([SAMPLE_ECE], 1)));
 
-    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington", response_format: "detailed" });
+    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington", response_format: "detailed" }, fakeEnv());
     const item = (result.structuredContent?.items as Array<Record<string, unknown>>)[0];
 
     expect(item?.hours_20_ece).toBe("Yes");
@@ -249,19 +280,27 @@ describe("nz_govt_search_early_childhood_services", () => {
       ),
     );
 
-    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington" });
+    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington" }, fakeEnv());
     expect(result.isError).toBe(true);
     expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
   });
 
   it("surfaces a malformed (non-JSON) upstream response as a tool error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("<html>502 Bad Gateway</html>", { status: 200 })),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(htmlErrorPageResponse()));
 
-    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington" });
+    const result = await searchEarlyChildhoodServicesHandler({ region: "Wellington" }, fakeEnv());
     expect(result.isError).toBe(true);
     expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("could not be reached") });
+  });
+
+  it("caches the upstream fetch across calls for the same filters", async () => {
+    const env = fakeEnv();
+    const fetchMock = vi.fn().mockResolvedValue(datastoreResponse([SAMPLE_ECE], 1));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchEarlyChildhoodServicesHandler({ region: "Wellington" }, env);
+    await searchEarlyChildhoodServicesHandler({ region: "Wellington" }, env);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

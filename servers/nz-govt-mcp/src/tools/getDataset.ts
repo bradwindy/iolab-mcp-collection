@@ -1,6 +1,20 @@
 import { z } from "zod";
-import { attribution, jsonResult, toolError, UpstreamHttpError, upstreamError, type ToolTextResult } from "@nz-mcp/mcp-kit";
-import { getDataset as getDatasetClient, UpstreamActionError, UpstreamFetchError } from "../clients/datagovt.js";
+import {
+  attribution,
+  cached,
+  CACHE_TTL,
+  jsonResult,
+  toolError,
+  UpstreamHttpError,
+  upstreamError,
+  type ToolTextResult,
+} from "@nz-mcp/mcp-kit";
+import {
+  ckanCacheKey,
+  getDataset as getDatasetClient,
+  UpstreamActionError,
+  UpstreamFetchError,
+} from "../clients/datagovt.js";
 
 export const getDatasetInputShape = {
   id_or_slug: z
@@ -32,11 +46,12 @@ export const getDatasetOutputShape = {
 
 const inputSchema = z.object(getDatasetInputShape);
 
-export async function getDatasetHandler(rawInput: unknown): Promise<ToolTextResult> {
+export async function getDatasetHandler(rawInput: unknown, env: Env): Promise<ToolTextResult> {
   const input = inputSchema.parse(rawInput);
 
   try {
-    const pkg = await getDatasetClient(input.id_or_slug);
+    const cacheKey = await ckanCacheKey("package_show", { id: input.id_or_slug });
+    const pkg = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.METADATA, () => getDatasetClient(input.id_or_slug));
 
     return jsonResult({
       id: pkg.name,

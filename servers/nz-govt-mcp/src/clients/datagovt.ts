@@ -76,6 +76,42 @@ type CkanResponse<T> = {
   error?: { message: string };
 };
 
+/**
+ * CKAN's action API always responds `application/json` on a 2xx. Confirmed live: during a ~60s
+ * window on data.govt.nz's own backend, `package_search` and `datastore_search_sql` returned HTTP
+ * 200 with an HTML error/interstitial page instead — a failure mode fetchWithBackoff's default
+ * retryOn doesn't catch, since it only inspects the status code. Treating "200 but not JSON" the
+ * same as a 5xx lets the existing retry+backoff silently recover from short blips of exactly this
+ * kind; a sustained outage still exhausts all attempts and surfaces as UpstreamFetchError below.
+ */
+function shouldRetryCkanResponse(response: Response | undefined, _error: unknown): boolean {
+  if (!response) return true;
+  if (response.status === 429 || response.status >= 500) return true;
+  const contentType = response.headers.get("content-type") ?? "";
+  return response.ok && !contentType.includes("application/json");
+}
+
+/** SHA-256 hex digest — used to keep KV cache keys well within KV's 512-byte key limit. */
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Deterministic, length-bounded cache key for a CKAN action + its params. Some inputs
+ * (`datastore_search_sql`'s raw `sql`, `package_show`'s `id_or_slug`) have no repo-enforced upper
+ * bound, so every key is hashed rather than only the ones known to be long today.
+ */
+export async function ckanCacheKey(action: string, params: Record<string, string>): Promise<string> {
+  const sortedParams = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join("&");
+  return `nz-govt:datagovt:${action}:${await sha256Hex(`${action}?${sortedParams}`)}`;
+}
+
 async function callAction<T>(action: string, query: Record<string, string>): Promise<T> {
   const url = new URL(`${BASE_URL}/${action}`);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
@@ -84,7 +120,7 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
 
   let response: Response;
   try {
-    response = await fetchWithBackoff(url, { headers: { "User-Agent": USER_AGENT } });
+    response = await fetchWithBackoff(url, { headers: { "User-Agent": USER_AGENT } }, { retryOn: shouldRetryCkanResponse });
   } catch (error) {
     console.error(
       `[datagovt] ${action} fetch failed:`,

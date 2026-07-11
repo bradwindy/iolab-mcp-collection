@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   attribution,
+  cached,
+  CACHE_TTL,
   describePage,
   jsonResult,
   limitParam,
@@ -13,7 +15,13 @@ import {
   upstreamError,
   type ToolTextResult,
 } from "@nz-mcp/mcp-kit";
-import { datastoreSearch, UpstreamActionError, UpstreamFetchError, type DatastoreRecord } from "../clients/datagovt.js";
+import {
+  ckanCacheKey,
+  datastoreSearch,
+  UpstreamActionError,
+  UpstreamFetchError,
+  type DatastoreRecord,
+} from "../clients/datagovt.js";
 import { ECE_DIRECTORY_RESOURCE_ID } from "../constants.js";
 
 /**
@@ -88,7 +96,7 @@ function toDetailed(record: DatastoreRecord) {
   };
 }
 
-export async function searchEarlyChildhoodServicesHandler(rawInput: unknown): Promise<ToolTextResult> {
+export async function searchEarlyChildhoodServicesHandler(rawInput: unknown, env: Env): Promise<ToolTextResult> {
   const input = inputSchema.parse(rawInput);
 
   if (!input.query && !input.region && !input.authority && !input.city) {
@@ -104,13 +112,23 @@ export async function searchEarlyChildhoodServicesHandler(rawInput: unknown): Pr
     if (input.authority) filters.Authority = input.authority;
     if (input.city) filters.Add1_City = input.city;
 
-    const { records, total } = await datastoreSearch({
+    const datastoreParams = {
       resourceId: ECE_DIRECTORY_RESOURCE_ID,
       ...(combinedQuery ? { query: combinedQuery } : {}),
       ...(Object.keys(filters).length > 0 ? { filters } : {}),
       limit: input.limit,
       offset: input.offset,
+    };
+    const cacheKey = await ckanCacheKey("datastore_search", {
+      resource_id: ECE_DIRECTORY_RESOURCE_ID,
+      q: combinedQuery,
+      filters: JSON.stringify(filters),
+      limit: String(input.limit),
+      offset: String(input.offset),
     });
+    const { records, total } = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.SLOW_MOVING, () =>
+      datastoreSearch(datastoreParams),
+    );
 
     const page = describePage({ returned: records.length, total_count: total, offset: input.offset });
     const items = records.map((record) => selectFormat(input.response_format, toConcise(record), toDetailed(record)));

@@ -1,6 +1,21 @@
 import { z } from "zod";
-import { attribution, jsonResult, toolError, UpstreamHttpError, upstreamError, type ToolTextResult } from "@nz-mcp/mcp-kit";
-import { datastoreSearchSql, SqlValidationError, UpstreamActionError, UpstreamFetchError } from "../clients/datagovt.js";
+import {
+  attribution,
+  cached,
+  CACHE_TTL,
+  jsonResult,
+  toolError,
+  UpstreamHttpError,
+  upstreamError,
+  type ToolTextResult,
+} from "@nz-mcp/mcp-kit";
+import {
+  ckanCacheKey,
+  datastoreSearchSql,
+  SqlValidationError,
+  UpstreamActionError,
+  UpstreamFetchError,
+} from "../clients/datagovt.js";
 
 const MAX_ROWS_RETURNED = 200;
 
@@ -25,11 +40,12 @@ export const queryOpenDataSqlOutputShape = {
 
 const inputSchema = z.object(queryOpenDataSqlInputShape);
 
-export async function queryOpenDataSqlHandler(rawInput: unknown): Promise<ToolTextResult> {
+export async function queryOpenDataSqlHandler(rawInput: unknown, env: Env): Promise<ToolTextResult> {
   const input = inputSchema.parse(rawInput);
 
   try {
-    const { records } = await datastoreSearchSql(input.sql);
+    const cacheKey = await ckanCacheKey("datastore_search_sql", { sql: input.sql });
+    const { records } = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.SLOW_MOVING, () => datastoreSearchSql(input.sql));
     const truncated = records.length > MAX_ROWS_RETURNED;
     const rows = truncated ? records.slice(0, MAX_ROWS_RETURNED) : records;
 
