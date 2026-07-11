@@ -170,7 +170,10 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
-      "Set-Cookie": `${CSRF_COOKIE_NAME}=${csrfToken}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=300`,
+      // 10 minutes, not 5: real-world consent clicks can be slower than a synthetic test — a user
+      // reading the client name/redirect URI, switching tabs, or just being interrupted mid-click
+      // is normal, and a token that expired mid-read reads to them as "the button does nothing."
+      "Set-Cookie": `${CSRF_COOKIE_NAME}=${csrfToken}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`,
       "X-Frame-Options": "DENY",
       "Content-Security-Policy": "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
     },
@@ -188,6 +191,15 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
   const cookieToken = extractCsrfCookie(request);
   const formToken = formData.get("csrf_token");
   if (!cookieToken || typeof formToken !== "string" || formToken !== cookieToken) {
+    // Never log the token values themselves — just enough to tell a stale-page resubmission
+    // (the common case: the consent page was loaded more than once, and the wrong tab's form was
+    // submitted) apart from a cookie never arriving at all (Access/proxy stripping it — a config
+    // problem worth escalating).
+    console.warn(
+      "OAuth /authorize consent POST rejected: CSRF token mismatch.",
+      `cookiePresent=${cookieToken !== null}`,
+      `formTokenPresent=${typeof formToken === "string"}`,
+    );
     return new Response("Forbidden: missing or invalid CSRF token. Restart the authorization flow.", {
       status: 403,
     });
