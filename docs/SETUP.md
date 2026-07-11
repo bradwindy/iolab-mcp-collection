@@ -257,13 +257,17 @@ pnpm run deploy:all
 
 **Personal account:** Settings → Connectors → **Add custom connector** → enter
 `https://nz-govt.mcp.yourdomain.com/mcp` → Claude opens a browser tab, Cloudflare Access prompts you to
-sign in (email OTP or whichever identity provider you configured in step 4), and on success you're
-redirected back into claude.ai as connected.
+sign in (email OTP or whichever identity provider you configured in step 4), then a one-time consent page
+shows which client is asking to connect — click **Approve** — and you're redirected back into claude.ai
+as connected. (This consent click is a deliberate step, not a bug: DCR lets any client self-register, so
+skipping it would let a crafted link silently grant access to an already-logged-in browser.)
 
-**Team/Enterprise account:** an admin adds the connector the same way under the organization's
-**Settings → Connectors**, so every member of the team sees it; each member still authenticates
-individually through your Access policy the first time they use it (unless your Access policy allows
-more than one email — most personal deployments allow only the operator's own).
+**Team/Enterprise account:** an admin can add the connector the same way under the organization's
+**Settings → Connectors**, so every member of the team sees it — but only the single operator email in
+`ACCESS_EMAIL` can actually complete the login: `verifyAccessJwt` checks the Access JWT's email against
+that one configured value, regardless of how many emails your Access policy itself allows through. This
+collection is built for one operator (see the top of this doc); it does not support authorizing multiple
+distinct users per server.
 
 The portal's **Connect** page shows this same `/mcp` URL next to the existing `claude mcp add` command
 for each server, so you don't need to reconstruct it by hand.
@@ -302,6 +306,12 @@ Common failures:
 - **Claude Code stops working after adding OAuth** — it shouldn't: the bypass in `buildOAuthMcpWorker`
   checks for the exact `MCP_SHARED_TOKEN` bearer header before the OAuth provider ever runs. If it did
   break, confirm you didn't also rotate `MCP_SHARED_TOKEN` as part of this change.
+- **"Forbidden: missing or invalid CSRF token" when clicking Approve** — the consent page's cookie
+  (`__Host-OAUTH_CSRF`) is 5 minutes and single-flow; this fires if you took too long, opened the
+  consent link in a second tab/browser than the one that requested it, or the browser blocked the
+  cookie (the `__Host-` prefix requires HTTPS and no `Domain` attribute — normal on a Cloudflare custom
+  domain, but would fail over plain HTTP in local `wrangler dev` testing). Reload `/authorize` and
+  approve again from the same browser session.
 
 ## Updating an existing deployment
 
@@ -329,5 +339,6 @@ variables → Actions**:
   script for the exact mechanism). Never committed anywhere in this repo.
 
 This job only deploys Worker code and the custom domain route — it never touches secrets
-(`MCP_SHARED_TOKEN`, `ENCRYPTION_KEY`, `PORTAL_URL`, `BASE_DOMAIN`, `ACCESS_EMAIL`), which persist from
-the manual initial setup above and don't need to be reset on every deploy.
+(`MCP_SHARED_TOKEN`, `ENCRYPTION_KEY`, `PORTAL_URL`, `BASE_DOMAIN`, `ACCESS_EMAIL`, and, on servers with
+OAuth enabled, `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`), which persist from the manual initial setup above
+and don't need to be reset on every deploy.

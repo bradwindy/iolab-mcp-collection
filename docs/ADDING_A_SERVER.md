@@ -47,7 +47,8 @@ servers/nz-{domain}-mcp/
 │   ├── index.ts           # export default buildOAuthMcpWorker(YourAgent, "YOUR_DO_BINDING")
 │   ├── agent.ts           # McpAgent<Env, State, OAuthProps> subclass; one this.server.registerTool(...) per tool
 │   ├── clients/           # one file per upstream API — throw UpstreamHttpError on !response.ok
-│   └── tools/             # one file per tool: {name}InputShape, {name}OutputShape, async handler(rawInput, env?)
+│   └── tools/             # one file per tool: {name}InputShape, {name}OutputShape, and
+│   │                       # handler: (rawInput: unknown, env: Env) => Promise<ToolTextResult>
 └── test/
     ├── index.test.ts       # bearer-auth gate, via `import { exports } from "cloudflare:workers"`
     ├── oauth.test.ts        # OAuth flows — copy an existing server's, only the ORIGIN constant changes

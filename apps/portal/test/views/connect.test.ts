@@ -24,7 +24,8 @@ describe("renderConnect", () => {
     const body = String(await renderConnect(SERVERS, "my-shared-token", "example.com", "you@example.com"));
 
     for (const server of SERVERS) {
-      expect(body).toContain(`https://${server.subdomain}.example.com/mcp`);
+      const url = `https://${server.subdomain}.example.com/mcp`;
+      expect(body).toContain(`<pre><code>${url}</code></pre>`);
     }
     expect(body).toContain("Add custom connector");
   });

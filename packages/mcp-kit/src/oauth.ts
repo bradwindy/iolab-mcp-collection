@@ -1,5 +1,5 @@
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
-import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
 import { bearerTokenMatches } from "./auth.js";
@@ -92,13 +92,146 @@ export async function verifyAccessJwt(request: Request, env: AccessJwtEnv): Prom
   }
 }
 
+type AuthorizeEnv = AccessJwtEnv & { OAUTH_PROVIDER: OAuthHelpers };
+
+const CSRF_COOKIE_NAME = "__Host-OAUTH_CSRF";
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function extractCsrfCookie(request: Request): string | null {
+  const cookie = request.headers.get("Cookie") ?? "";
+  const match = new RegExp(`(?:^|;\\s*)${CSRF_COOKIE_NAME}=([^;]+)`).exec(cookie);
+  return match?.[1] ?? null;
+}
+
 /**
- * The OAuth provider's `defaultHandler`: serves `GET /authorize`, gated by an upstream
- * Cloudflare Access application scoped to that path. Access has already completed the
- * interactive login by the time this runs, so the Access JWT is auto-approved (no separate
- * consent UI) into an OAuth grant for the requesting MCP client.
+ * Renders a consent page for `GET /authorize`: the caller is already Access-authenticated (verified
+ * by the handler below before this runs), but has not yet said *which* client they mean to authorize.
+ * Without this step, a single crafted link (or even a plain top-level redirect) to `/authorize` from an
+ * attacker-registered OAuth client — DCR is public, per the MCP spec — would silently grant that client
+ * a token scoped to the operator's identity while an Access session happens to be live: a classic
+ * confused-deputy / session-riding gap. Requiring an explicit POST closes it; the CSRF token (bound via
+ * a `__Host-` cookie set on this response and echoed back as a hidden field on submit — the "double
+ * submit cookie" pattern) additionally stops a forged cross-site POST from skipping the click entirely.
  */
-export function createAccessAuthorizeHandler<Env extends AccessJwtEnv & { OAUTH_PROVIDER: OAuthHelpers }>(): {
+async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request, env: Env): Promise<Response> {
+  let oauthReqInfo: AuthRequest;
+  try {
+    oauthReqInfo = await env.OAUTH_PROVIDER.parseAuthRequest(request);
+  } catch (err) {
+    return new Response(`Invalid authorization request: ${err instanceof Error ? err.message : "unknown error"}`, {
+      status: 400,
+    });
+  }
+
+  const clientInfo = await env.OAUTH_PROVIDER.lookupClient(oauthReqInfo.clientId);
+  const clientName = clientInfo?.clientName || oauthReqInfo.clientId;
+
+  // Echo every original query param back verbatim as hidden fields (not just the ones the parsed
+  // AuthRequest names) so a repeated param like `resource` round-trips exactly, and so the POST
+  // handler can re-run parseAuthRequest on the reconstructed URL instead of re-deriving it by hand.
+  // A crafted link could itself carry a `csrf_token` param, which would render a hidden field ahead
+  // of the real one and shadow it on submit (formData.get() returns the first match) — fail closed
+  // but an annoying self-DoS, so it's dropped here; the one appended below is the only one that counts.
+  const hiddenInputs = [...new URL(request.url).searchParams.entries()]
+    .filter(([name]) => name !== "csrf_token")
+    .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}" />`)
+    .join("\n      ");
+
+  const csrfToken = crypto.randomUUID();
+  const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Authorize</title>
+  </head>
+  <body>
+    <h1>Authorize access</h1>
+    <p><strong>${escapeHtml(clientName)}</strong> (client ID <code>${escapeHtml(oauthReqInfo.clientId)}</code>)
+      wants to connect to this MCP server as <strong>${escapeHtml(env.ACCESS_EMAIL)}</strong>.</p>
+    <p>It will be redirected to: <code>${escapeHtml(oauthReqInfo.redirectUri)}</code></p>
+    <form method="POST" action="/authorize">
+      ${hiddenInputs}
+      <input type="hidden" name="csrf_token" value="${escapeHtml(csrfToken)}" />
+      <button type="submit">Approve</button>
+    </form>
+  </body>
+</html>`;
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Set-Cookie": `${CSRF_COOKIE_NAME}=${csrfToken}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=300`,
+      "X-Frame-Options": "DENY",
+      "Content-Security-Policy": "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    },
+  });
+}
+
+/** Completes `POST /authorize` after the consent form is submitted: validates the CSRF token, then grants. */
+async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
+  request: Request,
+  env: Env,
+  identity: { email: string },
+): Promise<Response> {
+  const formData = await request.formData();
+
+  const cookieToken = extractCsrfCookie(request);
+  const formToken = formData.get("csrf_token");
+  if (!cookieToken || typeof formToken !== "string" || formToken !== cookieToken) {
+    return new Response("Forbidden: missing or invalid CSRF token. Restart the authorization flow.", {
+      status: 403,
+    });
+  }
+
+  const reconstructedUrl = new URL("/authorize", request.url);
+  for (const [name, value] of formData.entries()) {
+    if (name === "csrf_token") continue;
+    reconstructedUrl.searchParams.append(name, String(value));
+  }
+
+  let oauthReqInfo: AuthRequest;
+  try {
+    oauthReqInfo = await env.OAUTH_PROVIDER.parseAuthRequest(new Request(reconstructedUrl));
+  } catch (err) {
+    return new Response(`Invalid authorization request: ${err instanceof Error ? err.message : "unknown error"}`, {
+      status: 400,
+    });
+  }
+
+  const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
+    request: oauthReqInfo,
+    userId: identity.email,
+    scope: oauthReqInfo.scope,
+    metadata: { label: identity.email },
+    props: { email: identity.email } satisfies OAuthProps,
+  });
+
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: redirectTo,
+      "Set-Cookie": `${CSRF_COOKIE_NAME}=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0`,
+    },
+  });
+}
+
+/**
+ * The OAuth provider's `defaultHandler`: serves `/authorize`, gated by an upstream Cloudflare Access
+ * application scoped to that path. `GET` renders a consent page (see `renderAuthorizeConsent`); `POST`
+ * (the page's own form submit) completes the grant. Access authentication is re-verified on both
+ * methods — the JWT alone answers "who," never "did they mean to approve this specific client."
+ */
+export function createAccessAuthorizeHandler<Env extends AuthorizeEnv>(): {
   fetch(request: Request, env: Env): Promise<Response>;
 } {
   return {
@@ -107,24 +240,15 @@ export function createAccessAuthorizeHandler<Env extends AccessJwtEnv & { OAUTH_
       if (url.pathname !== "/authorize") {
         return new Response("Not found", { status: 404 });
       }
-      if (request.method !== "GET") {
-        return new Response("Method not allowed", { status: 405 });
-      }
 
       const identity = await verifyAccessJwt(request, env);
       if (!identity) {
         return new Response("Forbidden: Cloudflare Access did not authenticate this request.", { status: 403 });
       }
 
-      const oauthReqInfo = await env.OAUTH_PROVIDER.parseAuthRequest(request);
-      const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
-        request: oauthReqInfo,
-        userId: identity.email,
-        scope: oauthReqInfo.scope,
-        metadata: { label: identity.email },
-        props: { email: identity.email } satisfies OAuthProps,
-      });
-      return Response.redirect(redirectTo, 302);
+      if (request.method === "GET") return renderAuthorizeConsent(request, env);
+      if (request.method === "POST") return completeAuthorizeConsent(request, env, identity);
+      return new Response("Method not allowed", { status: 405 });
     },
   };
 }

@@ -85,7 +85,7 @@ research questions it can answer.
   `/authorize` path only, for claude.ai's custom-connector flow — see [docs/SETUP.md §8](docs/SETUP.md#8-oauth-for-claudeai-optional).
   Both paths work at once on the same server; OAuth is opt-in per server.
 - **Shared tool-kit** (`packages/mcp-kit`): pagination, response formatting (concise/detailed), TTL
-  caching, rate-limit backoff, actionable tool errors, attribution helpers, and the bearer-auth middleware
+  caching, rate-limit backoff, actionable tool errors, attribution helpers, and the bearer/OAuth auth
   every server uses identically.
 
 ## Connecting
@@ -102,8 +102,10 @@ in that flow, so servers you want to use there need [OAuth enabled](docs/SETUP.m
 instead. The portal's **Connect** page (`https://<your-portal-domain>/connect`, once you're logged in via
 Cloudflare Access) renders both the `claude mcp add` command and the plain `/mcp` URL for every server.
 
-These MCPs are **not public** — only someone holding your `MCP_SHARED_TOKEN` can call them, and only you
-(or whoever you grant Cloudflare Access to) can reach the portal to manage credentials.
+These MCPs are **not public** — only someone holding your `MCP_SHARED_TOKEN`, or holding a valid OAuth
+access token issued by that server's own `/authorize` (which itself requires your Cloudflare Access
+login) if you've enabled OAuth, can call them. Only you (or whoever you grant Cloudflare Access to) can
+reach the portal to manage credentials.
 
 ## Getting started
 
