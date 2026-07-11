@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
-import { READ_ONLY_OPEN_WORLD_ANNOTATIONS } from "@nz-mcp/mcp-kit";
+import { READ_ONLY_OPEN_WORLD_ANNOTATIONS, type OAuthProps } from "@nz-mcp/mcp-kit";
 import {
   searchCharitiesHandler,
   searchCharitiesInputShape,
@@ -25,7 +25,7 @@ import {
   queryOpenDataSqlOutputShape,
 } from "./tools/queryOpenDataSql.js";
 
-export class NzGovtMcp extends McpAgent<Env, Record<string, never>, Record<string, never>> {
+export class NzGovtMcp extends McpAgent<Env, Record<string, never>, OAuthProps> {
   server = new McpServer({ name: "nz-govt-mcp", version: "0.1.0" });
 
   async init() {

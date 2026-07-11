@@ -158,6 +158,151 @@ claude mcp add --transport http nz-govt-mcp https://nz-govt.mcp.yourdomain.com/m
 Repeat per server, or use the **Connect** page on your deployed portal, which renders the exact command
 for every server with the token already filled in.
 
+## 8. OAuth for claude.ai (optional)
+
+Claude Code uses the static `MCP_SHARED_TOKEN` above and needs nothing further. **claude.ai** (and
+Claude mobile), however, add custom connectors through an interactive browser login — its first-class
+path is OAuth 2.1 + PKCE with Dynamic Client Registration. Every server in this collection can do both
+at once: the static bearer token keeps working unchanged, and each server also runs its own OAuth
+authorization/resource server, gated by Cloudflare Access. Do this once per server you want to add to
+claude.ai; skip it entirely for servers you only ever use from Claude Code.
+
+### 8.1 Create the OAuth KV namespace (per server)
+
+Each server stores its OAuth tokens/grants/DCR clients in its own KV namespace — deliberately *not*
+shared with `MCP_CACHE` or across servers, so a leak or bug in one server's OAuth storage can't touch
+another's issued tokens.
+
+```bash
+pnpm exec wrangler kv namespace create OAUTH_KV
+# → note the returned id
+```
+
+Paste the id into that server's `wrangler.jsonc`, replacing the placeholder:
+
+```jsonc
+{ "binding": "OAUTH_KV", "id": "REPLACE_WITH_OAUTH_KV_NAMESPACE_ID" },
+```
+
+Repeat for every server you're enabling OAuth on — each needs its **own** namespace, not one shared
+across the fleet.
+
+### 8.2 Find your Access team domain
+
+Cloudflare Zero Trust dashboard → **Settings → Custom Pages** (or any Zero Trust page — the team domain
+is shown in the URL and in **Settings → General**): `<your-team-name>.cloudflareaccess.com`. This is the
+same team you already used for the portal's Access app in step 4. This value is `ACCESS_TEAM_DOMAIN`
+below, identical for every server.
+
+### 8.3 Create a self-hosted Access application per server, scoped to `/authorize` only
+
+For each server you're enabling OAuth on:
+
+1. **Zero Trust → Access → Applications → Add an application → Self-hosted.**
+2. Application domain: the server's hostname **and path**, e.g.
+   `nz-govt.mcp.yourdomain.com/authorize` — not the bare hostname. Scoping to the path is what keeps
+   `/mcp`, `/token`, `/register`, and the `.well-known` documents public.
+3. Add a policy: Action **Allow**, Include **Emails** → your email address (the same one you'll set as
+   `ACCESS_EMAIL`).
+4. Save, then copy the application's **Audience (AUD) tag** (shown on the application's overview page) —
+   this is `ACCESS_AUD` below, **different for every server** (each is its own Access application).
+
+**This step is the one place a mistake breaks both claude.ai and Claude Code at once.** An Access
+application scoped to the whole hostname (instead of just `/authorize`) intercepts `/mcp`, `/token`, and
+`/register` too — those must stay reachable without an interactive login, since claude.ai and Claude Code
+both call them server-to-server.
+
+| Path | Must be |
+|---|---|
+| `/authorize` | Behind Access (interactive login only) |
+| `/mcp` | Public (bearer token **or** OAuth token checked in application code) |
+| `/token` | Public (OAuth token exchange, machine-to-machine) |
+| `/register` | Public (Dynamic Client Registration, machine-to-machine) |
+| `/.well-known/oauth-authorization-server` | Public (RFC 8414 discovery) |
+| `/.well-known/oauth-protected-resource*` | Public (RFC 9728 discovery) |
+
+### 8.4 Set the secrets (per server)
+
+Alongside the existing `MCP_SHARED_TOKEN` / `PORTAL_URL` / `ENCRYPTION_KEY`, every server with OAuth
+enabled needs three more:
+
+```bash
+cd servers/nz-govt-mcp   # repeat per server
+printf '%s' "<your-team-name>.cloudflareaccess.com" | pnpm exec wrangler secret put ACCESS_TEAM_DOMAIN
+printf '%s' "<this server's Access application AUD tag>" | pnpm exec wrangler secret put ACCESS_AUD
+printf '%s' "you@yourdomain.com" | pnpm exec wrangler secret put ACCESS_EMAIL
+cd ../..
+```
+
+Full secrets table for a server with OAuth enabled:
+
+| Secret | Same across every server? | Purpose |
+|---|---|---|
+| `MCP_SHARED_TOKEN` | Yes | Static bearer token (Claude Code) |
+| `PORTAL_URL` | Yes | Link in missing-credential error messages |
+| `ENCRYPTION_KEY` | Yes (every server except `nz-govt-mcp`) | Decrypt upstream API keys |
+| `ACCESS_TEAM_DOMAIN` | Yes | Verify the Access JWT's issuer |
+| `ACCESS_AUD` | **No — per server**, from that server's own Access app | Verify the Access JWT's audience |
+| `ACCESS_EMAIL` | Yes | The one operator email `/authorize` accepts |
+
+### 8.5 Deploy
+
+```bash
+cd servers/nz-govt-mcp && pnpm exec wrangler types && pnpm exec wrangler deploy && cd ../..
+# or, once every server is ready:
+pnpm run deploy:all
+```
+
+### 8.6 Add the connector in claude.ai
+
+**Personal account:** Settings → Connectors → **Add custom connector** → enter
+`https://nz-govt.mcp.yourdomain.com/mcp` → Claude opens a browser tab, Cloudflare Access prompts you to
+sign in (email OTP or whichever identity provider you configured in step 4), and on success you're
+redirected back into claude.ai as connected.
+
+**Team/Enterprise account:** an admin adds the connector the same way under the organization's
+**Settings → Connectors**, so every member of the team sees it; each member still authenticates
+individually through your Access policy the first time they use it (unless your Access policy allows
+more than one email — most personal deployments allow only the operator's own).
+
+The portal's **Connect** page shows this same `/mcp` URL next to the existing `claude mcp add` command
+for each server, so you don't need to reconstruct it by hand.
+
+### 8.7 Verification / troubleshooting
+
+```bash
+# Discovery documents (should both return 200 with JSON, no auth required):
+curl -s https://nz-govt.mcp.yourdomain.com/.well-known/oauth-authorization-server | jq
+curl -s https://nz-govt.mcp.yourdomain.com/.well-known/oauth-protected-resource/mcp | jq
+
+# Unauthenticated /mcp should 401 with a WWW-Authenticate challenge pointing at the resource metadata:
+curl -sI https://nz-govt.mcp.yourdomain.com/mcp -X POST | grep -i www-authenticate
+
+# /authorize with no Access session should 403 (Access blocks it before your Worker even runs, if
+# the Access app is configured correctly — a 200/302 here without ever prompting a login means the
+# Access app isn't actually covering this path):
+curl -sI https://nz-govt.mcp.yourdomain.com/authorize
+```
+
+Common failures:
+
+- **claude.ai never prompts a login, or `/mcp` calls with a bearer token also 401** — the Access
+  application is scoped too broadly (covers more than `/authorize`). Fix the application domain in step
+  8.3 to include the exact `/authorize` path.
+- **`invalid_client` / `redirect_uri mismatch` during the OAuth handshake** — claude.ai registers itself
+  as a new DCR client on first connection; if you removed and re-added the connector, it registers a new
+  client each time. This is expected and not an error unless it recurs on every request.
+- **`resource` in `/.well-known/oauth-protected-resource/mcp` doesn't match the URL you entered in
+  claude.ai** — the provider derives `resource` from the request's own hostname automatically; this only
+  happens if you're behind an unexpected proxy/redirect rewriting the Host header before reaching the
+  Worker. On a plain Cloudflare custom domain this shouldn't occur.
+- **403 with a valid-looking Access login** — the JWT's `email` claim doesn't match your `ACCESS_EMAIL`
+  secret exactly, or `ACCESS_AUD` is the wrong application's AUD tag (double check you copied the AUD
+  from *this* server's Access application, not the portal's or another server's).
+- **Claude Code stops working after adding OAuth** — it shouldn't: the bypass in `buildOAuthMcpWorker`
+  checks for the exact `MCP_SHARED_TOKEN` bearer header before the OAuth provider ever runs. If it did
+  break, confirm you didn't also rotate `MCP_SHARED_TOKEN` as part of this change.
+
 ## Updating an existing deployment
 
 After pulling changes, redeploy the servers that changed:

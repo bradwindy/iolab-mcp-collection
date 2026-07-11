@@ -29,7 +29,8 @@ Every server:
 - runs read-only, with `readOnlyHint`/`openWorldHint` annotations on every tool
 - is a Cloudflare Worker using the [Agents SDK](https://developers.cloudflare.com/agents/)'s `McpAgent`,
   served over Streamable HTTP
-- gates its `/mcp` endpoint behind a single shared bearer token (see [Connecting](#connecting) below)
+- gates its `/mcp` endpoint behind a single shared bearer token, and optionally OAuth 2.1 for
+  claude.ai (see [Connecting](#connecting) below)
 - reads any upstream API keys it needs from a shared, AES-256-GCM-encrypted D1 store — see
   [Architecture](#architecture)
 
@@ -77,10 +78,12 @@ research questions it can answer.
   request time. Neither the repo nor any AI agent that helped build it ever saw a real upstream key —
   Cloudflare secrets are write-only by design.
 - **MCP servers** (`servers/*`): each is an independent Worker/Durable Object pair on its own subdomain.
-  The **only** gate on `/mcp` is a shared bearer token (`MCP_SHARED_TOKEN`), checked in application code
-  before the request reaches the MCP handler — deliberately *not* behind Cloudflare Access, since MCP
-  clients (Claude Code, claude.ai connectors) connect server-to-server and can't complete an interactive
-  login.
+  `/mcp` accepts a shared bearer token (`MCP_SHARED_TOKEN`), checked in application code before the
+  request reaches the MCP handler — this is what Claude Code uses, since it connects server-to-server and
+  can't complete an interactive login. Each server can also run its own OAuth 2.1 + PKCE
+  authorization/resource server (`@cloudflare/workers-oauth-provider`), gated by Cloudflare Access on the
+  `/authorize` path only, for claude.ai's custom-connector flow — see [docs/SETUP.md §8](docs/SETUP.md#8-oauth-for-claudeai-optional).
+  Both paths work at once on the same server; OAuth is opt-in per server.
 - **Shared tool-kit** (`packages/mcp-kit`): pagination, response formatting (concise/detailed), TTL
   caching, rate-limit backoff, actionable tool errors, attribution helpers, and the bearer-auth middleware
   every server uses identically.
@@ -94,9 +97,10 @@ claude mcp add --transport http nz-transport-mcp https://nz-transport.mcp.yourdo
   --header "Authorization: Bearer <your MCP_SHARED_TOKEN>"
 ```
 
-Or as a custom connector in claude.ai, using the same URL and header. The portal's **Connect** page
-(`https://<your-portal-domain>/connect`, once you're logged in via Cloudflare Access) renders these
-commands for you with the token already filled in.
+For claude.ai / Claude mobile, add a custom connector with just the `/mcp` URL — no header field exists
+in that flow, so servers you want to use there need [OAuth enabled](docs/SETUP.md#8-oauth-for-claudeai-optional)
+instead. The portal's **Connect** page (`https://<your-portal-domain>/connect`, once you're logged in via
+Cloudflare Access) renders both the `claude mcp add` command and the plain `/mcp` URL for every server.
 
 These MCPs are **not public** — only someone holding your `MCP_SHARED_TOKEN` can call them, and only you
 (or whoever you grant Cloudflare Access to) can reach the portal to manage credentials.

@@ -2,7 +2,7 @@
   "name": "@nz-mcp/mcp-kit",
   "private": true,
   "version": "0.1.0",
-  "description": "Shared tool-building utilities for the nz-mcp-collection servers: pagination, response formatting, caching, retry/backoff, actionable errors, attribution, and bearer auth.",
+  "description": "Shared tool-building utilities for the nz-mcp-collection servers: pagination, response formatting, caching, retry/backoff, actionable errors, attribution, and bearer/OAuth auth.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
@@ -12,6 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.8.1",
+    "jose": "^6.2.3",
     "zod": "^4.1.10"
   },
   "devDependencies": {

@@ -41,14 +41,16 @@ servers/nz-{domain}-mcp/
 ├── .dev.vars.example
 ├── README.md
 ├── src/
-│   ├── env.d.ts          # hand-written Env augmentation for secrets (MCP_SHARED_TOKEN, + ENCRYPTION_KEY if you need credentials)
+│   ├── env.d.ts          # hand-written Env augmentation: MCP_SHARED_TOKEN, OAUTH_PROVIDER, ACCESS_TEAM_DOMAIN,
+│   │                     # ACCESS_AUD, ACCESS_EMAIL, + ENCRYPTION_KEY if you need credentials
 │   ├── constants.ts       # SERVER_SLUG (must equal wrangler.jsonc "name"), PORTAL_URL, credential key name(s)
-│   ├── index.ts           # bearer-auth gate, then McpAgent.serve("/mcp", ...)
-│   ├── agent.ts           # McpAgent subclass; one this.server.registerTool(...) per tool
+│   ├── index.ts           # export default buildOAuthMcpWorker(YourAgent, "YOUR_DO_BINDING")
+│   ├── agent.ts           # McpAgent<Env, State, OAuthProps> subclass; one this.server.registerTool(...) per tool
 │   ├── clients/           # one file per upstream API — throw UpstreamHttpError on !response.ok
 │   └── tools/             # one file per tool: {name}InputShape, {name}OutputShape, async handler(rawInput, env?)
 └── test/
     ├── index.test.ts       # bearer-auth gate, via `import { exports } from "cloudflare:workers"`
+    ├── oauth.test.ts        # OAuth flows — copy an existing server's, only the ORIGIN constant changes
     └── {tool}.test.ts       # one per tool, mocking global.fetch
 ```
 
@@ -58,7 +60,8 @@ servers/nz-{domain}-mcp/
   `describePage`, `limitParam`/`offsetParam`/`responseFormatParam`, `jsonResult`, `selectFormat`,
   `truncationNotice`, `toolError`, `upstreamError`, `missingCredentialError`, `UpstreamHttpError`,
   `attribution`, `READ_ONLY_OPEN_WORLD_ANNOTATIONS`, `cached`, `CACHE_TTL`, `fetchWithBackoff`,
-  `requireBearerToken`.
+  `requireBearerToken`, `buildOAuthMcpWorker`, `OAuthProps` — the standard `index.ts`/`agent.ts` shape
+  (§6, below) uses the last two; see `packages/mcp-kit/src/oauth.ts` for how the OAuth wrapper works.
 - **`@nz-mcp/credentials`** (only if your server needs upstream API keys):
   `getCredential(env.CREDENTIALS_DB, SERVER_SLUG, keyName, env.ENCRYPTION_KEY)`,
   `missingCredentialError(SERVER_SLUG, keyName, PORTAL_URL)` when it's unset.
@@ -105,7 +108,11 @@ servers/nz-{domain}-mcp/
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": { "bindings": [{ "name": "NZ_{DOMAIN}_MCP", "class_name": "Nz{Domain}Mcp" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Nz{Domain}Mcp"] }],
-  "kv_namespaces": [{ "binding": "MCP_CACHE", "id": "<shared KV id>" }],
+  "kv_namespaces": [
+    { "binding": "MCP_CACHE", "id": "<shared KV id>" },
+    // Own namespace per server — create with `wrangler kv namespace create OAUTH_KV`, see docs/SETUP.md §8.1.
+    { "binding": "OAUTH_KV", "id": "<this server's own OAuth KV id>" }
+  ],
   // Only if the server needs upstream credentials:
   "d1_databases": [{ "binding": "CREDENTIALS_DB", "database_name": "nz-mcp-credentials", "database_id": "<shared D1 id>" }],
   "routes": [{ "pattern": "nz-{domain}.mcp.<your-domain>", "custom_domain": true }],
@@ -115,7 +122,16 @@ servers/nz-{domain}-mcp/
 
 Do **not** install `@cloudflare/workers-types` — this repo relies entirely on `wrangler types`-generated
 runtime types (`worker-configuration.d.ts`, gitignored, regenerate after any config change) plus a
-hand-written `src/env.d.ts` for secrets not declared in `wrangler.jsonc`.
+hand-written `src/env.d.ts` for secrets not declared in `wrangler.jsonc`. `OAUTH_KV` is a binding, so
+`wrangler types` provides it automatically once it's in `wrangler.jsonc`; you do still need
+`@cloudflare/workers-oauth-provider` and `jose` as **devDependencies** (types only — the runtime code
+lives in `@nz-mcp/mcp-kit`) so `src/env.d.ts` can name `OAuthHelpers`, and so `test/oauth.test.ts` can
+sign test JWTs.
+
+Every new server also needs a self-hosted Cloudflare Access application scoped to its `/authorize` path
+and three secrets (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ACCESS_EMAIL`) before OAuth actually works end to
+end — see [docs/SETUP.md §8](SETUP.md#8-oauth-for-claudeai-optional) for the exact steps. The server
+works with Claude Code's static bearer token immediately either way; OAuth is what claude.ai needs.
 
 ## 7. If the portal needs to know about your new credentials
 
@@ -136,6 +152,11 @@ pnpm exec vitest run
 pnpm exec wrangler deploy
 printf '%s' "<MCP_SHARED_TOKEN>" | pnpm exec wrangler secret put MCP_SHARED_TOKEN
 printf '%s' "<ENCRYPTION_KEY>"  | pnpm exec wrangler secret put ENCRYPTION_KEY   # only if you bound CREDENTIALS_DB
+printf '%s' "<PORTAL_URL>"      | pnpm exec wrangler secret put PORTAL_URL
+# Only if you're enabling OAuth for claude.ai on this server — see docs/SETUP.md §8:
+printf '%s' "<ACCESS_TEAM_DOMAIN>" | pnpm exec wrangler secret put ACCESS_TEAM_DOMAIN
+printf '%s' "<ACCESS_AUD>"         | pnpm exec wrangler secret put ACCESS_AUD
+printf '%s' "<ACCESS_EMAIL>"       | pnpm exec wrangler secret put ACCESS_EMAIL
 ```
 
 Then live-smoke-test: no-auth → 401, wrong token → 401, correct token + `initialize` →
