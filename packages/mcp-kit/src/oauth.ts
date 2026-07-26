@@ -237,9 +237,12 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
 ): Promise<Response> {
   const formData = await request.formData();
   const flowRefField = formData.get("flow_ref");
-  // Reuse the GET's ref so its log line and this one correlate under one grep; if it's missing
-  // (tampered or pre-dates this field), fall back to a fresh one so this attempt is still traceable.
-  const ref = typeof flowRefField === "string" && flowRefField ? flowRefField : generateFlowRef();
+  // Reuse the GET's ref so its log line and this one correlate under one grep; if it's missing,
+  // malformed, or oversized (a tampered submission — this is client-controlled form data), fall
+  // back to a fresh one instead, so an attacker can't inject arbitrary text into log lines or
+  // response bodies via this field. generateFlowRef() only ever produces 8 lowercase hex chars.
+  const ref =
+    typeof flowRefField === "string" && /^[0-9a-f]{8}$/.test(flowRefField) ? flowRefField : generateFlowRef();
 
   const cookieToken = extractCsrfCookie(request);
   const formToken = formData.get("csrf_token");
@@ -320,7 +323,15 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
     return new Response(`Server error completing authorization. (ref: ${ref})`, { status: 500 });
   }
 
-  console.log(`[authorize:${ref}] POST: approved, redirecting.`, `client_id=${oauthReqInfo.clientId}`, `to=${redirectTo}`);
+  // Never log redirectTo itself: completeAuthorization() appends the OAuth authorization code (and
+  // state, if present) to the client's redirect_uri as query params — origin+path is enough to
+  // confirm which client/URL a grant redirected to without putting a live code in Workers Logs.
+  const redirectDestination = new URL(redirectTo);
+  console.log(
+    `[authorize:${ref}] POST: approved, redirecting.`,
+    `client_id=${oauthReqInfo.clientId}`,
+    `to=${redirectDestination.origin}${redirectDestination.pathname}`,
+  );
 
   return new Response(null, {
     status: 302,

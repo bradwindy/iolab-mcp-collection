@@ -1,20 +1,6 @@
 import { z } from "zod";
-import {
-  attribution,
-  cached,
-  CACHE_TTL,
-  jsonResult,
-  toolError,
-  UpstreamHttpError,
-  upstreamError,
-  type ToolTextResult,
-} from "@iolab/mcp-kit";
-import {
-  ckanCacheKey,
-  getDataset as getDatasetClient,
-  UpstreamActionError,
-  UpstreamFetchError,
-} from "../clients/datagovt.js";
+import { attribution, cached, CACHE_TTL, jsonResult, type ToolTextResult } from "@iolab/mcp-kit";
+import { ckanCacheKey, getDataset as getDatasetClient, handleDatagovtError } from "../clients/datagovt.js";
 
 export const getDatasetInputShape = {
   id_or_slug: z
@@ -72,13 +58,9 @@ export async function getDatasetHandler(rawInput: unknown, env: Env): Promise<To
       attribution: attribution("data.govt.nz catalogue", { url: "https://catalogue.data.govt.nz/" }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
-    if (error instanceof UpstreamActionError) {
-      return toolError(error.message, "Verify the id_or_slug and retry; this is data.govt.nz's own error, not a network failure.");
-    }
-    if (error instanceof UpstreamFetchError) {
-      return toolError(error.message, "This looks like a transient network issue reaching data.govt.nz; retry in a moment.");
-    }
-    throw error;
+    return handleDatagovtError(
+      error,
+      "Verify the id_or_slug and retry; this is data.govt.nz's own error, not a network failure.",
+    );
   }
 }

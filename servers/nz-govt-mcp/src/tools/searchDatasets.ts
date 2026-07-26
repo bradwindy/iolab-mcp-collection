@@ -9,17 +9,13 @@ import {
   offsetParam,
   responseFormatParam,
   selectFormat,
-  toolError,
   truncationNotice,
-  UpstreamHttpError,
-  upstreamError,
   type ToolTextResult,
 } from "@iolab/mcp-kit";
 import {
   ckanCacheKey,
+  handleDatagovtError,
   searchDatasets as searchDatasetsClient,
-  UpstreamActionError,
-  UpstreamFetchError,
   type CkanPackage,
 } from "../clients/datagovt.js";
 
@@ -94,13 +90,9 @@ export async function searchDatasetsHandler(rawInput: unknown, env: Env): Promis
       attribution: attribution("data.govt.nz catalogue", { url: "https://catalogue.data.govt.nz/" }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
-    if (error instanceof UpstreamActionError) {
-      return toolError(error.message, "Verify the query/id and retry; this is data.govt.nz's own error, not a network failure.");
-    }
-    if (error instanceof UpstreamFetchError) {
-      return toolError(error.message, "This looks like a transient network issue reaching data.govt.nz; retry in a moment.");
-    }
-    throw error;
+    return handleDatagovtError(
+      error,
+      "Verify the query/id and retry; this is data.govt.nz's own error, not a network failure.",
+    );
   }
 }

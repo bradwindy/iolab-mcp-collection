@@ -1,4 +1,4 @@
-import { fetchWithBackoff, UpstreamHttpError } from "@iolab/mcp-kit";
+import { fetchWithBackoff, toolError, upstreamError, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
 
 const BASE_URL = "https://catalogue.data.govt.nz/api/3/action";
 const SOURCE = "data.govt.nz";
@@ -46,6 +46,28 @@ export class UpstreamFetchError extends Error {
     super(`${source} action '${action}' could not be reached: ${cause instanceof Error ? cause.message : String(cause)}`);
     this.name = "UpstreamFetchError";
   }
+}
+
+/**
+ * Shared catch-block mapping for every tool handler built on this client (getDataset,
+ * searchDatasets, searchSchools, searchEarlyChildhoodServices, queryOpenDataSql) — all five had an
+ * identical `UpstreamHttpError`/`UpstreamActionError`/`UpstreamFetchError` chain, differing only in
+ * the `actionErrorHint` text. Any error not one of this client's three throws (e.g. a tool's own
+ * input-validation error) is rethrown, not swallowed — a caller must still check for those first.
+ */
+export function handleDatagovtError(error: unknown, actionErrorHint: string): ToolTextResult {
+  if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
+  if (error instanceof UpstreamActionError) return toolError(error.message, actionErrorHint);
+  if (error instanceof UpstreamFetchError) {
+    // Deliberately neutral: this error also covers a 200 response that wasn't valid JSON (see
+    // shouldRetryCkanResponse above), which isn't a network failure — "retry" still applies to
+    // both causes, but the wording shouldn't tell the caller it's specifically a connectivity issue.
+    return toolError(
+      error.message,
+      "This may be a transient issue reaching data.govt.nz, or an unexpected response from it; retry in a moment.",
+    );
+  }
+  throw error;
 }
 
 export type CkanResource = {
@@ -105,10 +127,14 @@ async function sha256Hex(input: string): Promise<string> {
  * bound, so every key is hashed rather than only the ones known to be long today.
  */
 export async function ckanCacheKey(action: string, params: Record<string, string>): Promise<string> {
-  const sortedParams = Object.keys(params)
-    .sort()
-    .map((key) => `${key}=${params[key]}`)
-    .join("&");
+  // URLSearchParams (not manual `key=value` joins) so a value containing '&' or '=' — e.g. a
+  // `filters` value, which is itself JSON.stringify'd and can readily contain either — can't
+  // serialize to the same string as a different (action, params) pair and alias its cached result.
+  const sortedParams = new URLSearchParams(
+    Object.keys(params)
+      .sort()
+      .map((key) => [key, params[key]] as [string, string]),
+  ).toString();
   return `nz-govt:datagovt:${action}:${await sha256Hex(`${action}?${sortedParams}`)}`;
 }
 
@@ -116,7 +142,9 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
   const url = new URL(`${BASE_URL}/${action}`);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
 
-  console.log(`[datagovt] ${action} request:`, url.toString());
+  // Path only, never the full URL: query params can carry a caller's raw `sql`/`filters` value
+  // (datastore_search_sql, datastore_search), which shouldn't end up sitting in Workers Logs.
+  console.log(`[datagovt] ${action} request:`, url.pathname);
 
   let response: Response;
   try {
@@ -125,7 +153,7 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
     console.error(
       `[datagovt] ${action} fetch failed:`,
       error instanceof Error ? error.message : String(error),
-      `url=${url.toString()}`,
+      `path=${url.pathname}`,
     );
     throw new UpstreamFetchError(SOURCE, action, error);
   }
@@ -134,7 +162,7 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
     console.error(
       `[datagovt] ${action} upstream HTTP error:`,
       `status=${response.status} ${response.statusText}`,
-      `url=${url.toString()}`,
+      `path=${url.pathname}`,
     );
     throw new UpstreamHttpError(SOURCE, response);
   }
@@ -146,14 +174,14 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
     console.error(
       `[datagovt] ${action} response was not valid JSON:`,
       error instanceof Error ? error.message : String(error),
-      `url=${url.toString()}`,
+      `path=${url.pathname}`,
     );
     throw new UpstreamFetchError(SOURCE, action, error);
   }
 
   if (!body.success) {
     const message = body.error?.message ?? "unknown error";
-    console.error(`[datagovt] ${action} CKAN reported failure:`, message, `url=${url.toString()}`);
+    console.error(`[datagovt] ${action} CKAN reported failure:`, message, `path=${url.pathname}`);
     throw new UpstreamActionError(SOURCE, action, message);
   }
 

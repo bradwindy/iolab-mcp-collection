@@ -1,20 +1,10 @@
 import { z } from "zod";
-import {
-  attribution,
-  cached,
-  CACHE_TTL,
-  jsonResult,
-  toolError,
-  UpstreamHttpError,
-  upstreamError,
-  type ToolTextResult,
-} from "@iolab/mcp-kit";
+import { attribution, cached, CACHE_TTL, jsonResult, toolError, type ToolTextResult } from "@iolab/mcp-kit";
 import {
   ckanCacheKey,
   datastoreSearchSql,
+  handleDatagovtError,
   SqlValidationError,
-  UpstreamActionError,
-  UpstreamFetchError,
 } from "../clients/datagovt.js";
 
 const MAX_ROWS_RETURNED = 200;
@@ -58,17 +48,10 @@ export async function queryOpenDataSqlHandler(rawInput: unknown, env: Env): Prom
       attribution: attribution("data.govt.nz datastore", { url: "https://catalogue.data.govt.nz/" }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
     if (error instanceof SqlValidationError) return toolError(error.message);
-    if (error instanceof UpstreamActionError) {
-      return toolError(
-        error.message,
-        "This is data.govt.nz's own error (e.g. a malformed query or a resource id that isn't datastore-enabled), not a network failure — verify the resource with nz_govt_get_dataset and check the SQL syntax.",
-      );
-    }
-    if (error instanceof UpstreamFetchError) {
-      return toolError(error.message, "This looks like a transient network issue reaching data.govt.nz; retry in a moment.");
-    }
-    throw error;
+    return handleDatagovtError(
+      error,
+      "This is data.govt.nz's own error (e.g. a malformed query or a resource id that isn't datastore-enabled), not a network failure — verify the resource with nz_govt_get_dataset and check the SQL syntax.",
+    );
   }
 }

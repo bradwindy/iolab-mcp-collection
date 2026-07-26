@@ -362,6 +362,29 @@ describe("OAuth (buildMultiServerOAuthWorker)", () => {
     expect(await response.text()).toMatch(/\(ref: [0-9a-f-]+\)/);
   });
 
+  it("ignores a malformed client-supplied flow_ref instead of reflecting it verbatim into the response", async () => {
+    const accessJwt = await signAccessJwt();
+    const maliciousRef = "not-a-real-ref\ninjected log line";
+    const response = await exports.default.fetch(
+      new Request(`${ORIGIN}/authorize`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", "Cf-Access-Jwt-Assertion": accessJwt },
+        body: new URLSearchParams({
+          response_type: "code",
+          client_id: "does-not-matter",
+          redirect_uri: "https://client.example.com/callback",
+          resource: resourceFor("nz-govt"),
+          csrf_token: "attacker-guessed-token",
+          flow_ref: maliciousRef,
+        }),
+      }),
+    );
+    expect(response.status).toBe(403);
+    const body = await response.text();
+    expect(body).not.toContain(maliciousRef);
+    expect(body).toMatch(/\(ref: [0-9a-f]{8}\)/);
+  });
+
   it("rejects POST /authorize when the CSRF cookie is present but doesn't match the form token", async () => {
     const accessJwt = await signAccessJwt();
     const response = await exports.default.fetch(

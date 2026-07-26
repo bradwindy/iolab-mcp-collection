@@ -11,15 +11,12 @@ import {
   selectFormat,
   toolError,
   truncationNotice,
-  UpstreamHttpError,
-  upstreamError,
   type ToolTextResult,
 } from "@iolab/mcp-kit";
 import {
   ckanCacheKey,
   datastoreSearch,
-  UpstreamActionError,
-  UpstreamFetchError,
+  handleDatagovtError,
   type DatastoreRecord,
 } from "../clients/datagovt.js";
 import { ECE_DIRECTORY_RESOURCE_ID } from "../constants.js";
@@ -148,13 +145,9 @@ export async function searchEarlyChildhoodServicesHandler(rawInput: unknown, env
       }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
-    if (error instanceof UpstreamActionError) {
-      return toolError(error.message, "This is data.govt.nz's own error, not a network failure; verify the filters and retry.");
-    }
-    if (error instanceof UpstreamFetchError) {
-      return toolError(error.message, "This looks like a transient network issue reaching data.govt.nz; retry in a moment.");
-    }
-    throw error;
+    return handleDatagovtError(
+      error,
+      "This is data.govt.nz's own error, not a network failure; verify the filters and retry.",
+    );
   }
 }
