@@ -57,4 +57,50 @@ describe("ia_search_inside_text", () => {
     expect(matches[0]?.char_offset).toBe(16);
     expect(matches[0]?.passage).toContain("fox");
   });
+
+  it("defaults to whole-word matching — 'moa' doesn't match inside 'moans' or 'amoaing'", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url.includes("/metadata/")) return Promise.resolve(metadataResponse([{ name: "item1_djvu.txt" }]));
+        return Promise.resolve(new Response("The moa moans while amoaing near a real moa.", { status: 200 }));
+      }),
+    );
+
+    const result = await searchInsideTextHandler({ identifier: "item1", query: "moa" }, fakeEnv());
+
+    expect(result.structuredContent?.total_count).toBe(2); // "The moa" and "real moa.", not "moans"/"amoaing"
+  });
+
+  it("whole_word: false restores raw substring matching for a deliberate fragment search", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url.includes("/metadata/")) return Promise.resolve(metadataResponse([{ name: "item1_djvu.txt" }]));
+        return Promise.resolve(new Response("The moa moans while amoaing.", { status: 200 }));
+      }),
+    );
+
+    const result = await searchInsideTextHandler({ identifier: "item1", query: "moa", whole_word: false }, fakeEnv());
+
+    expect(result.structuredContent?.total_count).toBe(3); // "moa", "moa"ns, a"moa"ing
+  });
+
+  it("returns an actionable error for a nonexistent identifier", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url.includes("/metadata/")) return Promise.resolve(new Response("{}", { status: 200 }));
+        throw new Error("should not fetch a file for a nonexistent item");
+      }),
+    );
+
+    const result = await searchInsideTextHandler({ identifier: "nonexistent", query: "anything" }, fakeEnv());
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("No archive.org item found");
+  });
 });

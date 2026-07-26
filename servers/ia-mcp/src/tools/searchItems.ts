@@ -9,7 +9,7 @@ import {
   upstreamError,
   type ToolTextResult,
 } from "@iolab/mcp-kit";
-import { advancedSearch, DeepPaginationError } from "../clients/archiveOrg.js";
+import { advancedSearch, DeepPaginationError, filterCollections } from "../clients/archiveOrg.js";
 
 export const searchItemsInputShape = {
   query: z.string().min(1).describe("Lucene query, e.g. 'title:(apollo)' or a plain keyword search."),
@@ -84,7 +84,7 @@ export async function searchItemsHandler(rawInput: unknown, env: Env): Promise<T
       creator: doc.creator,
       date: doc.date,
       mediatype: doc.mediatype,
-      collection: doc.collection,
+      collection: filterCollections(doc.collection),
       details_url: `https://archive.org/details/${doc.identifier}`,
     }));
 

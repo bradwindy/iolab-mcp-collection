@@ -41,4 +41,13 @@ describe("ia_get_item_text", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain("no recognisable full-text file");
   });
+
+  it("returns an actionable error for a nonexistent identifier", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 200 })));
+
+    const result = await getItemTextHandler({ identifier: "nonexistent" }, fakeEnv());
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("No archive.org item found");
+  });
 });

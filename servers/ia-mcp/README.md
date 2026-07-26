@@ -69,6 +69,27 @@ optional exception and why it almost certainly doesn't matter.
   `ia-pub-fts-api.archive.org`, `ia-petabox.archive.org` are unreachable; `books-search0.us.archive.org`
   times out; every BookReader URL shape tried 404s. `ia_search_inside_text` achieves the same
   research capability by downloading and searching the resolved full-text file directly instead.
+- **The metadata API has no top-level `identifier` field** — confirmed live: `GET /metadata/<id>`
+  nests it at `metadata.identifier` instead; a nonexistent identifier responds 200 with `{}`, not a
+  404. `ia_get_item` (and `ia_search_inside_text`/`ia_get_item_text`, which resolve full text
+  through the same client) now read it from there, falling back to the requested identifier, and
+  surface a `ItemNotFoundError` for the empty-body case instead of crashing on `undefined`.
+- **`collection` mixes real collections with one `fav-<username>` entry per user who favorited the
+  item** — confirmed live: a popular item like `nasa` carries 1,006 `collection` entries, 1,005 of
+  them `fav-*`. `ia_get_item` and `ia_search_items` drop these unconditionally (`filterCollections`
+  in `src/clients/archiveOrg.ts`) — they carry no research value and can otherwise balloon a single
+  search response into tens of thousands of array entries.
+- **`ia_search_inside_text` defaults to whole-word matching** — a plain substring search (still
+  available via `whole_word: false`) matched "moa" inside "moans" and "amoaing", which is mostly
+  noise for a real research query.
+- **CDX's raw (uncollapsed) ordering can starve `ia_wayback_list_site_urls` down to almost nothing**
+  — confirmed live against `trademe.co.nz`'s 1999–2001 range: CDX sorts by `(urlkey, timestamp)`, so
+  a heavily-crawled URL (its homepage) filled ~130 of the first 150 raw rows, leaving none of the
+  site's other ~5,000 distinct URLs represented in a small fetch window. Switched to CDX's own
+  server-side `collapse=urlkey` (one row per distinct URL, however many times it was captured) —
+  the tradeoff, since collapse always returns the *first* (earliest) row in a group with no
+  server-side way to request the latest, is the output fields are honestly named `first_seen`/
+  `first_status`, not "last".
 
 ## Example research questions
 

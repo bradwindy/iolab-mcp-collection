@@ -9,12 +9,22 @@ import {
   upstreamError,
   type ToolTextResult,
 } from "@iolab/mcp-kit";
-import { LendingRestrictedError } from "../clients/archiveOrg.js";
+import { ItemNotFoundError, LendingRestrictedError } from "../clients/archiveOrg.js";
 import { getItemFullText, NoFullTextFileError } from "../itemText.js";
+
+/** A character indexOf could match adjacent to, that should NOT count as a word boundary. */
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
 export const searchInsideTextInputShape = {
   identifier: z.string().min(1).describe("The archive.org item identifier to search within."),
-  query: z.string().min(1).describe("Text to search for within the item's full text (case-insensitive substring match)."),
+  query: z.string().min(1).describe("Text to search for within the item's full text (case-insensitive)."),
+  whole_word: z
+    .boolean()
+    .default(true)
+    .describe(
+      "Match `query` only at word boundaries (default). E.g. 'moa' won't match inside 'moans' or 'amoaing'. " +
+        "Set false for a raw substring match, e.g. to deliberately find a word fragment or prefix/suffix.",
+    ),
   context_chars: z.number().int().min(20).max(2000).default(200).describe("Characters of surrounding context to include per match."),
   limit: limitParam(50, 10),
   offset: offsetParam,
@@ -45,7 +55,9 @@ export async function searchInsideTextHandler(rawInput: unknown, env: Env): Prom
     while (true) {
       const found = haystack.indexOf(needle, searchFrom);
       if (found === -1) break;
-      allOffsets.push(found);
+      if (!input.whole_word || (!WORD_CHAR.test(haystack[found - 1] ?? "") && !WORD_CHAR.test(haystack[found + needle.length] ?? ""))) {
+        allOffsets.push(found);
+      }
       searchFrom = found + needle.length;
     }
 
@@ -66,6 +78,9 @@ export async function searchInsideTextHandler(rawInput: unknown, env: Env): Prom
       attribution: attribution("archive.org", { url: `https://archive.org/details/${input.identifier}` }),
     });
   } catch (error) {
+    if (error instanceof ItemNotFoundError) {
+      return { content: [{ type: "text", text: `${error.message} Check the identifier with ia_search_items.` }], isError: true };
+    }
     if (error instanceof LendingRestrictedError) {
       return {
         content: [

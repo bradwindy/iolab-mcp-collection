@@ -9,7 +9,7 @@ import {
   upstreamError,
   type ToolTextResult,
 } from "@iolab/mcp-kit";
-import { getItemMetadata } from "../clients/archiveOrg.js";
+import { filterCollections, getItemMetadata, ItemNotFoundError } from "../clients/archiveOrg.js";
 
 export const getItemInputShape = {
   identifier: z.string().min(1).describe("The archive.org item identifier, e.g. 'nasa' or 'hobbitortherebac00tolk_2'."),
@@ -55,7 +55,7 @@ export async function getItemHandler(rawInput: unknown, env: Env): Promise<ToolT
       date: typeof meta.date === "string" ? meta.date : undefined,
       description: typeof meta.description === "string" ? meta.description : undefined,
       subjects: meta.subject as string | string[] | undefined,
-      collections: meta.collection as string | string[] | undefined,
+      collections: filterCollections(meta.collection as string | string[] | undefined),
       licenseurl: typeof meta.licenseurl === "string" ? meta.licenseurl : undefined,
       // The metadata API is public even for lending-restricted items; `is_dark` is archive.org's
       // own flag for that — surfaced here so a caller knows before hitting a 401 on file download.
@@ -66,6 +66,9 @@ export async function getItemHandler(rawInput: unknown, env: Env): Promise<ToolT
       attribution: attribution("archive.org", { url: `https://archive.org/details/${item.identifier}` }),
     });
   } catch (error) {
+    if (error instanceof ItemNotFoundError) {
+      return { content: [{ type: "text", text: `${error.message} Check the identifier with ia_search_items.` }], isError: true };
+    }
     if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
     throw error;
   }
