@@ -1,4 +1,4 @@
-import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
+import { fetchWithBackoff, UpstreamHttpError } from "@iolab/mcp-kit";
 import { AGENCY_ID, SDMX_BASE_URL, SOURCE_NAME, SUBSCRIPTION_KEY_HEADER } from "../constants.js";
 
 const USER_AGENT = "nz-mcp-collection/nz-stats-mcp (+https://github.com/bradwindy/nz-mcp-collection)";

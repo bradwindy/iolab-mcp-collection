@@ -1,11 +1,12 @@
 {
-  "name": "@nz-mcp/mcp-kit",
+  "name": "@iolab/mcp-kit",
   "private": true,
   "version": "0.1.0",
   "description": "Shared tool-building utilities for the nz-mcp-collection servers: pagination, response formatting, caching, retry/backoff, actionable errors, attribution, and bearer/OAuth auth.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./access": "./src/access.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -1,4 +1,4 @@
-import { CACHE_TTL, cached, fetchWithBackoff, UpstreamHttpError, type CacheNamespace } from "@nz-mcp/mcp-kit";
+import { CACHE_TTL, cached, fetchWithBackoff, UpstreamHttpError, type CacheNamespace } from "@iolab/mcp-kit";
 import { summarizeEsriGeometry, type GeometrySummary } from "../geo.js";
 
 const BASE_URL = "https://gis.ecan.govt.nz/arcgis/rest/services";

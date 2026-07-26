@@ -1,8 +1,8 @@
-import type { D1LikeDatabase, D1LikeStatement } from "@nz-mcp/credentials";
+import type { D1LikeDatabase, D1LikeStatement } from "@iolab/credentials";
 
 /**
  * A minimal in-memory stand-in for the shared D1 credentials table, satisfying
- * @nz-mcp/credentials' D1LikeDatabase/D1LikeStatement structural interfaces (imported here so a
+ * @iolab/credentials' D1LikeDatabase/D1LikeStatement structural interfaces (imported here so a
  * drift in those interfaces fails this fake at compile time rather than silently). Generic enough
  * that setCredential/getCredential/deleteCredential (which drive it with real SQL text) work
  * against it without this fake needing to parse SQL — it just keys a Map by the (server, key_name)

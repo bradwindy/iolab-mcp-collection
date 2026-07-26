@@ -1,7 +1,7 @@
-# @nz-mcp/mcp-kit
+# @iolab/mcp-kit
 
 Shared tool-building utilities every server in this collection imports from — the conventions from
-[`docs/nz-research-mcp-best-practices.md`](../../docs/nz-research-mcp-best-practices.md) implemented
+[`docs/research-mcp-best-practices.md`](../../docs/research-mcp-best-practices.md) implemented
 once, not seven times. Internal workspace package, not published to npm.
 
 | Module | Exports |

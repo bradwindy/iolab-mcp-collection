@@ -1,7 +1,7 @@
-import { generateEncryptionKey, setCredential, type D1LikeDatabase } from "@nz-mcp/credentials";
-import type { CacheNamespace } from "@nz-mcp/mcp-kit";
+import { generateEncryptionKey, setCredential, type D1LikeDatabase } from "@iolab/credentials";
+import type { CacheNamespace } from "@iolab/mcp-kit";
 
-/** In-memory fake satisfying the D1LikeDatabase surface @nz-mcp/credentials depends on. */
+/** In-memory fake satisfying the D1LikeDatabase surface @iolab/credentials depends on. */
 export class FakeD1 implements D1LikeDatabase {
   rows = new Map<string, { server: string; key_name: string; value: string; updated_at: string }>();
 
@@ -48,7 +48,7 @@ export class FakeD1 implements D1LikeDatabase {
   }
 }
 
-/** In-memory fake satisfying the CacheNamespace surface @nz-mcp/mcp-kit's cached() depends on. */
+/** In-memory fake satisfying the CacheNamespace surface @iolab/mcp-kit's cached() depends on. */
 export class FakeKV implements CacheNamespace {
   store = new Map<string, string>();
 

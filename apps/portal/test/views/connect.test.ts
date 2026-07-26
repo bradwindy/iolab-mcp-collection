@@ -8,7 +8,7 @@ describe("renderConnect", () => {
 
     for (const server of SERVERS) {
       expect(body).toContain(
-        `claude mcp add --transport http ${server.slug} https://${server.subdomain}.example.com/mcp --header "Authorization: Bearer my-shared-token"`,
+        `claude mcp add --transport http ${server.slug} https://mcp.example.com/${server.pathPrefix}/mcp --header "Authorization: Bearer my-shared-token"`,
       );
     }
   });
@@ -24,7 +24,7 @@ describe("renderConnect", () => {
     const body = String(await renderConnect(SERVERS, "my-shared-token", "example.com", "you@example.com"));
 
     for (const server of SERVERS) {
-      const url = `https://${server.subdomain}.example.com/mcp`;
+      const url = `https://mcp.example.com/${server.pathPrefix}/mcp`;
       expect(body).toContain(`<pre><code>${url}</code></pre>`);
     }
     expect(body).toContain("Add custom connector");

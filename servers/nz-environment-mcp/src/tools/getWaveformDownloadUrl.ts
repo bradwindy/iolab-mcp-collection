@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { attribution, jsonResult, type ToolTextResult } from "@nz-mcp/mcp-kit";
+import { attribution, jsonResult, type ToolTextResult } from "@iolab/mcp-kit";
 import { buildWaveformUrl } from "../clients/geonetFdsn.js";
 
 export const getWaveformDownloadUrlInputShape = {

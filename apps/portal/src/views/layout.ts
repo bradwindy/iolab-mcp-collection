@@ -142,8 +142,8 @@ export function layout(title: string, body: unknown) {
     <header class="topbar">
       <a class="brand" href="/">NZ MCP Portal</a>
       <nav>
-        <a href="/">Dashboard</a>
-        <a href="/connect">Connect</a>
+        <a href="/admin">Dashboard</a>
+        <a href="/admin/connect">Connect</a>
       </nav>
     </header>
     <main>${body}</main>

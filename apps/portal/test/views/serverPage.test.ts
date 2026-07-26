@@ -4,7 +4,7 @@ import type { ServerManifestEntry } from "../../src/manifest.js";
 
 const ENTRY: ServerManifestEntry = {
   slug: "nz-geo-mcp",
-  subdomain: "nz-geo.mcp",
+  pathPrefix: "nz-geo",
   credentialKeys: [
     { envName: "LINZ_API_KEY", label: "LINZ Data Service API key", signupUrl: "https://example.test/linz" },
     { envName: "LINZ_BASEMAPS_API_KEY", label: "LINZ Basemaps API key", signupUrl: "https://example.test/basemaps" },
@@ -21,7 +21,7 @@ describe("renderServerPage", () => {
     expect(body).toContain("https://example.test/linz");
     expect(body).toContain("https://example.test/basemaps");
     expect(body).toContain('method="post"');
-    expect(body).toContain('action="/servers/nz-geo-mcp"');
+    expect(body).toContain('action="/admin/servers/nz-geo-mcp"');
   });
 
   it("never renders a previously-set value into the form", async () => {

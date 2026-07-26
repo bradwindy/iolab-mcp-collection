@@ -9,7 +9,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { ArcgisQueryError, searchAddresses, type AddressCandidate } from "../clients/canterburyMaps.js";
 
 export const searchCanterburyAddressesInputShape = {

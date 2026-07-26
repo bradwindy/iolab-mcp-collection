@@ -1,7 +1,7 @@
 // Shared test helper — NOT a test file itself (no .test.ts suffix, vitest won't collect it).
 // Builds a minimal fake `Env` satisfying what our tool handlers need: a KV-shaped cache
 // namespace and a D1-shaped credentials store, without touching real Cloudflare bindings.
-import { encryptValue } from "@nz-mcp/credentials";
+import { encryptValue } from "@iolab/credentials";
 import { NIWA_API_KEY_NAME, SERVER_SLUG } from "../src/constants.js";
 
 export const TEST_ENCRYPTION_KEY = "PW8FuEhIc2nI3+L8+1ofwFtFD7LSYEpeAWNzYxxTtxc=";

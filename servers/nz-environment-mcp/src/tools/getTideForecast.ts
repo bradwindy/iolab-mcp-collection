@@ -8,7 +8,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { getTideData } from "../clients/niwaTides.js";
 import { getNiwaApiKey } from "../clients/niwaCredentials.js";
 import { NIWA_API_KEY_NAME, SERVER_SLUG } from "../constants.js";

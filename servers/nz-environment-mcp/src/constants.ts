@@ -1,4 +1,4 @@
-// Must exactly match the "name" field in wrangler.jsonc — @nz-mcp/credentials scopes
+// Must exactly match the "name" field in wrangler.jsonc — @iolab/credentials scopes
 // stored keys by this server slug.
 export const SERVER_SLUG = "nz-environment-mcp";
 

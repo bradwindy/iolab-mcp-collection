@@ -11,7 +11,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { searchDatasets as searchDatasetsClient, type CkanPackage } from "../clients/datagovt.js";
 
 export const searchDatasetsInputShape = {

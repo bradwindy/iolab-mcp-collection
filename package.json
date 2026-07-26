@@ -1,9 +1,9 @@
 {
-  "name": "nz-mcp-collection",
+  "name": "iolab-mcp-collection",
   "private": true,
   "type": "module",
   "version": "0.1.0",
-  "description": "A collection of remote MCP servers exposing New Zealand public APIs, clustered by research domain and hosted on Cloudflare Workers.",
+  "description": "A collection of remote MCP servers, clustered by research domain and served from one Cloudflare Worker.",
   "license": "MIT",
   "engines": {
     "node": ">=22"
@@ -14,7 +14,7 @@
     "test": "pnpm -r --if-present run test",
     "lint": "eslint .",
     "typecheck": "pnpm -r --if-present run typecheck",
-    "dev:portal": "pnpm --filter @nz-mcp/portal run dev",
+    "dev:gateway": "pnpm --filter @iolab/gateway run dev",
     "deploy:all": "pnpm -r --if-present run deploy"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 import { html } from "hono/html";
-import type { CredentialStatus } from "@nz-mcp/credentials";
+import type { CredentialStatus } from "@iolab/credentials";
 import type { CredentialKeyDescriptor, ServerManifestEntry } from "../manifest.js";
 import { layout } from "./layout.js";
 
@@ -15,7 +15,7 @@ function credentialForm(slug: string, key: CredentialKeyDescriptor, status: Cred
           : html`<span class="badge badge-unset">not set</span>`}
       </p>
       <p><a href="${key.signupUrl}" rel="noreferrer noopener" target="_blank">Sign up for a key &rarr;</a></p>
-      <form method="post" action="/servers/${slug}">
+      <form method="post" action="/admin/servers/${slug}">
         <input type="hidden" name="key_name" value="${key.envName}" />
         <label for="${inputId}">Value</label>
         <input
@@ -38,12 +38,12 @@ export function renderServerPage(
   baseDomain: string,
 ) {
   const statusByKey = new Map(statuses.map((status) => [status.keyName, status]));
-  const url = `https://${entry.subdomain}.${baseDomain}/mcp`;
+  const url = `https://mcp.${baseDomain}/${entry.pathPrefix}/mcp`;
 
   return layout(
     entry.slug,
     html`
-      <p><a href="/">&larr; Back to dashboard</a></p>
+      <p><a href="/admin">&larr; Back to dashboard</a></p>
       <h1>${entry.slug}</h1>
       <p class="url"><a href="${url}">${url}</a></p>
       ${updatedKey ? html`<p class="flash">Saved <code>${updatedKey}</code>.</p>` : ""}
@@ -62,7 +62,7 @@ export function renderServerNotFound(slug: string) {
   return layout(
     "Not found",
     html`
-      <p><a href="/">&larr; Back to dashboard</a></p>
+      <p><a href="/admin">&larr; Back to dashboard</a></p>
       <h1>No such server</h1>
       <p>There's no server in the collection with slug <code>${slug}</code>.</p>
     `,

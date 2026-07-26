@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { attribution, jsonResult, missingCredentialError, toolError, type ToolTextResult } from "@nz-mcp/mcp-kit";
+import { attribution, jsonResult, missingCredentialError, toolError, type ToolTextResult } from "@iolab/mcp-kit";
 import { buildBasemapUrl, supportsVectorStyle } from "../clients/linzBasemaps.js";
 import { MissingCredentialError, requireLinzCredential } from "../credentials.js";
 import { SERVER_SLUG } from "../constants.js";

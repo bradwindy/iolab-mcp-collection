@@ -10,7 +10,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { ArcgisQueryError, listLayers, queryLayer } from "../clients/canterburyMaps.js";
 
 export const queryCanterburyLayerInputShape = {

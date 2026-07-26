@@ -15,7 +15,7 @@ function timingSafeEqual(a: string, b: string): boolean {
  * matching `expectedToken` exactly (constant-time comparison). Used both by
  * {@link requireBearerToken} (servers without OAuth) and by the OAuth wrapper in
  * `oauth.ts`, which bypasses the OAuth provider entirely for requests presenting the
- * static shared token — see `buildOAuthMcpWorker`.
+ * static shared token — see `buildMultiServerOAuthWorker`.
  */
 export function bearerTokenMatches(request: Request, expectedToken: string | undefined): boolean {
   if (!expectedToken) return false;

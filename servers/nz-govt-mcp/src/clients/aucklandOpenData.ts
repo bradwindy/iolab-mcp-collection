@@ -1,4 +1,4 @@
-import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
+import { fetchWithBackoff, UpstreamHttpError } from "@iolab/mcp-kit";
 
 const BASE_URL = "https://data-aucklandcouncil.opendata.arcgis.com/api/search/v1";
 const SOURCE = "Auckland Council Open Data";

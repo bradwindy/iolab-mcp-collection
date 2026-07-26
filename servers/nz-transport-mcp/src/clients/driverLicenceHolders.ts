@@ -1,4 +1,4 @@
-import { CACHE_TTL, cached, type CacheNamespace } from "@nz-mcp/mcp-kit";
+import { CACHE_TTL, cached, type CacheNamespace } from "@iolab/mcp-kit";
 import { queryArcgisFeatures } from "./arcgisFeatureServer.js";
 
 // The catalog's documented service name (Driver_licence_holders_dataset) is stale; the live service

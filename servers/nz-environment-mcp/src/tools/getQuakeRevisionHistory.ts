@@ -8,7 +8,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { getQuakeHistory, type QuakeHistoryEntry } from "../clients/geonet.js";
 
 const PUBLIC_ID_PATTERN = /^\d{4}p\d+$/i;

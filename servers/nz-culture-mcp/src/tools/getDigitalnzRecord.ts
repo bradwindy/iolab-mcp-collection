@@ -9,7 +9,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { getDigitalNzRecord as getDigitalNzRecordClient, type DigitalNzRecord } from "../clients/digitalnz.js";
 
 export const getDigitalnzRecordInputShape = {

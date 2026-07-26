@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { attribution, jsonResult, toolError, UpstreamHttpError, upstreamError, type ToolTextResult } from "@nz-mcp/mcp-kit";
+import { attribution, jsonResult, toolError, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
 import { datastoreSearchSql, SqlValidationError } from "../clients/datagovt.js";
 
 const MAX_ROWS_RETURNED = 200;

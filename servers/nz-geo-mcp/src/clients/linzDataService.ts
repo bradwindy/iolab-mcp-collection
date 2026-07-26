@@ -1,4 +1,4 @@
-import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
+import { fetchWithBackoff, UpstreamHttpError } from "@iolab/mcp-kit";
 
 const BASE_URL = "https://data.linz.govt.nz/services/query/v1/vector.json";
 const SOURCE = "LINZ Data Service";

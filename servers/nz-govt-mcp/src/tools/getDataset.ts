@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { attribution, jsonResult, UpstreamHttpError, upstreamError, type ToolTextResult } from "@nz-mcp/mcp-kit";
+import { attribution, jsonResult, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
 import { getDataset as getDatasetClient } from "../clients/datagovt.js";
 
 export const getDatasetInputShape = {

@@ -12,7 +12,7 @@ import {
   truncationNotice,
   UpstreamHttpError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { listDataflows, type SdmxDataflowSummary } from "../clients/statsNzSdmx.js";
 import { resolveSubscriptionKey } from "../credentialHelper.js";
 import { handleSdmxUpstreamError } from "../sdmxError.js";

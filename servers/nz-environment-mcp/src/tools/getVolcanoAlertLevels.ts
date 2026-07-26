@@ -9,7 +9,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { getVolcanoAlertLevels as getVolcanoAlertLevelsClient, type VolcanoAlert } from "../clients/geonet.js";
 
 export const getVolcanoAlertLevelsInputShape = {

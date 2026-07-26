@@ -9,7 +9,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { queryVector, type LdsFeature } from "../clients/linzDataService.js";
 import { summarizeGeoJsonGeometry } from "../geo.js";
 import { MissingCredentialError, requireLinzCredential } from "../credentials.js";

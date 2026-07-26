@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { deleteCredential, listCredentialStatus, setCredential } from "@nz-mcp/credentials";
+import { deleteCredential, listCredentialStatus, setCredential } from "@iolab/credentials";
 import { findServer } from "../manifest.js";
 import { renderServerNotFound, renderServerPage } from "../views/serverPage.js";
 
@@ -48,5 +48,5 @@ export async function postServerCredential(c: ServerRouteContext) {
     await setCredential(c.env.CREDENTIALS_DB, entry.slug, keyDescriptor.envName, trimmed, c.env.ENCRYPTION_KEY);
   }
 
-  return c.redirect(`/servers/${entry.slug}?updated=${encodeURIComponent(keyDescriptor.envName)}`, 303);
+  return c.redirect(`/admin/servers/${entry.slug}?updated=${encodeURIComponent(keyDescriptor.envName)}`, 303);
 }
