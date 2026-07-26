@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { attribution, jsonResult, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
-import { LendingRestrictedError } from "../clients/archiveOrg.js";
+import { ItemNotFoundError, LendingRestrictedError } from "../clients/archiveOrg.js";
 import { getItemFullText, NoFullTextFileError } from "../itemText.js";
 
 export const getItemTextInputShape = {
@@ -37,6 +37,9 @@ export async function getItemTextHandler(rawInput: unknown, env: Env): Promise<T
       attribution: attribution("archive.org", { url: `https://archive.org/details/${input.identifier}` }),
     });
   } catch (error) {
+    if (error instanceof ItemNotFoundError) {
+      return { content: [{ type: "text", text: `${error.message} Check the identifier with ia_search_items.` }], isError: true };
+    }
     if (error instanceof LendingRestrictedError) {
       return {
         content: [

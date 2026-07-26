@@ -93,17 +93,66 @@ export type ItemMetadata = {
   identifier: string;
   metadata: Record<string, unknown>;
   files: ItemFile[];
+  server?: string | undefined;
+  dir?: string | undefined;
+  /** Present on lending-restricted items — the metadata API itself is always public, unlike file downloads. */
+  is_dark?: boolean | undefined;
+};
+
+/**
+ * The raw shape of `GET /metadata/<id>` — confirmed live: there is no top-level `identifier`
+ * field at all; it's nested at `metadata.identifier`. An item that doesn't exist responds 200
+ * with `{}` (no `metadata` key), not a 404 or an error envelope — confirmed live too.
+ */
+type RawItemMetadataResponse = {
+  metadata?: Record<string, unknown>;
+  files?: ItemFile[];
   server?: string;
   dir?: string;
-  /** Present on lending-restricted items — the metadata API itself is always public, unlike file downloads. */
   is_dark?: boolean;
 };
+
+/** Thrown when the metadata API responds 200 with an empty `{}` body — archive.org's own signal for "no such item." */
+export class ItemNotFoundError extends Error {
+  constructor(public readonly identifier: string) {
+    super(`No archive.org item found with identifier '${identifier}'.`);
+    this.name = "ItemNotFoundError";
+  }
+}
 
 export async function getItemMetadata(env: Env, identifier: string): Promise<ItemMetadata> {
   const response = await iaFetch(env, `${METADATA_URL}/${encodeURIComponent(identifier)}`);
   if (!response.ok) throw new UpstreamHttpError(SOURCE, response);
-  const body = (await response.json()) as ItemMetadata;
-  return body;
+  const body = (await response.json()) as RawItemMetadataResponse;
+  if (!body.metadata) throw new ItemNotFoundError(identifier);
+  return {
+    // metadata.identifier is normally present and matches the requested identifier exactly, but
+    // fall back to the requested one rather than risk `undefined` reaching the tool's response —
+    // this field must never be missing.
+    identifier: typeof body.metadata.identifier === "string" ? body.metadata.identifier : identifier,
+    metadata: body.metadata,
+    files: body.files ?? [],
+    server: body.server,
+    dir: body.dir,
+    is_dark: body.is_dark,
+  };
+}
+
+const FAV_COLLECTION_PREFIX = "fav-";
+const MAX_COLLECTIONS_RETURNED = 20;
+
+/**
+ * archive.org's `collection` field mixes real curated collections (e.g. "nasa", "prelinger")
+ * with one `fav-<username>` pseudo-collection per user who has favorited the item — confirmed
+ * live: a popular item like "nasa" carries 1,006 `collection` entries, 1,005 of them `fav-*`.
+ * These carry no research value and, across a page of search results, can balloon a single tool
+ * response into tens of thousands of array entries. Dropped unconditionally; the (rare) remainder
+ * is capped as a defensive bound, not because real collection lists are expected to be long.
+ */
+export function filterCollections(collection: string | string[] | undefined): string | string[] | undefined {
+  if (collection === undefined) return undefined;
+  if (typeof collection === "string") return collection.startsWith(FAV_COLLECTION_PREFIX) ? undefined : collection;
+  return collection.filter((c) => !c.startsWith(FAV_COLLECTION_PREFIX)).slice(0, MAX_COLLECTIONS_RETURNED);
 }
 
 /** Thrown when a file download 401s — confirmed live: in-copyright lending items 401, public-domain items 200. */

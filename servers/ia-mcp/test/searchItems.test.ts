@@ -33,6 +33,19 @@ describe("ia_search_items", () => {
     ]);
   });
 
+  it("drops fav-* pseudo-collections from search results — confirmed live a popular item can carry 1000+ of them", async () => {
+    const collection = ["movies", ...Array.from({ length: 50 }, (_, i) => `fav-user${i}`)];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(advancedSearchResponse(1, [{ identifier: "nasa", collection }])),
+    );
+
+    const result = await searchItemsHandler({ query: "nasa" }, fakeEnv());
+
+    const items = result.structuredContent?.items as Array<{ collection?: string[] }>;
+    expect(items[0]?.collection).toEqual(["movies"]);
+  });
+
   it("rejects an offset that isn't a multiple of limit with an actionable error, not a silent wrong page", async () => {
     const result = await searchItemsHandler({ query: "moon", limit: 20, offset: 7 }, fakeEnv());
 

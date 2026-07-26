@@ -4,7 +4,7 @@ import { iaFetch } from "./http.js";
 const CDX_URL = "https://web.archive.org/cdx/search/cdx";
 export const SOURCE = "Wayback Machine";
 
-export type CdxCollapse = "none" | "hour" | "day" | "month" | "year" | "digest";
+export type CdxCollapse = "none" | "hour" | "day" | "month" | "year" | "digest" | "urlkey";
 
 /** Maps the tool-facing collapse granularity to CDX's own `collapse` parameter value. */
 function collapseParam(collapse: CdxCollapse): string | null {
@@ -21,6 +21,12 @@ function collapseParam(collapse: CdxCollapse): string | null {
       return "timestamp:4";
     case "digest":
       return "digest";
+    case "urlkey":
+      // One row per distinct URL — CDX's own field name, not a timestamp-truncation prefix like
+      // the cases above. Confirmed live: returns the FIRST (earliest in range) row per urlkey, not
+      // the most recent — see waybackListSiteUrls.ts, the one caller of this mode, for why that's
+      // an acceptable tradeoff there.
+      return "urlkey";
   }
 }
 
