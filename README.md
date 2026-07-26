@@ -1,8 +1,8 @@
 # iolab-mcp-collection
 
-A collection of remote [MCP](https://modelcontextprotocol.io) servers exposing free and self-service
-New Zealand public APIs to Claude (or any MCP client), clustered by research domain, and served from
-**one Cloudflare Worker** at one hostname.
+A collection of remote [MCP](https://modelcontextprotocol.io) servers clustered by research domain
+and served from **one Cloudflare Worker** at one hostname — free and self-service New Zealand
+public APIs, plus Internet Archive / Wayback Machine research.
 
 Built from the API inventory in [api-catalog](https://github.com/bradwindy/api-catalog) (24 NZ public
 APIs) following the clustering and tool-design guidance in
@@ -14,6 +14,7 @@ than 1:1 endpoint wraps, paginate everything, and keep response payloads lean.
 
 | Server | Domain | Tools | Upstream APIs | URL |
 |---|---|---|---|---|
+| [`ia-mcp`](servers/ia-mcp) | Internet Archive / Wayback Machine research | 11 | Wayback Machine, CDX Server API, archive.org, Open Library | `/ia/mcp` |
 | [`nz-govt-mcp`](servers/nz-govt-mcp) | Civic & open data | 7 | Charities Register, data.govt.nz, Auckland Council Open Data, Education Counts (Schools + ECE) | `/nz-govt/mcp` |
 | [`nz-culture-mcp`](servers/nz-culture-mcp) | Digital heritage & museums | 4 | DigitalNZ, Te Papa Collections | `/nz-culture/mcp` |
 | [`nz-stats-mcp`](servers/nz-stats-mcp) | Official statistics | 4 | Stats NZ Aotearoa Data Explorer (SDMX) | `/nz-stats/mcp` |
@@ -24,8 +25,8 @@ than 1:1 endpoint wraps, paginate everything, and keep response payloads lean.
 
 Every server:
 
-- exposes tools designed around research questions, not raw endpoints (`nz_{domain}_verb_noun`, always
-  paginated, always attributed to its upstream source and license)
+- exposes tools designed around research questions, not raw endpoints (`{prefix}_verb_noun` — `nz_{domain}_`
+  for the NZ servers, `ia_` for `ia-mcp` — always paginated, always attributed to its upstream source and license)
 - runs read-only, with `readOnlyHint`/`openWorldHint` annotations on every tool
 - is an `McpAgent` (Cloudflare [Agents SDK](https://developers.cloudflare.com/agents/)) served over
   Streamable HTTP at its own path on the one gateway Worker (`/{slug}/mcp` — see the table above)
@@ -51,7 +52,7 @@ research questions it can answer.
                     │   ONE Worker · ONE OAuthProvider             │
                     │                                              │
                     │   /authorize /token /register /.well-known/* │
-                    │   /{slug}/mcp  ×7  (bearer OR OAuth token,   │
+                    │   /{slug}/mcp  ×8  (bearer OR OAuth token,   │
                     │                     per-path audience check) │
                     │   /             public landing page          │
                     │   /admin/*      portal — Access checked in   │
@@ -64,14 +65,15 @@ research questions it can answer.
                     │     credentials(server, key_name, value)  │
                     └───────────────────┬───────────────────────┘
                                         │ reads + decrypts
-        ┌───────────────┬───────────────┼───────────────┬───────────────┬──────────────┐
-        ▼               ▼               ▼               ▼               ▼              ▼
-  nz-govt-mcp    nz-culture-mcp   nz-stats-mcp     nz-geo-mcp    nz-environment  nz-transport
-  nz-markets-mcp
-   (7 servers, each an McpAgent Durable Object registered into the one gateway Worker)
-        │               │               │               │               │              │
-        ▼               ▼               ▼               ▼               ▼              ▼
-   live NZ public / self-service APIs (Charities Register, GeoNet, LINZ, NIWA, Stats NZ, AT, NZTA, ...)
+    ┌───────────┬───────────────┬───────────────┼───────────────┬───────────────┬──────────────┐
+    ▼           ▼               ▼               ▼               ▼               ▼              ▼
+ ia-mcp   nz-govt-mcp    nz-culture-mcp   nz-stats-mcp     nz-geo-mcp    nz-environment  nz-transport
+                                                                                nz-markets-mcp
+   (8 servers, each an McpAgent Durable Object registered into the one gateway Worker)
+    │           │               │               │               │               │              │
+    ▼           ▼               ▼               ▼               ▼               ▼              ▼
+ Internet Archive / Wayback     live NZ public / self-service APIs (Charities Register, GeoNet,
+     Machine, Open Library            LINZ, NIWA, Stats NZ, AT, NZTA, ...)
 ```
 
 - **Gateway** (`apps/gateway`): the one deployed Worker. Owns the `wrangler.jsonc`, the one shared
@@ -132,7 +134,7 @@ manage credentials.
 - **[docs/API_KEYS.md](docs/API_KEYS.md)** — how to obtain every upstream API key this collection can use
   (and which APIs need no key at all).
 - **[docs/ADDING_A_SERVER.md](docs/ADDING_A_SERVER.md)** — add a new domain server to the collection,
-  following the same conventions as the other seven.
+  following the same conventions as the other eight.
 
 ## Repo layout
 

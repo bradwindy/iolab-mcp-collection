@@ -452,6 +452,7 @@ describe("path routing", () => {
   // Tool prefixes don't always match the slug verbatim — nz-environment-mcp abbreviates to
   // nz_env_*, so this is an explicit table rather than derived from the slug string.
   const REGISTERED_SERVERS: Array<[slug: string, toolPrefix: string]> = [
+    ["ia", "ia_"],
     ["nz-culture", "nz_culture_"],
     ["nz-environment", "nz_env_"],
     ["nz-geo", "nz_geo_"],

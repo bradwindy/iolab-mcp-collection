@@ -6,6 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {
     "bindings": [
+      { "name": "IA_MCP", "class_name": "InternetArchiveMcp" },
       { "name": "NZ_CULTURE_MCP", "class_name": "NzCultureMcp" },
       { "name": "NZ_ENVIRONMENT_MCP", "class_name": "NzEnvironmentMcp" },
       { "name": "NZ_GEO_MCP", "class_name": "NzGeoMcp" },
@@ -13,7 +14,6 @@
       { "name": "NZ_MARKETS_MCP", "class_name": "NzMarketsMcp" },
       { "name": "NZ_STATS_MCP", "class_name": "NzStatsMcp" },
       { "name": "NZ_TRANSPORT_MCP", "class_name": "NzTransportMcp" }
-      // IA_MCP / InternetArchiveMcp is added here in Part 2 of the gateway plan.
     ]
   },
   "migrations": [
@@ -28,7 +28,10 @@
         "NzStatsMcp",
         "NzTransportMcp"
       ]
-    }
+    },
+    // A class added to an already-deployed Worker needs its own migration tag — Durable Object
+    // migrations are append-only and apply once, so InternetArchiveMcp can't just join v1.
+    { "tag": "v2", "new_sqlite_classes": ["InternetArchiveMcp"] }
   ],
   "kv_namespaces": [
     // Shared cache, unchanged from the per-server layout — reused as-is, no reason to recreate it.
