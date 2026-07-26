@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { attribution, jsonResult, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
-import { getDataset as getDatasetClient } from "../clients/datagovt.js";
+import { attribution, cached, CACHE_TTL, jsonResult, type ToolTextResult } from "@iolab/mcp-kit";
+import { ckanCacheKey, getDataset as getDatasetClient, handleDatagovtError } from "../clients/datagovt.js";
 
 export const getDatasetInputShape = {
   id_or_slug: z
@@ -32,11 +32,12 @@ export const getDatasetOutputShape = {
 
 const inputSchema = z.object(getDatasetInputShape);
 
-export async function getDatasetHandler(rawInput: unknown): Promise<ToolTextResult> {
+export async function getDatasetHandler(rawInput: unknown, env: Env): Promise<ToolTextResult> {
   const input = inputSchema.parse(rawInput);
 
   try {
-    const pkg = await getDatasetClient(input.id_or_slug);
+    const cacheKey = await ckanCacheKey("package_show", { id: input.id_or_slug });
+    const pkg = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.METADATA, () => getDatasetClient(input.id_or_slug));
 
     return jsonResult({
       id: pkg.name,
@@ -57,7 +58,9 @@ export async function getDatasetHandler(rawInput: unknown): Promise<ToolTextResu
       attribution: attribution("data.govt.nz catalogue", { url: "https://catalogue.data.govt.nz/" }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
-    throw error;
+    return handleDatagovtError(
+      error,
+      "Verify the id_or_slug and retry; this is data.govt.nz's own error, not a network failure.",
+    );
   }
 }

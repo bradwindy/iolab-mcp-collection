@@ -1,4 +1,4 @@
-import { fetchWithBackoff, UpstreamHttpError } from "@iolab/mcp-kit";
+import { fetchWithBackoff, toolError, upstreamError, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
 
 const BASE_URL = "https://catalogue.data.govt.nz/api/3/action";
 const SOURCE = "data.govt.nz";
@@ -6,6 +6,69 @@ const USER_AGENT = "nz-mcp-collection/nz-govt-mcp (+https://github.com/bradwindy
 
 /** Thrown by datastoreSearchSql's input guard — always a caller-actionable message. */
 export class SqlValidationError extends Error {}
+
+/**
+ * Thrown when CKAN's action API responds 2xx but its own `{success: false}` envelope reports a
+ * failure — a malformed SQL query, a resource that isn't datastore-enabled, an invalid filter,
+ * etc. Distinct from UpstreamHttpError (a non-2xx HTTP status): there's no bad status to report
+ * here, only CKAN's own error message. Every tool handler that calls into this client must catch
+ * it alongside UpstreamHttpError — previously only UpstreamHttpError was caught, so this case
+ * fell through as an unformatted, unlogged exception (confirmed as the cause of "server error on
+ * every call" reports for search_datasets/get_dataset/query_open_data_sql/search_schools/
+ * search_early_childhood_services, all five of which share this client).
+ */
+export class UpstreamActionError extends Error {
+  constructor(
+    public readonly source: string,
+    public readonly action: string,
+    public readonly ckanMessage: string,
+  ) {
+    super(`${source} action '${action}' failed: ${ckanMessage}`);
+    this.name = "UpstreamActionError";
+  }
+}
+
+/**
+ * Thrown when the request to CKAN never produced a usable response at all: fetchWithBackoff
+ * exhausted its retries on a network-level failure (DNS, TLS, connection reset, or the platform's
+ * own subrequest timeout), or the response body wasn't valid JSON (a truncated response, or CKAN
+ * serving an HTML error page instead of its usual envelope). Previously this was neither caught
+ * nor logged anywhere in callAction — it just propagated as a bare, unlogged exception, which is
+ * indistinguishable from a crash to both the caller and to Workers Logs. Every tool handler that
+ * calls into this client must catch it alongside UpstreamHttpError and UpstreamActionError.
+ */
+export class UpstreamFetchError extends Error {
+  constructor(
+    public readonly source: string,
+    public readonly action: string,
+    cause: unknown,
+  ) {
+    super(`${source} action '${action}' could not be reached: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "UpstreamFetchError";
+  }
+}
+
+/**
+ * Shared catch-block mapping for every tool handler built on this client (getDataset,
+ * searchDatasets, searchSchools, searchEarlyChildhoodServices, queryOpenDataSql) — all five had an
+ * identical `UpstreamHttpError`/`UpstreamActionError`/`UpstreamFetchError` chain, differing only in
+ * the `actionErrorHint` text. Any error not one of this client's three throws (e.g. a tool's own
+ * input-validation error) is rethrown, not swallowed — a caller must still check for those first.
+ */
+export function handleDatagovtError(error: unknown, actionErrorHint: string): ToolTextResult {
+  if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
+  if (error instanceof UpstreamActionError) return toolError(error.message, actionErrorHint);
+  if (error instanceof UpstreamFetchError) {
+    // Deliberately neutral: this error also covers a 200 response that wasn't valid JSON (see
+    // shouldRetryCkanResponse above), which isn't a network failure — "retry" still applies to
+    // both causes, but the wording shouldn't tell the caller it's specifically a connectivity issue.
+    return toolError(
+      error.message,
+      "This may be a transient issue reaching data.govt.nz, or an unexpected response from it; retry in a moment.",
+    );
+  }
+  throw error;
+}
 
 export type CkanResource = {
   id: string;
@@ -35,17 +98,94 @@ type CkanResponse<T> = {
   error?: { message: string };
 };
 
+/**
+ * CKAN's action API always responds `application/json` on a 2xx. Confirmed live: during a ~60s
+ * window on data.govt.nz's own backend, `package_search` and `datastore_search_sql` returned HTTP
+ * 200 with an HTML error/interstitial page instead — a failure mode fetchWithBackoff's default
+ * retryOn doesn't catch, since it only inspects the status code. Treating "200 but not JSON" the
+ * same as a 5xx lets the existing retry+backoff silently recover from short blips of exactly this
+ * kind; a sustained outage still exhausts all attempts and surfaces as UpstreamFetchError below.
+ */
+function shouldRetryCkanResponse(response: Response | undefined, _error: unknown): boolean {
+  if (!response) return true;
+  if (response.status === 429 || response.status >= 500) return true;
+  const contentType = response.headers.get("content-type") ?? "";
+  return response.ok && !contentType.includes("application/json");
+}
+
+/** SHA-256 hex digest — used to keep KV cache keys well within KV's 512-byte key limit. */
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Deterministic, length-bounded cache key for a CKAN action + its params. Some inputs
+ * (`datastore_search_sql`'s raw `sql`, `package_show`'s `id_or_slug`) have no repo-enforced upper
+ * bound, so every key is hashed rather than only the ones known to be long today.
+ */
+export async function ckanCacheKey(action: string, params: Record<string, string>): Promise<string> {
+  // URLSearchParams (not manual `key=value` joins) so a value containing '&' or '=' — e.g. a
+  // `filters` value, which is itself JSON.stringify'd and can readily contain either — can't
+  // serialize to the same string as a different (action, params) pair and alias its cached result.
+  const sortedParams = new URLSearchParams(
+    Object.keys(params)
+      .sort()
+      .map((key) => [key, params[key]] as [string, string]),
+  ).toString();
+  return `nz-govt:datagovt:${action}:${await sha256Hex(`${action}?${sortedParams}`)}`;
+}
+
 async function callAction<T>(action: string, query: Record<string, string>): Promise<T> {
   const url = new URL(`${BASE_URL}/${action}`);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
 
-  const response = await fetchWithBackoff(url, { headers: { "User-Agent": USER_AGENT } });
-  if (!response.ok) throw new UpstreamHttpError(SOURCE, response);
+  // Path only, never the full URL: query params can carry a caller's raw `sql`/`filters` value
+  // (datastore_search_sql, datastore_search), which shouldn't end up sitting in Workers Logs.
+  console.log(`[datagovt] ${action} request:`, url.pathname);
 
-  const body = (await response.json()) as CkanResponse<T>;
-  if (!body.success) {
-    throw new Error(`${SOURCE} action '${action}' failed: ${body.error?.message ?? "unknown error"}`);
+  let response: Response;
+  try {
+    response = await fetchWithBackoff(url, { headers: { "User-Agent": USER_AGENT } }, { retryOn: shouldRetryCkanResponse });
+  } catch (error) {
+    console.error(
+      `[datagovt] ${action} fetch failed:`,
+      error instanceof Error ? error.message : String(error),
+      `path=${url.pathname}`,
+    );
+    throw new UpstreamFetchError(SOURCE, action, error);
   }
+
+  if (!response.ok) {
+    console.error(
+      `[datagovt] ${action} upstream HTTP error:`,
+      `status=${response.status} ${response.statusText}`,
+      `path=${url.pathname}`,
+    );
+    throw new UpstreamHttpError(SOURCE, response);
+  }
+
+  let body: CkanResponse<T>;
+  try {
+    body = (await response.json()) as CkanResponse<T>;
+  } catch (error) {
+    console.error(
+      `[datagovt] ${action} response was not valid JSON:`,
+      error instanceof Error ? error.message : String(error),
+      `path=${url.pathname}`,
+    );
+    throw new UpstreamFetchError(SOURCE, action, error);
+  }
+
+  if (!body.success) {
+    const message = body.error?.message ?? "unknown error";
+    console.error(`[datagovt] ${action} CKAN reported failure:`, message, `path=${url.pathname}`);
+    throw new UpstreamActionError(SOURCE, action, message);
+  }
+
+  console.log(`[datagovt] ${action} succeeded.`);
   return body.result;
 }
 
