@@ -13,7 +13,7 @@ import { ItemNotFoundError, LendingRestrictedError } from "../clients/archiveOrg
 import { getItemFullText, NoFullTextFileError } from "../itemText.js";
 
 /** A character indexOf could match adjacent to, that should NOT count as a word boundary. */
-const WORD_CHAR = /[\p{L}\p{N}_]/u;
+const WORD_CHAR = /[\p{L}\p{M}\p{N}_]/u;
 
 export const searchInsideTextInputShape = {
   identifier: z.string().min(1).describe("The archive.org item identifier to search within."),

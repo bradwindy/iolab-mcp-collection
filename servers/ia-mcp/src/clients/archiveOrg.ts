@@ -149,9 +149,10 @@ const MAX_COLLECTIONS_RETURNED = 20;
  * response into tens of thousands of array entries. Dropped unconditionally; the (rare) remainder
  * is capped as a defensive bound, not because real collection lists are expected to be long.
  */
-export function filterCollections<T extends string | string[] | undefined>(collection: T): T {
-  if (collection === undefined || typeof collection === "string") return collection;
-  return collection.filter((c) => !c.startsWith(FAV_COLLECTION_PREFIX)).slice(0, MAX_COLLECTIONS_RETURNED) as T;
+export function filterCollections(collection: string | string[] | undefined): string | string[] | undefined {
+  if (collection === undefined) return undefined;
+  if (typeof collection === "string") return collection.startsWith(FAV_COLLECTION_PREFIX) ? undefined : collection;
+  return collection.filter((c) => !c.startsWith(FAV_COLLECTION_PREFIX)).slice(0, MAX_COLLECTIONS_RETURNED);
 }
 
 /** Thrown when a file download 401s — confirmed live: in-copyright lending items 401, public-domain items 200. */

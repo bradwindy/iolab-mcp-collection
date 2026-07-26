@@ -60,4 +60,35 @@ describe("ia_wayback_list_site_urls", () => {
       { url: "https://example.org/page", first_seen: "1999-01-01T00:00:00Z", first_status: "200" },
     ]);
   });
+
+  it("stops escalating and reports has_more:false instead of looping forever when every row is filtered out", async () => {
+    // Regression: if exclude_errors filters out every fetched row and CDX still claims more exist,
+    // a fixed-size fetch would return an empty page with has_more:true and an UNCHANGED
+    // next_offset — a caller paging on it would repeat the exact same query forever. The handler
+    // must escalate its raw fetch up to a hard cap, then give up and report has_more:false rather
+    // than trap the caller in a non-advancing loop.
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const requestedLimit = Number(new URL(input.toString()).searchParams.get("limit"));
+      // Always return exactly the requested amount, all 404s — CDX always "has more" from the
+      // handler's point of view, and every row is filtered out by exclude_errors (the default).
+      const rows = Array.from({ length: requestedLimit }, (_, i) => [
+        `k${i}`,
+        "20200101000000",
+        `https://example.org/dead${i}`,
+        "text/html",
+        "404",
+        `D${i}`,
+        "10",
+      ]);
+      return Promise.resolve(cdxResponse(rows));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await waybackListSiteUrlsHandler({ url: "example.org" }, fakeEnv());
+
+    expect(result.structuredContent?.items).toEqual([]);
+    expect(result.structuredContent?.has_more).toBe(false);
+    expect(result.structuredContent?.next_offset).toBeNull();
+    expect(result.structuredContent?.notice).toContain("scan cap");
+  });
 });

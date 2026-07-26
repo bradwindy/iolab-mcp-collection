@@ -73,6 +73,26 @@ describe("ia_search_inside_text", () => {
     expect(result.structuredContent?.total_count).toBe(2); // "The moa" and "real moa.", not "moans"/"amoaing"
   });
 
+  it("treats a combining accent as part of the word, not a boundary — decomposed 'café' doesn't match 'cafe'", async () => {
+    // "café" in NFD (decomposed) form is "cafe" + U+0301 (combining acute accent) — five code
+    // units, not four. Without treating \p{M} as a word character, the accent looks like a
+    // non-word boundary immediately after "cafe", so an unaccented query would wrongly match
+    // inside a different, accented word.
+    const decomposedCafe = "cafe" + "\u0301"; // "e" + combining acute accent, NOT the precomposed "\u00e9"
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url.includes("/metadata/")) return Promise.resolve(metadataResponse([{ name: "item1_djvu.txt" }]));
+        return Promise.resolve(new Response(`the ${decomposedCafe} is nice`, { status: 200 }));
+      }),
+    );
+
+    const result = await searchInsideTextHandler({ identifier: "item1", query: "cafe" }, fakeEnv());
+
+    expect(result.structuredContent?.total_count).toBe(0);
+  });
+
   it("whole_word: false restores raw substring matching for a deliberate fragment search", async () => {
     vi.stubGlobal(
       "fetch",
