@@ -33,6 +33,22 @@ export type ServerManifestEntry = {
 
 export const SERVERS: readonly ServerManifestEntry[] = [
   {
+    slug: "ia-mcp",
+    pathPrefix: "ia",
+    credentialKeys: [
+      {
+        envName: "IA_S3_ACCESS_KEY",
+        label: "archive.org S3-like access key (optional — every tool works fully without it; see the server's README)",
+        signupUrl: "https://archive.org/account/s3.php",
+      },
+      {
+        envName: "IA_S3_SECRET_KEY",
+        label: "archive.org S3-like secret key (optional — every tool works fully without it; see the server's README)",
+        signupUrl: "https://archive.org/account/s3.php",
+      },
+    ],
+  },
+  {
     slug: "nz-culture-mcp",
     pathPrefix: "nz-culture",
     credentialKeys: [

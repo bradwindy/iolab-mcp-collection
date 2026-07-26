@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
+    "@iolab/ia-mcp": "workspace:*",
     "@iolab/mcp-kit": "workspace:*",
     "@iolab/nz-culture-mcp": "workspace:*",
     "@iolab/nz-environment-mcp": "workspace:*",

@@ -35,6 +35,6 @@ export function upstreamError(source: string, response: Response, hint?: string)
 export function missingCredentialError(serverSlug: string, keyName: string, portalUrl: string): ToolTextResult {
   return toolError(
     `The upstream API key '${keyName}' is not configured for ${serverSlug}.`,
-    `Set it at ${portalUrl}/servers/${serverSlug}, then retry.`,
+    `Set it at ${portalUrl}/admin/servers/${serverSlug}, then retry.`,
   );
 }

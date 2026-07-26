@@ -1,4 +1,5 @@
 import type { McpServerRegistration } from "@iolab/mcp-kit";
+import { InternetArchiveMcp } from "@iolab/ia-mcp";
 import { NzCultureMcp } from "@iolab/nz-culture-mcp";
 import { NzEnvironmentMcp } from "@iolab/nz-environment-mcp";
 import { NzGeoMcp } from "@iolab/nz-geo-mcp";
@@ -10,17 +11,25 @@ import { NzTransportMcp } from "@iolab/nz-transport-mcp";
 // Re-exported so src/index.ts can name every Durable Object class as a top-level export — required
 // by wrangler.jsonc's durable_objects.bindings[].class_name, which must resolve against the
 // Worker's `main` module directly.
-export { NzCultureMcp, NzEnvironmentMcp, NzGeoMcp, NzGovtMcp, NzMarketsMcp, NzStatsMcp, NzTransportMcp };
+export {
+  InternetArchiveMcp,
+  NzCultureMcp,
+  NzEnvironmentMcp,
+  NzGeoMcp,
+  NzGovtMcp,
+  NzMarketsMcp,
+  NzStatsMcp,
+  NzTransportMcp,
+};
 
 /**
  * The gateway's server registry: URL slug (→ `/{slug}/mcp`) to agent class and Durable Object
  * binding name. `slug` here must exactly match the corresponding manifest entry's `pathPrefix` in
  * apps/portal/src/manifest.ts — one is what the gateway actually routes, the other is what the
  * portal displays; a mismatch means the Connect page renders a URL the gateway doesn't serve.
- *
- * InternetArchiveMcp / IA_MCP is added here once Part 2 of the gateway plan builds it.
  */
 export const SERVERS: readonly McpServerRegistration<Env>[] = [
+  { slug: "ia", agent: InternetArchiveMcp, binding: "IA_MCP" },
   { slug: "nz-culture", agent: NzCultureMcp, binding: "NZ_CULTURE_MCP" },
   { slug: "nz-environment", agent: NzEnvironmentMcp, binding: "NZ_ENVIRONMENT_MCP" },
   { slug: "nz-geo", agent: NzGeoMcp, binding: "NZ_GEO_MCP" },
