@@ -271,6 +271,7 @@ describe("OAuth (buildMultiServerOAuthWorker)", () => {
     authorizeUrl.searchParams.set("state", "ref-state");
     authorizeUrl.searchParams.set("code_challenge", await base64UrlSha256("ref-test-verifier-1234567890"));
     authorizeUrl.searchParams.set("code_challenge_method", "S256");
+    authorizeUrl.searchParams.set("resource", resourceFor("nz-govt"));
 
     const consentResponse = await exports.default.fetch(
       new Request(authorizeUrl, { headers: { "Cf-Access-Jwt-Assertion": accessJwt } }),
@@ -305,6 +306,7 @@ describe("OAuth (buildMultiServerOAuthWorker)", () => {
     authorizeUrl.searchParams.set("state", "form-action-state");
     authorizeUrl.searchParams.set("code_challenge", await base64UrlSha256("form-action-test-verifier-1234567890"));
     authorizeUrl.searchParams.set("code_challenge_method", "S256");
+    authorizeUrl.searchParams.set("resource", resourceFor("nz-govt"));
 
     const consentResponse = await exports.default.fetch(
       new Request(authorizeUrl, { headers: { "Cf-Access-Jwt-Assertion": accessJwt } }),

@@ -1,10 +1,13 @@
-// This server binds no credentials, cache, or OAuth-specific fields of its own — it needs no
-// upstream API key and every one of its tools is a pure function of its input. Kept as an empty
-// augmentation (not deleted) so the ambient `Env` name agent.ts references always resolves, even
-// as a future tool might add a real field here.
+// This server needs no upstream API key — every tool is a pure function of its input plus the
+// shared TTL cache. Bindings are hand-typed here rather than generated (see nz-culture-mcp's
+// env.d.ts for the full rationale): this server has no wrangler.jsonc of its own anymore.
+import type { CacheNamespace } from "@iolab/mcp-kit";
+
 export {};
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intentional: only makes the ambient `Env` name resolve.
-  interface Env {}
+  interface Env {
+    /** TTL cache for slow-changing data.govt.nz CKAN responses. See CACHE_TTL in @iolab/mcp-kit. */
+    MCP_CACHE: CacheNamespace;
+  }
 }
