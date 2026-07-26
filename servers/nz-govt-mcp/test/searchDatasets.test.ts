@@ -2,6 +2,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { searchDatasetsHandler } from "../src/tools/searchDatasets.js";
 import { getDatasetHandler } from "../src/tools/getDataset.js";
 
+function createFakeCache() {
+  const store = new Map<string, string>();
+  return {
+    async get(key: string) {
+      return store.get(key) ?? null;
+    },
+    async put(key: string, value: string) {
+      store.set(key, value);
+    },
+  };
+}
+
+function fakeEnv(): Env {
+  return { MCP_CACHE: createFakeCache() } as unknown as Env;
+}
+
 const SAMPLE_PACKAGE = {
   id: "c1923d33-e781-46c9-9ea1-d9b850082be4",
   name: "directory-of-educational-institutions",
@@ -25,6 +41,13 @@ function ckanResponse(result: unknown) {
   });
 }
 
+function htmlErrorPageResponse() {
+  return new Response("<!DOCTYPE html><html><body>502 Bad Gateway</body></html>", {
+    status: 200,
+    headers: { "content-type": "text/html" },
+  });
+}
+
 describe("nz_govt_search_datasets", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -34,7 +57,7 @@ describe("nz_govt_search_datasets", () => {
       vi.fn().mockResolvedValue(ckanResponse({ count: 1, results: [SAMPLE_PACKAGE] })),
     );
 
-    const result = await searchDatasetsHandler({ query: "school directory" });
+    const result = await searchDatasetsHandler({ query: "school directory" }, fakeEnv());
 
     expect(result.structuredContent?.items).toEqual([
       {
@@ -54,14 +77,14 @@ describe("nz_govt_search_datasets", () => {
       vi.fn().mockResolvedValue(ckanResponse({ count: 1, results: [SAMPLE_PACKAGE] })),
     );
 
-    const result = await searchDatasetsHandler({ query: "school", response_format: "detailed" });
+    const result = await searchDatasetsHandler({ query: "school", response_format: "detailed" }, fakeEnv());
     const item = (result.structuredContent?.items as Array<Record<string, unknown>>)[0];
 
     expect(item?.tags).toEqual(["education", "schools"]);
     expect((item?.resources as unknown[]).length).toBe(1);
   });
 
-  it("surfaces a CKAN-level action failure", async () => {
+  it("surfaces a CKAN-level action failure as a tool error, not an unhandled rejection", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -69,14 +92,53 @@ describe("nz_govt_search_datasets", () => {
       ),
     );
 
-    await expect(searchDatasetsHandler({ query: "x" })).rejects.toThrow(/boom/);
+    // Per MCP guidance (and this repo's own toolError() convention), a tool execution failure
+    // must come back as an isError:true result the model can see and react to — not a thrown
+    // exception, which would surface as an opaque, unformatted, unlogged protocol-level failure.
+    const result = await searchDatasetsHandler({ query: "x" }, fakeEnv());
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
+  });
+
+  it("surfaces a network-level fetch failure as a tool error, not an unhandled rejection", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    const result = await searchDatasetsHandler({ query: "x" }, fakeEnv());
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("could not be reached") });
+  });
+
+  it("retries and recovers when data.govt.nz's own backend briefly serves an HTML error page", async () => {
+    // Confirmed live: catalogue.data.govt.nz can respond HTTP 200 with an HTML interstitial
+    // instead of its usual JSON envelope for a short window. That's indistinguishable from a
+    // real outage until we've tried more than once — this proves a transient instance of it now
+    // resolves silently via the existing retry+backoff instead of surfacing as a tool error.
+    const fetchMock = vi.fn().mockResolvedValueOnce(htmlErrorPageResponse()).mockResolvedValueOnce(ckanResponse({ count: 1, results: [SAMPLE_PACKAGE] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await searchDatasetsHandler({ query: "school directory" }, fakeEnv());
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent?.total_count).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("caches the upstream fetch across calls for the same query/limit/offset", async () => {
+    const env = fakeEnv();
+    const fetchMock = vi.fn().mockResolvedValue(ckanResponse({ count: 1, results: [SAMPLE_PACKAGE] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await searchDatasetsHandler({ query: "school directory" }, env);
+    await searchDatasetsHandler({ query: "school directory" }, env);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("requests a deterministic tiebreak sort, so tied datasets still paginate stably", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ckanResponse({ count: 1, results: [SAMPLE_PACKAGE] }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await searchDatasetsHandler({ query: "school directory" });
+    await searchDatasetsHandler({ query: "school directory" }, fakeEnv());
 
     const requestedUrl = new URL(fetchMock.mock.calls[0]?.[0] as string);
     expect(requestedUrl.searchParams.get("sort")).toBe("score desc, metadata_modified desc, name asc");
@@ -89,7 +151,7 @@ describe("nz_govt_get_dataset", () => {
   it("fetches full metadata for a dataset by slug", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(ckanResponse(SAMPLE_PACKAGE)));
 
-    const result = await getDatasetHandler({ id_or_slug: "directory-of-educational-institutions" });
+    const result = await getDatasetHandler({ id_or_slug: "directory-of-educational-institutions" }, fakeEnv());
 
     expect(result.structuredContent?.title).toBe("Directory of Educational Institutions");
     expect(result.structuredContent?.resources).toHaveLength(1);
@@ -98,8 +160,38 @@ describe("nz_govt_get_dataset", () => {
   it("returns an actionable error on upstream HTTP failure", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 500, statusText: "Internal Server Error" })));
 
-    const result = await getDatasetHandler({ id_or_slug: "does-not-exist" });
+    const result = await getDatasetHandler({ id_or_slug: "does-not-exist" }, fakeEnv());
 
     expect(result.isError).toBe(true);
+  });
+
+  it("surfaces a CKAN-level action failure as a tool error, not an unhandled rejection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: false, error: { message: "boom" } }), { status: 200 })),
+    );
+
+    const result = await getDatasetHandler({ id_or_slug: "x" }, fakeEnv());
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("boom") });
+  });
+
+  it("surfaces a malformed (non-JSON) upstream response as a tool error, not an unhandled rejection", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(htmlErrorPageResponse()));
+
+    const result = await getDatasetHandler({ id_or_slug: "x" }, fakeEnv());
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("could not be reached") });
+  });
+
+  it("caches the upstream fetch across calls for the same id_or_slug", async () => {
+    const env = fakeEnv();
+    const fetchMock = vi.fn().mockResolvedValue(ckanResponse(SAMPLE_PACKAGE));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getDatasetHandler({ id_or_slug: "directory-of-educational-institutions" }, env);
+    await getDatasetHandler({ id_or_slug: "directory-of-educational-institutions" }, env);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,11 @@
 import { z } from "zod";
-import { attribution, jsonResult, toolError, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
-import { datastoreSearchSql, SqlValidationError } from "../clients/datagovt.js";
+import { attribution, cached, CACHE_TTL, jsonResult, toolError, type ToolTextResult } from "@iolab/mcp-kit";
+import {
+  ckanCacheKey,
+  datastoreSearchSql,
+  handleDatagovtError,
+  SqlValidationError,
+} from "../clients/datagovt.js";
 
 const MAX_ROWS_RETURNED = 200;
 
@@ -25,11 +30,12 @@ export const queryOpenDataSqlOutputShape = {
 
 const inputSchema = z.object(queryOpenDataSqlInputShape);
 
-export async function queryOpenDataSqlHandler(rawInput: unknown): Promise<ToolTextResult> {
+export async function queryOpenDataSqlHandler(rawInput: unknown, env: Env): Promise<ToolTextResult> {
   const input = inputSchema.parse(rawInput);
 
   try {
-    const { records } = await datastoreSearchSql(input.sql);
+    const cacheKey = await ckanCacheKey("datastore_search_sql", { sql: input.sql });
+    const { records } = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.SLOW_MOVING, () => datastoreSearchSql(input.sql));
     const truncated = records.length > MAX_ROWS_RETURNED;
     const rows = truncated ? records.slice(0, MAX_ROWS_RETURNED) : records;
 
@@ -42,8 +48,10 @@ export async function queryOpenDataSqlHandler(rawInput: unknown): Promise<ToolTe
       attribution: attribution("data.govt.nz datastore", { url: "https://catalogue.data.govt.nz/" }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
     if (error instanceof SqlValidationError) return toolError(error.message);
-    throw error;
+    return handleDatagovtError(
+      error,
+      "This is data.govt.nz's own error (e.g. a malformed query or a resource id that isn't datastore-enabled), not a network failure — verify the resource with nz_govt_get_dataset and check the SQL syntax.",
+    );
   }
 }
