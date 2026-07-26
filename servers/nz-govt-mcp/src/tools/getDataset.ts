@@ -8,7 +8,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import {
   ckanCacheKey,
   getDataset as getDatasetClient,

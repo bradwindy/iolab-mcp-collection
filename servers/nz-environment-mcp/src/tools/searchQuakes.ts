@@ -11,7 +11,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { getRecentQuakes, type Quake } from "../clients/geonet.js";
 
 export const searchQuakesInputShape = {

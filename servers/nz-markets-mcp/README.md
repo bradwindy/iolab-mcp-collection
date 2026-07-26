@@ -30,7 +30,7 @@ a `notice` field on truncated results, and a `source`/`url` `attribution` object
 ## Upstream API keys
 
 This server needs **three** separate credentials, configured through the portal (see
-`@nz-mcp/credentials` — values are AES-256-GCM encrypted at rest in the shared `CREDENTIALS_DB`
+`@iolab/credentials` — values are AES-256-GCM encrypted at rest in the shared `CREDENTIALS_DB`
 D1 database, keyed by this server's slug `nz-markets-mcp`). Tools that need a missing key return
 an actionable tool error telling you which key to set and where.
 

@@ -11,7 +11,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { listAllServices, searchServices, type CanterburyServiceEntry } from "../clients/canterburyMaps.js";
 
 export const searchCanterburyServicesInputShape = {

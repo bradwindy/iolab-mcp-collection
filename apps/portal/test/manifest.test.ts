@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { findServer, SERVERS } from "../src/manifest.js";
 
 describe("manifest", () => {
-  it("has 7 servers with unique slugs and unique subdomains", () => {
+  it("has 8 servers with unique slugs and unique path prefixes", () => {
     const slugs = SERVERS.map((server) => server.slug);
-    const subdomains = SERVERS.map((server) => server.subdomain);
+    const pathPrefixes = SERVERS.map((server) => server.pathPrefix);
 
-    expect(SERVERS).toHaveLength(7);
+    expect(SERVERS).toHaveLength(8);
     expect(new Set(slugs).size).toBe(slugs.length);
-    expect(new Set(subdomains).size).toBe(subdomains.length);
+    expect(new Set(pathPrefixes).size).toBe(pathPrefixes.length);
   });
 
   it("gives every credential key a label and an https signup URL", () => {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateEncryptionKey, setCredential } from "@nz-mcp/credentials";
+import { generateEncryptionKey, setCredential } from "@iolab/credentials";
 import { searchIcpConnectionsHandler } from "../src/tools/searchIcpConnections.js";
 import { EA_ICP_API_KEY, SERVER_SLUG } from "../src/constants.js";
 import { createFakeCredentialsDb } from "./fakeCredentialsDb.js";

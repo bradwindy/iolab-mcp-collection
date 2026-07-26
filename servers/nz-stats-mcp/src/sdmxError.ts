@@ -1,4 +1,4 @@
-import { toolError, upstreamError, type ToolTextResult, type UpstreamHttpError } from "@nz-mcp/mcp-kit";
+import { toolError, upstreamError, type ToolTextResult, type UpstreamHttpError } from "@iolab/mcp-kit";
 import { SUBSCRIPTION_KEY_NAME } from "./constants.js";
 
 /**

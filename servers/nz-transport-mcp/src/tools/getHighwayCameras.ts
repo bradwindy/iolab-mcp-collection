@@ -14,7 +14,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { CAMERA_IMAGE_HOST, getCameras, SOURCE, type NztaCamera } from "../clients/nztaTraffic.js";
 import { NZTA_REGIONS_DESCRIPTION, resolveNztaRegionId } from "../constants.js";
 

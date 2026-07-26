@@ -14,7 +14,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { getAllRoutes, SOURCE, type GtfsRouteAttributes } from "../clients/aucklandTransport.js";
 import { getAtSubscriptionKey } from "../clients/credentialStore.js";
 import { AT_SUBSCRIPTION_KEY_NAME, SERVER_SLUG } from "../constants.js";

@@ -10,8 +10,8 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
-import { getCredential } from "@nz-mcp/credentials";
+} from "@iolab/mcp-kit";
+import { getCredential } from "@iolab/credentials";
 import { SERVER_SLUG, TE_PAPA_API_KEY } from "../constants.js";
 import { getTePapaItem as getTePapaItemClient, TE_PAPA_ITEM_PATHS, type TePapaRecord } from "../clients/tepapa.js";
 

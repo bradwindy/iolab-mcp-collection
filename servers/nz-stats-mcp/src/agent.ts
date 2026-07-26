@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
-import { READ_ONLY_OPEN_WORLD_ANNOTATIONS, type OAuthProps } from "@nz-mcp/mcp-kit";
+import { READ_ONLY_OPEN_WORLD_ANNOTATIONS, type OAuthProps } from "@iolab/mcp-kit";
 import {
   searchDataflowsHandler,
   searchDataflowsInputShape,

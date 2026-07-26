@@ -11,7 +11,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { searchQuakeHistory as searchQuakeHistoryClient, type FdsnQuakeRecord } from "../clients/geonetFdsn.js";
 
 const bboxParam = z

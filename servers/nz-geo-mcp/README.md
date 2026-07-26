@@ -80,12 +80,12 @@ No signup, no key. Public ArcGIS REST service directory at
 
 ```bash
 cp .dev.vars.example .dev.vars   # fill in MCP_SHARED_TOKEN and ENCRYPTION_KEY
-pnpm --filter @nz-mcp/nz-geo-mcp dev
-pnpm --filter @nz-mcp/nz-geo-mcp test
+pnpm --filter @iolab/nz-geo-mcp dev
+pnpm --filter @iolab/nz-geo-mcp test
 ```
 
 `ENCRYPTION_KEY` must match the value used across every server that shares the collection's D1
-credentials store — generate once with `generateEncryptionKey()` from `@nz-mcp/credentials`, not
+credentials store — generate once with `generateEncryptionKey()` from `@iolab/credentials`, not
 per-server.
 
 ## Research findings & design notes

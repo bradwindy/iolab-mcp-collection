@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { listCredentialStatus } from "@nz-mcp/credentials";
+import { listCredentialStatus } from "@iolab/credentials";
 import { SERVERS } from "../manifest.js";
 import { renderDashboard, type DashboardServerRow } from "../views/dashboard.js";
 

@@ -1,4 +1,4 @@
-import { getCredential } from "@nz-mcp/credentials";
+import { getCredential } from "@iolab/credentials";
 import { SERVER_SLUG } from "./constants.js";
 
 export type LinzCredentialName = "LINZ_API_KEY" | "LINZ_BASEMAPS_API_KEY";

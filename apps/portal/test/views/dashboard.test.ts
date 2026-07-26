@@ -5,25 +5,25 @@ import type { ServerManifestEntry } from "../../src/manifest.js";
 function entry(overrides: Partial<ServerManifestEntry> = {}): ServerManifestEntry {
   return {
     slug: "nz-example-mcp",
-    subdomain: "nz-example.mcp",
+    pathPrefix: "nz-example",
     credentialKeys: [],
     ...overrides,
   };
 }
 
 describe("renderDashboard", () => {
-  it("lists every server with its slug and subdomain URL", async () => {
+  it("lists every server with its slug and path-prefixed gateway URL", async () => {
     const rows: DashboardServerRow[] = [
-      { entry: entry({ slug: "nz-geo-mcp", subdomain: "nz-geo.mcp" }), statuses: [] },
-      { entry: entry({ slug: "nz-govt-mcp", subdomain: "nz-govt.mcp" }), statuses: [] },
+      { entry: entry({ slug: "nz-geo-mcp", pathPrefix: "nz-geo" }), statuses: [] },
+      { entry: entry({ slug: "nz-govt-mcp", pathPrefix: "nz-govt" }), statuses: [] },
     ];
 
     const body = String(await renderDashboard(rows, "example.com"));
 
     expect(body).toContain("nz-geo-mcp");
-    expect(body).toContain("https://nz-geo.mcp.example.com/mcp");
+    expect(body).toContain("https://mcp.example.com/nz-geo/mcp");
     expect(body).toContain("nz-govt-mcp");
-    expect(body).toContain("https://nz-govt.mcp.example.com/mcp");
+    expect(body).toContain("https://mcp.example.com/nz-govt/mcp");
   });
 
   it("shows 'No credentials required' for a server with no credential keys", async () => {

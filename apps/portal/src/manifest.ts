@@ -1,10 +1,12 @@
 /**
- * Static manifest of every server in the nz-mcp-collection: its slug (matches the server's
- * wrangler.jsonc "name" AND the `server` column it reads/writes in the shared credentials
- * table), its public MCP subdomain, and the upstream API credentials it requires (if any).
+ * Static manifest of every server in the collection: its slug (the stable identifier — matches
+ * the `server` column it reads/writes in the shared credentials table, and predates the
+ * single-Worker gateway, so it is never renamed even though it no longer matches any
+ * `wrangler.jsonc "name"`), its URL path prefix on the shared gateway hostname, and the upstream
+ * API credentials it requires (if any).
  *
  * The portal renders this list on the dashboard, drives the per-server credential forms at
- * /servers/:slug, and builds the `claude mcp add` examples on the Connect page.
+ * /admin/servers/:slug, and builds the `claude mcp add` examples on the Connect page.
  */
 
 export type CredentialKeyDescriptor = {
@@ -17,21 +19,38 @@ export type CredentialKeyDescriptor = {
 };
 
 export type ServerManifestEntry = {
-  /** Matches the server's wrangler.jsonc "name" and the `server` column in the shared credentials table. */
+  /** Stable identifier: the `server` column in the shared credentials table. Never renamed. */
   slug: string;
   /**
-   * Hostname prefix relative to the operator's base domain (itself never committed to this repo —
-   * read from the `BASE_DOMAIN` secret at request time). The server's /mcp endpoint lives at
-   * https://{subdomain}.{BASE_DOMAIN}/mcp.
+   * URL path prefix on the gateway's single shared hostname (itself never committed to this repo
+   * — read from the `BASE_DOMAIN` secret at request time). Must exactly match the `slug` this
+   * server is registered under in `apps/gateway/src/servers.ts`. The server's MCP endpoint lives
+   * at https://mcp.{BASE_DOMAIN}/{pathPrefix}/mcp.
    */
-  subdomain: string;
+  pathPrefix: string;
   credentialKeys: CredentialKeyDescriptor[];
 };
 
 export const SERVERS: readonly ServerManifestEntry[] = [
   {
+    slug: "ia-mcp",
+    pathPrefix: "ia",
+    credentialKeys: [
+      {
+        envName: "IA_S3_ACCESS_KEY",
+        label: "archive.org S3-like access key (optional — every tool works fully without it; see the server's README)",
+        signupUrl: "https://archive.org/account/s3.php",
+      },
+      {
+        envName: "IA_S3_SECRET_KEY",
+        label: "archive.org S3-like secret key (optional — every tool works fully without it; see the server's README)",
+        signupUrl: "https://archive.org/account/s3.php",
+      },
+    ],
+  },
+  {
     slug: "nz-culture-mcp",
-    subdomain: "nz-culture.mcp",
+    pathPrefix: "nz-culture",
     credentialKeys: [
       {
         envName: "TE_PAPA_API_KEY",
@@ -42,7 +61,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-stats-mcp",
-    subdomain: "nz-stats.mcp",
+    pathPrefix: "nz-stats",
     credentialKeys: [
       {
         envName: "STATS_NZ_SUBSCRIPTION_KEY",
@@ -53,7 +72,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-geo-mcp",
-    subdomain: "nz-geo.mcp",
+    pathPrefix: "nz-geo",
     credentialKeys: [
       {
         envName: "LINZ_API_KEY",
@@ -70,7 +89,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-environment-mcp",
-    subdomain: "nz-environment.mcp",
+    pathPrefix: "nz-environment",
     credentialKeys: [
       {
         envName: "NIWA_API_KEY",
@@ -81,7 +100,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-transport-mcp",
-    subdomain: "nz-transport.mcp",
+    pathPrefix: "nz-transport",
     credentialKeys: [
       {
         envName: "AT_SUBSCRIPTION_KEY",
@@ -92,7 +111,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-markets-mcp",
-    subdomain: "nz-markets.mcp",
+    pathPrefix: "nz-markets",
     credentialKeys: [
       {
         envName: "NZXPLORER_API_KEY",
@@ -113,7 +132,7 @@ export const SERVERS: readonly ServerManifestEntry[] = [
   },
   {
     slug: "nz-govt-mcp",
-    subdomain: "nz-govt.mcp",
+    pathPrefix: "nz-govt",
     credentialKeys: [],
   },
 ];

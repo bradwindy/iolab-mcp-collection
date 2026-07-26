@@ -1,4 +1,4 @@
-import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
+import { fetchWithBackoff, UpstreamHttpError } from "@iolab/mcp-kit";
 
 // NZTA's Traffic and Travel API publishes a WADL (curl 'https://trafficnz.info/service/traffic/rest/4?_wadl')
 // but the WADL's per-parameter docs are unreliable: `events/byregion/{region}` and `cameras/byregion/{region}`

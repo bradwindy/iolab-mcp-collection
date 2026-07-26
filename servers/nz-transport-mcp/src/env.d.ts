@@ -1,15 +1,22 @@
-// Bindings (KV, D1, Durable Objects) are generated into worker-configuration.d.ts by `wrangler types`.
-// Secrets aren't declared in wrangler.jsonc, so they're typed here by hand. OAUTH_KV is a binding
-// (declared in wrangler.jsonc), so `wrangler types` provides it; OAUTH_PROVIDER is injected into
-// `env` at runtime by @cloudflare/workers-oauth-provider itself, so it's hand-typed like a secret.
-import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+// Bindings and secrets are now fully hand-typed here — this server no longer has its own
+// wrangler.jsonc, so there's no local `wrangler types` run to generate worker-configuration.d.ts
+// (that config now lives at apps/gateway/wrangler.jsonc, which the gateway owns). MCP_CACHE and
+// CREDENTIALS_DB used to come from real generated KVNamespace/D1Database types; they're typed here
+// against this repo's own minimal structural interfaces (CacheNamespace, D1LikeDatabase) instead
+// of @cloudflare/workers-types, which this repo deliberately avoids depending on. OAuth/bearer-gate
+// fields (MCP_SHARED_TOKEN, OAUTH_PROVIDER, ACCESS_TEAM_DOMAIN, ACCESS_AUD, ACCESS_EMAIL) moved to
+// the gateway along with the auth gate itself — this server's own src/ code never reads them.
+import type { CacheNamespace } from "@iolab/mcp-kit";
+import type { D1LikeDatabase } from "@iolab/credentials";
 
 export {};
 
 declare global {
   interface Env {
-    /** Shared bearer token every MCP client must present. Set via `wrangler secret put MCP_SHARED_TOKEN`. */
-    MCP_SHARED_TOKEN: string;
+    /** TTL cache for slow-changing upstream responses. See CACHE_TTL in @iolab/mcp-kit. */
+    MCP_CACHE: CacheNamespace;
+    /** D1-backed encrypted credential store, shared across every server. See @iolab/credentials. */
+    CREDENTIALS_DB: D1LikeDatabase;
     /**
      * Base URL of the operator's deployed credential portal, used only to build the
      * actionable link in missing-credential error messages. Set via `wrangler secret put PORTAL_URL`.
@@ -20,22 +27,5 @@ declare global {
      * CREDENTIALS_DB D1 table. Set via `wrangler secret put ENCRYPTION_KEY`.
      */
     ENCRYPTION_KEY: string;
-    /** Injected by @cloudflare/workers-oauth-provider; see `buildOAuthMcpWorker` in @nz-mcp/mcp-kit. */
-    OAUTH_PROVIDER: OAuthHelpers;
-    /**
-     * This server's Cloudflare Zero Trust team domain, e.g. `myteam.cloudflareaccess.com`, used to
-     * verify the Access JWT on `/authorize`. Set via `wrangler secret put ACCESS_TEAM_DOMAIN`.
-     */
-    ACCESS_TEAM_DOMAIN: string;
-    /**
-     * Audience (AUD) tag of the Access application scoped to this server's `/authorize` path.
-     * Set via `wrangler secret put ACCESS_AUD`.
-     */
-    ACCESS_AUD: string;
-    /**
-     * The single operator email allowed to complete the OAuth login at `/authorize`.
-     * Set via `wrangler secret put ACCESS_EMAIL`.
-     */
-    ACCESS_EMAIL: string;
   }
 }

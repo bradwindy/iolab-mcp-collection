@@ -43,7 +43,7 @@ server includes in every response.
    API key.
 3. From your app's dashboard, subscribe that same app to the **Tide API**, **UV API**, and **CO2** products.
 4. Set the resulting key on this server via your deployed portal at `<your PORTAL_URL>/servers/nz-environment-mcp`
-   (or directly with `setCredential` from `@nz-mcp/credentials`) under the key name `NIWA_API_KEY`.
+   (or directly with `setCredential` from `@iolab/credentials`) under the key name `NIWA_API_KEY`.
 
 **Design note on "one key or three":** NIWA's own catalog wording is identical across the Tide, UV, and
 CO2 API entries ("Sign in to the NIWA developer portal. Register an app name and generate an API key.").
@@ -108,9 +108,9 @@ those URLs as secrets**.
 
 ```bash
 pnpm install          # from the repo root — installs all workspace packages
-pnpm --filter @nz-mcp/nz-environment-mcp typecheck
-pnpm --filter @nz-mcp/nz-environment-mcp test
-pnpm --filter @nz-mcp/nz-environment-mcp dev
+pnpm --filter @iolab/nz-environment-mcp typecheck
+pnpm --filter @iolab/nz-environment-mcp test
+pnpm --filter @iolab/nz-environment-mcp dev
 ```
 
 Copy `.dev.vars.example` to `.dev.vars` and fill in a real `MCP_SHARED_TOKEN` and a generated

@@ -1,8 +1,8 @@
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
-import { createRemoteJWKSet, jwtVerify } from "jose";
-import type { JWTVerifyGetKey } from "jose";
 import { bearerTokenMatches } from "./auth.js";
+import { verifyAccessJwt } from "./access.js";
+import type { AccessJwtEnv } from "./access.js";
 
 /**
  * Identity surfaced to MCP tool handlers for requests that authenticated via OAuth (Access-gated
@@ -13,16 +13,7 @@ export interface OAuthProps extends Record<string, unknown> {
   email: string;
 }
 
-interface AccessJwtEnv {
-  /** The operator's Cloudflare Zero Trust team domain, e.g. `myteam.cloudflareaccess.com`. */
-  ACCESS_TEAM_DOMAIN: string;
-  /** Audience (AUD) tag of the Access application scoped to this server's `/authorize` path. */
-  ACCESS_AUD: string;
-  /** The single operator email allowed to complete the OAuth login. */
-  ACCESS_EMAIL: string;
-}
-
-/** Everything `buildOAuthMcpWorker` needs beyond what each server's `Env` already declares for the bearer path. */
+/** Everything `buildMultiServerOAuthWorker` needs beyond what the gateway's `Env` already declares. */
 export interface OAuthMcpEnv extends AccessJwtEnv {
   MCP_SHARED_TOKEN: string;
   // The OAuth provider library reads/writes this KV binding directly at runtime; this package
@@ -30,85 +21,17 @@ export interface OAuthMcpEnv extends AccessJwtEnv {
   // convention above) it isn't worth depending on @cloudflare/workers-types just to name it.
   OAUTH_KV: unknown;
   OAUTH_PROVIDER: OAuthHelpers;
+  /**
+   * Escape hatch for cutover: set to the exact string `"true"` to disable the per-path `resource`
+   * enforcement in `/authorize` (see `validateResourceForRegisteredPath`) if a real client turns
+   * out not to send an RFC 8707 `resource` parameter the way claude.ai is expected to. Unset (the
+   * default) enforces it. Every `/authorize` request logs the raw `resource` value(s) it observed
+   * regardless of this flag, so the first real connector attempt confirms the assumption either way.
+   */
+  DISABLE_RESOURCE_ENFORCEMENT?: string;
 }
 
-// jose's JWKS fetcher isn't available until a request carries `env`, so the per-team-domain
-// resolver is cached lazily here rather than at module load.
-const jwksByTeamDomain = new Map<string, JWTVerifyGetKey>();
-
-let jwksResolverOverride: ((teamDomain: string) => JWTVerifyGetKey) | undefined;
-
-/**
- * Test-only seam: replace how `verifyAccessJwt` resolves a team domain's JWKS, so tests can
- * sign a token against a local keypair instead of fetching the real Access certs endpoint.
- * Call with `undefined` to restore the real remote-JWKS resolver.
- */
-export function __setAccessJwksResolverForTesting(resolver: ((teamDomain: string) => JWTVerifyGetKey) | undefined) {
-  jwksResolverOverride = resolver;
-  jwksByTeamDomain.clear();
-}
-
-function getJwks(teamDomain: string): JWTVerifyGetKey {
-  let jwks = jwksByTeamDomain.get(teamDomain);
-  if (!jwks) {
-    jwks = jwksResolverOverride
-      ? jwksResolverOverride(teamDomain)
-      : createRemoteJWKSet(new URL(`https://${teamDomain}/cdn-cgi/access/certs`));
-    jwksByTeamDomain.set(teamDomain, jwks);
-  }
-  return jwks;
-}
-
-function extractAccessJwt(request: Request): string | null {
-  const header = request.headers.get("Cf-Access-Jwt-Assertion");
-  if (header) return header;
-  const cookie = request.headers.get("Cookie") ?? "";
-  const match = /(?:^|;\s*)CF_Authorization=([^;]+)/.exec(cookie);
-  return match?.[1] ?? null;
-}
-
-/**
- * Verifies the Cloudflare Access identity on `request`: signature (via the team's JWKS),
- * `iss`/`aud`, and that the token's email matches the single allowed operator. Returns `null`
- * on any failure — never trust `Cf-Access-Authenticated-User-Email` alone, since only the JWT
- * signature proves Access actually issued it.
- *
- * Logs the specific failure reason (never the token or a mismatched email itself) so a rejected
- * request is diagnosable from Workers Logs — "no token present" (Access misconfigured to not
- * reach this path, or session expired), a `jose` verification error (expired/bad signature/wrong
- * audience), and "email mismatch" are otherwise indistinguishable from the outside.
- */
-export async function verifyAccessJwt(request: Request, env: AccessJwtEnv): Promise<{ email: string } | null> {
-  const token = extractAccessJwt(request);
-  if (!token) {
-    console.warn("[access-jwt] no Cf-Access-Jwt-Assertion header or CF_Authorization cookie on request.");
-    return null;
-  }
-
-  try {
-    const jwks = getJwks(env.ACCESS_TEAM_DOMAIN);
-    const { payload } = await jwtVerify(token, jwks, {
-      algorithms: ["RS256"],
-      issuer: `https://${env.ACCESS_TEAM_DOMAIN}`,
-      audience: env.ACCESS_AUD,
-    });
-    const email = typeof payload.email === "string" ? payload.email : null;
-    if (!email) {
-      console.warn("[access-jwt] token verified but has no email claim.");
-      return null;
-    }
-    if (email !== env.ACCESS_EMAIL) {
-      console.warn("[access-jwt] token verified but its email does not match ACCESS_EMAIL.");
-      return null;
-    }
-    return { email };
-  } catch (err) {
-    console.warn("[access-jwt] verification threw:", err instanceof Error ? `${err.name}: ${err.message}` : err);
-    return null;
-  }
-}
-
-type AuthorizeEnv = AccessJwtEnv & { OAUTH_PROVIDER: OAuthHelpers };
+type AuthorizeEnv = AccessJwtEnv & { OAUTH_PROVIDER: OAuthHelpers; DISABLE_RESOURCE_ENFORCEMENT?: string };
 
 const CSRF_COOKIE_NAME = "__Host-OAUTH_CSRF";
 
@@ -133,6 +56,48 @@ function generateFlowRef(): string {
 }
 
 /**
+ * Guards the finding that one shared authorization server now covers every `/{slug}/mcp` path:
+ * `handleApiRequest` only checks a token's audience when the token *has* one, which requires the
+ * client to have sent an RFC 8707 `resource` parameter — and even then, `audienceMatches` treats an
+ * origin-only audience (no path) as matching every path (`pathname === "/" || pathname === ""`).
+ * Neither the OAuth spec nor the library forces a client to pick a specific, correctly-scoped
+ * `resource`, so this enforces it ourselves at the one place a request can supply it: `/authorize`.
+ * Requires exactly one `resource`, same-origin, whose path is one of the servers actually
+ * registered — otherwise a token minted here would be usable at every other server in the fleet.
+ */
+export function validateResourceForRegisteredPath(
+  resource: string | string[] | undefined,
+  requestOrigin: string,
+  registeredResourcePaths: ReadonlySet<string>,
+): { ok: true } | { ok: false; reason: string } {
+  if (resource === undefined) {
+    return { ok: false, reason: "missing 'resource' parameter — must name exactly one registered MCP server" };
+  }
+  if (Array.isArray(resource)) {
+    return { ok: false, reason: "multiple 'resource' parameters — must name exactly one registered MCP server" };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(resource);
+  } catch {
+    return { ok: false, reason: `'resource' is not an absolute URI: ${resource}` };
+  }
+  if (parsed.origin !== requestOrigin) {
+    return { ok: false, reason: `'resource' origin (${parsed.origin}) does not match this server (${requestOrigin})` };
+  }
+  if (parsed.pathname === "/" || parsed.pathname === "") {
+    return {
+      ok: false,
+      reason: "'resource' is origin-only (no path) — this library treats that as matching every server's path",
+    };
+  }
+  if (!registeredResourcePaths.has(parsed.pathname)) {
+    return { ok: false, reason: `'resource' path (${parsed.pathname}) is not a registered MCP server` };
+  }
+  return { ok: true };
+}
+
+/**
  * Renders a consent page for `GET /authorize`: the caller is already Access-authenticated (verified
  * by the handler below before this runs), but has not yet said *which* client they mean to authorize.
  * Without this step, a single crafted link (or even a plain top-level redirect) to `/authorize` from an
@@ -142,8 +107,14 @@ function generateFlowRef(): string {
  * a `__Host-` cookie set on this response and echoed back as a hidden field on submit — the "double
  * submit cookie" pattern) additionally stops a forged cross-site POST from skipping the click entirely.
  */
-async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request, env: Env): Promise<Response> {
+async function renderAuthorizeConsent<Env extends AuthorizeEnv>(
+  request: Request,
+  env: Env,
+  registeredResourcePaths: ReadonlySet<string>,
+): Promise<Response> {
   const ref = generateFlowRef();
+  const url = new URL(request.url);
+  console.log(`[authorize:${ref}] GET: resource param(s) observed:`, JSON.stringify(url.searchParams.getAll("resource")));
 
   let oauthReqInfo: AuthRequest;
   try {
@@ -156,6 +127,14 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request
     );
   }
 
+  if (env.DISABLE_RESOURCE_ENFORCEMENT !== "true") {
+    const resourceCheck = validateResourceForRegisteredPath(oauthReqInfo.resource, url.origin, registeredResourcePaths);
+    if (!resourceCheck.ok) {
+      console.error(`[authorize:${ref}] GET: rejected — ${resourceCheck.reason}`);
+      return new Response(`Invalid authorization request: ${resourceCheck.reason} (ref: ${ref})`, { status: 400 });
+    }
+  }
+
   const clientInfo = await env.OAUTH_PROVIDER.lookupClient(oauthReqInfo.clientId);
   const clientName = clientInfo?.clientName || oauthReqInfo.clientId;
 
@@ -166,13 +145,13 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request
   );
 
   // Echo every original query param back verbatim as hidden fields (not just the ones the parsed
-  // AuthRequest names) so a repeated param like `resource` round-trips exactly, and so the POST
-  // handler can re-run parseAuthRequest on the reconstructed URL instead of re-deriving it by hand.
-  // A crafted link could itself carry a `csrf_token`/`flow_ref` param, which would render a hidden
-  // field ahead of the real one and shadow it on submit (formData.get() returns the first match) —
-  // fail closed but an annoying self-DoS, so both are dropped here; the ones appended below (the
-  // only ones that count) always come last in the form.
-  const hiddenInputs = [...new URL(request.url).searchParams.entries()]
+  // AuthRequest names — this is how `resource` round-trips to the POST for re-validation there) so
+  // a repeated param round-trips exactly, and so the POST handler can re-run parseAuthRequest on the
+  // reconstructed URL instead of re-deriving it by hand. A crafted link could itself carry a
+  // `csrf_token`/`flow_ref` param, which would render a hidden field ahead of the real one and shadow
+  // it on submit (formData.get() returns the first match) — fail closed but an annoying self-DoS, so
+  // both are dropped here; the ones appended below (the only ones that count) always come last.
+  const hiddenInputs = [...url.searchParams.entries()]
     .filter(([name]) => name !== "csrf_token" && name !== "flow_ref")
     .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}" />`)
     .join("\n      ");
@@ -180,10 +159,9 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request
   // Chrome and Safari (unlike Firefox) re-check `form-action` against each hop of a redirect chain
   // that results from a form submission, not just the submission's own same-origin URL — so a POST
   // to /authorize that succeeds and 302s to the client's (cross-origin) redirect_uri gets silently
-  // blocked by a bare `form-action 'self'`, with no visible error on the page (confirmed: this is
-  // exactly what left a real, successfully-granted authorization stuck on this page — the server-side
-  // logs showed the 302 was issued correctly). oauthReqInfo.redirectUri is already validated by
-  // parseAuthRequest against the registered client's redirect_uris above, so it's safe to allowlist.
+  // blocked by a bare `form-action 'self'`, with no visible error on the page. oauthReqInfo.redirectUri
+  // is already validated by parseAuthRequest against the registered client's redirect_uris above, so
+  // it's safe to allowlist. (Confirmed against Chromium issue 40923007 / content-security-policy.com.)
   let redirectOrigin: string | null = null;
   try {
     redirectOrigin = new URL(oauthReqInfo.redirectUri).origin;
@@ -241,7 +219,7 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(request: Request
       // is normal, and a token that expired mid-read reads to them as "the button does nothing."
       "Set-Cookie": `${CSRF_COOKIE_NAME}=${csrfToken}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`,
       "X-Frame-Options": "DENY",
-      // 'script-src nonce-...' (not 'none'): the inline script below only logs client-side
+      // 'script-src nonce-...' (not 'none'): the inline script above only logs client-side
       // diagnostics and shows submit feedback — nothing it does touches untrusted data (clientName/
       // clientId/redirectUri are rendered as escaped text elsewhere, never interpolated into script).
       // 'form-action' includes the validated redirect_uri's origin, not just 'self' — see above.
@@ -255,12 +233,13 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
   request: Request,
   env: Env,
   identity: { email: string },
+  registeredResourcePaths: ReadonlySet<string>,
 ): Promise<Response> {
   const formData = await request.formData();
-  const flowRef = formData.get("flow_ref");
+  const flowRefField = formData.get("flow_ref");
   // Reuse the GET's ref so its log line and this one correlate under one grep; if it's missing
   // (tampered or pre-dates this field), fall back to a fresh one so this attempt is still traceable.
-  const ref = typeof flowRef === "string" && flowRef ? flowRef : generateFlowRef();
+  const ref = typeof flowRefField === "string" && flowRefField ? flowRefField : generateFlowRef();
 
   const cookieToken = extractCsrfCookie(request);
   const formToken = formData.get("csrf_token");
@@ -293,6 +272,7 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
     if (name === "csrf_token" || name === "flow_ref") continue;
     reconstructedUrl.searchParams.append(name, String(value));
   }
+  console.log(`[authorize:${ref}] POST: resource param(s) observed:`, JSON.stringify(reconstructedUrl.searchParams.getAll("resource")));
 
   let oauthReqInfo: AuthRequest;
   try {
@@ -305,6 +285,20 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
     );
   }
 
+  // Re-validated here, not just on GET: the hidden `resource` field is client-controlled and could
+  // be tampered with between the two requests (a scripted client can skip rendering the page at all).
+  if (env.DISABLE_RESOURCE_ENFORCEMENT !== "true") {
+    const resourceCheck = validateResourceForRegisteredPath(
+      oauthReqInfo.resource,
+      new URL(request.url).origin,
+      registeredResourcePaths,
+    );
+    if (!resourceCheck.ok) {
+      console.error(`[authorize:${ref}] POST: rejected — ${resourceCheck.reason}`);
+      return new Response(`Invalid authorization request: ${resourceCheck.reason} (ref: ${ref})`, { status: 400 });
+    }
+  }
+
   let redirectTo: string;
   try {
     ({ redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
@@ -313,6 +307,13 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
       scope: oauthReqInfo.scope,
       metadata: { label: identity.email },
       props: { email: identity.email } satisfies OAuthProps,
+      // Every server now shares one authorization server and one userId (the operator email). If a
+      // client reuses one DCR client_id across connectors on this issuer (plausible for claude.ai,
+      // which registers per-connection but the registration TTL is long), the library's default
+      // (revoke every existing grant for this userId+clientId) would silently kill an unrelated
+      // connector's grant the moment a new one is approved. Concurrent grants per user+client are
+      // exactly what a multi-server gateway needs, so this must stay false.
+      revokeExistingGrants: false,
     }));
   } catch (err) {
     console.error(`[authorize:${ref}] POST: completeAuthorization threw:`, err instanceof Error ? err.message : err);
@@ -331,19 +332,26 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
 }
 
 /**
- * The OAuth provider's `defaultHandler`: serves `/authorize`, gated by an upstream Cloudflare Access
- * application scoped to that path. `GET` renders a consent page (see `renderAuthorizeConsent`); `POST`
- * (the page's own form submit) completes the grant. Access authentication is re-verified on both
- * methods — the JWT alone answers "who," never "did they mean to approve this specific client."
+ * The OAuth provider's `defaultHandler`: serves `/authorize`, gated by the one Cloudflare Access
+ * application scoped to that path, and delegates every other non-API path (the portal UI, and
+ * anything else) to `portal`. `GET /authorize` renders a consent page (see `renderAuthorizeConsent`);
+ * `POST /authorize` (the page's own form submit) completes the grant. Access authentication is
+ * re-verified on both methods — the JWT alone answers "who," never "did they mean to approve this
+ * specific client." The portal is responsible for its own authorization in code (see
+ * `docs/SETUP.md` — this hostname can no longer be entirely covered by one Access application, since
+ * `/token`, `/register`, and `/.well-known/*` must stay public for machine-to-machine calls).
  */
-export function createAccessAuthorizeHandler<Env extends AuthorizeEnv>(): {
-  fetch(request: Request, env: Env): Promise<Response>;
+export function createAccessAuthorizeHandler<Env extends AuthorizeEnv>(
+  portal: { fetch(request: Request, env: Env, ctx: unknown): Response | Promise<Response> },
+  registeredResourcePaths: ReadonlySet<string>,
+): {
+  fetch(request: Request, env: Env, ctx: unknown): Promise<Response>;
 } {
   return {
-    async fetch(request, env) {
+    async fetch(request, env, ctx) {
       const url = new URL(request.url);
       if (url.pathname !== "/authorize") {
-        return new Response("Not found", { status: 404 });
+        return portal.fetch(request, env, ctx);
       }
 
       console.log(`[authorize] ${request.method} request received.`);
@@ -359,8 +367,8 @@ export function createAccessAuthorizeHandler<Env extends AuthorizeEnv>(): {
         });
       }
 
-      if (request.method === "GET") return renderAuthorizeConsent(request, env);
-      if (request.method === "POST") return completeAuthorizeConsent(request, env, identity);
+      if (request.method === "GET") return renderAuthorizeConsent(request, env, registeredResourcePaths);
+      if (request.method === "POST") return completeAuthorizeConsent(request, env, identity, registeredResourcePaths);
       return new Response("Method not allowed", { status: 405 });
     },
   };
@@ -380,38 +388,59 @@ interface McpAgentClass<Env> {
   };
 }
 
+/** One MCP server's registration in the gateway: its URL slug, `McpAgent` subclass, and DO binding name. */
+export interface McpServerRegistration<Env> {
+  /** URL path prefix, e.g. `"ia"` → served at `/ia/mcp`. */
+  slug: string;
+  /** The `McpAgent` subclass for this server. */
+  agent: McpAgentClass<Env>;
+  /** Durable Object binding name in `wrangler.jsonc`, e.g. `"IA_MCP"`. */
+  binding: string;
+}
+
 /**
- * Wraps an MCP server's `McpAgent` class with OAuth 2.1 + PKCE (via
- * `@cloudflare/workers-oauth-provider`) while preserving the existing static bearer token for
- * server-to-server clients (Claude Code) that can't complete an interactive login. Requests to
- * `/mcp` carrying the exact `MCP_SHARED_TOKEN` bypass the OAuth provider entirely; every other
- * request — including a token-less or wrong-token `/mcp` request — flows through the provider,
- * which returns the spec-correct `401 + WWW-Authenticate: Bearer resource_metadata=…` that
+ * Wraps every MCP server's `McpAgent` class with one shared OAuth 2.1 + PKCE authorization server
+ * (via `@cloudflare/workers-oauth-provider`), path-routed at `/{slug}/mcp`, while preserving the
+ * existing static bearer token for server-to-server clients (Claude Code) that can't complete an
+ * interactive login. Requests to a registered `/{slug}/mcp` path carrying the exact
+ * `MCP_SHARED_TOKEN` bypass the OAuth provider entirely; every other request — including a
+ * token-less or wrong-token request to one of those paths — flows through the provider, which
+ * returns the spec-correct `401 + WWW-Authenticate: Bearer resource_metadata=…` (path-suffixed per
+ * RFC 9728, derived automatically per request by the library — no per-server config needed) that
  * triggers claude.ai's OAuth handshake, and serves `/token`, `/register`, `/authorize`, and the
- * `.well-known` discovery documents.
+ * `.well-known` discovery documents — all shared, at the hostname root, across every server.
+ *
+ * One authorization server for every server means one token store (`OAUTH_KV`): a bug or leak in
+ * OAuth storage is no longer isolated per server, unlike the previous one-Worker-per-server layout.
+ * The per-path `resource`/audience enforcement in `createAccessAuthorizeHandler` is what partially
+ * replaces that isolation — see its docstring and `docs/SETUP.md`.
  */
-export function buildOAuthMcpWorker<Env extends OAuthMcpEnv>(
-  agent: McpAgentClass<Env>,
-  mcpBinding: string,
+export function buildMultiServerOAuthWorker<Env extends OAuthMcpEnv>(
+  servers: readonly McpServerRegistration<Env>[],
+  portal: { fetch(request: Request, env: Env, ctx: unknown): Response | Promise<Response> },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): { fetch(request: Request, env: Env, ctx: any): Promise<Response> } {
-  const mcpHandler = agent.serve("/mcp", { binding: mcpBinding });
+  const mcpHandlers = new Map<string, ReturnType<McpAgentClass<Env>["serve"]>>(
+    servers.map((s) => [`/${s.slug}/mcp`, s.agent.serve(`/${s.slug}/mcp`, { binding: s.binding })]),
+  );
+  const registeredResourcePaths = new Set(mcpHandlers.keys());
 
   const provider = new OAuthProvider<Env>({
-    apiHandlers: { "/mcp": mcpHandler },
+    apiHandlers: Object.fromEntries(mcpHandlers),
     authorizeEndpoint: "/authorize",
     tokenEndpoint: "/token",
     clientRegistrationEndpoint: "/register",
     // OAuth 2.1 drops plain PKCE; only accept/advertise S256.
     allowPlainPKCE: false,
-    defaultHandler: createAccessAuthorizeHandler<Env>(),
+    defaultHandler: createAccessAuthorizeHandler<Env>(portal, registeredResourcePaths),
   });
 
   return {
     fetch(request, env, ctx) {
       const url = new URL(request.url);
-      if (url.pathname === "/mcp" && bearerTokenMatches(request, env.MCP_SHARED_TOKEN)) {
-        return mcpHandler.fetch(request, env, ctx);
+      const direct = mcpHandlers.get(url.pathname);
+      if (direct && bearerTokenMatches(request, env.MCP_SHARED_TOKEN)) {
+        return direct.fetch(request, env, ctx);
       }
       return provider.fetch(request, env, ctx);
     },
