@@ -1,4 +1,4 @@
-import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
+import { fetchWithBackoff, UpstreamHttpError } from "@iolab/mcp-kit";
 
 const BASE_URL = "https://api.geonet.org.nz";
 const SOURCE = "GeoNet API";

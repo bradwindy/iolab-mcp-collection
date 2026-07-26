@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateEncryptionKey, setCredential } from "@nz-mcp/credentials";
+import { generateEncryptionKey, setCredential } from "@iolab/credentials";
 import { searchMarketAnnouncementsHandler } from "../src/tools/searchMarketAnnouncements.js";
 import { NZXPLORER_API_KEY, SERVER_SLUG } from "../src/constants.js";
 import { createFakeCredentialsDb } from "./fakeCredentialsDb.js";

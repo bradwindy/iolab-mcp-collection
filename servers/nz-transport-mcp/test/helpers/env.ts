@@ -1,5 +1,5 @@
-import { encryptValue } from "@nz-mcp/credentials";
-import type { D1LikeDatabase, D1LikeStatement } from "@nz-mcp/credentials";
+import { encryptValue } from "@iolab/credentials";
+import type { D1LikeDatabase, D1LikeStatement } from "@iolab/credentials";
 
 /** Base64 encoding of 32 zero bytes — a validly-shaped (but obviously not secret) AES-256-GCM key for tests. */
 export const TEST_ENCRYPTION_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -17,7 +17,7 @@ export function fakeKv(): { get(key: string): Promise<string | null>; put(key: s
   };
 }
 
-/** Minimal in-memory D1 fake satisfying @nz-mcp/credentials' D1LikeDatabase interface. */
+/** Minimal in-memory D1 fake satisfying @iolab/credentials' D1LikeDatabase interface. */
 function fakeCredentialsDb(rows: Map<string, string>): D1LikeDatabase {
   return {
     prepare(query: string): D1LikeStatement {

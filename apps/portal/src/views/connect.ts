@@ -3,7 +3,7 @@ import type { ServerManifestEntry } from "../manifest.js";
 import { layout } from "./layout.js";
 
 function mcpUrl(entry: ServerManifestEntry, baseDomain: string) {
-  return `https://${entry.subdomain}.${baseDomain}/mcp`;
+  return `https://mcp.${baseDomain}/${entry.pathPrefix}/mcp`;
 }
 
 function connectCommand(entry: ServerManifestEntry, token: string, baseDomain: string) {
@@ -19,7 +19,7 @@ export function renderConnect(
   return layout(
     "Connect",
     html`
-      <p><a href="/">&larr; Back to dashboard</a></p>
+      <p><a href="/admin">&larr; Back to dashboard</a></p>
       <h1>Connect to Claude Code / claude.ai</h1>
       <p>
         Every server in the collection is a remote MCP server that shares one bearer token.

@@ -1,4 +1,4 @@
-import { getCredential } from "@nz-mcp/credentials";
+import { getCredential } from "@iolab/credentials";
 import { AT_SUBSCRIPTION_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 /** Fetch and decrypt this server's Auckland Transport subscription key, if one has been set. */

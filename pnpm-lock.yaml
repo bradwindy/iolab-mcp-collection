@@ -27,15 +27,54 @@ importers:
         specifier: ^8.63.0
         version: 8.63.0(eslint@10.6.0)(typescript@6.0.3)
 
-  apps/portal:
+  apps/gateway:
     dependencies:
-      '@nz-mcp/credentials':
+      '@iolab/mcp-kit':
         specifier: workspace:*
-        version: link:../../packages/credentials
-      hono:
-        specifier: ^4.12.28
-        version: 4.12.28
+        version: link:../../packages/mcp-kit
+      '@iolab/nz-culture-mcp':
+        specifier: workspace:*
+        version: link:../../servers/nz-culture-mcp
+      '@iolab/nz-environment-mcp':
+        specifier: workspace:*
+        version: link:../../servers/nz-environment-mcp
+      '@iolab/nz-geo-mcp':
+        specifier: workspace:*
+        version: link:../../servers/nz-geo-mcp
+      '@iolab/nz-govt-mcp':
+        specifier: workspace:*
+        version: link:../../servers/nz-govt-mcp
+      '@iolab/nz-markets-mcp':
+        specifier: workspace:*
+        version: link:../../servers/nz-markets-mcp
+      '@iolab/nz-stats-mcp':
+        specifier: workspace:*
+        version: link:../../servers/nz-stats-mcp
+      '@iolab/nz-transport-mcp':
+        specifier: workspace:*
+        version: link:../../servers/nz-transport-mcp
+      '@iolab/portal':
+        specifier: workspace:*
+        version: link:../portal
+      '@modelcontextprotocol/sdk':
+        specifier: 1.29.0
+        version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      agents:
+        specifier: ^0.17.3
+        version: 0.17.3(@babel/core@8.0.1)(@babel/runtime@7.29.7)(react@19.2.7)(rolldown@1.1.5)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0))(zod@4.4.3)
+      zod:
+        specifier: ^4.1.10
+        version: 4.4.3
     devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: ^0.18.4
+        version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
+      '@cloudflare/workers-oauth-provider':
+        specifier: ^0.8.1
+        version: 0.8.1
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -45,6 +84,28 @@ importers:
       wrangler:
         specifier: ^4.110.0
         version: 4.110.0
+
+  apps/portal:
+    dependencies:
+      '@iolab/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
+      '@iolab/mcp-kit':
+        specifier: workspace:*
+        version: link:../../packages/mcp-kit
+      hono:
+        specifier: ^4.12.28
+        version: 4.12.28
+    devDependencies:
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.3
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0))
 
   packages/credentials:
     devDependencies:
@@ -76,15 +137,15 @@ importers:
 
   servers/nz-culture-mcp:
     dependencies:
+      '@iolab/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
+      '@iolab/mcp-kit':
+        specifier: workspace:*
+        version: link:../../packages/mcp-kit
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
-      '@nz-mcp/credentials':
-        specifier: workspace:*
-        version: link:../../packages/credentials
-      '@nz-mcp/mcp-kit':
-        specifier: workspace:*
-        version: link:../../packages/mcp-kit
       agents:
         specifier: ^0.17.3
         version: 0.17.3(@babel/core@8.0.1)(@babel/runtime@7.29.7)(react@19.2.7)(rolldown@1.1.5)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0))(zod@4.4.3)
@@ -95,12 +156,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
-      '@cloudflare/workers-oauth-provider':
-        specifier: ^0.8.1
-        version: 0.8.1
-      jose:
-        specifier: ^6.2.3
-        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -113,15 +168,15 @@ importers:
 
   servers/nz-environment-mcp:
     dependencies:
+      '@iolab/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
+      '@iolab/mcp-kit':
+        specifier: workspace:*
+        version: link:../../packages/mcp-kit
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
-      '@nz-mcp/credentials':
-        specifier: workspace:*
-        version: link:../../packages/credentials
-      '@nz-mcp/mcp-kit':
-        specifier: workspace:*
-        version: link:../../packages/mcp-kit
       agents:
         specifier: ^0.17.3
         version: 0.17.3(@babel/core@8.0.1)(@babel/runtime@7.29.7)(react@19.2.7)(rolldown@1.1.5)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0))(zod@4.4.3)
@@ -132,12 +187,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
-      '@cloudflare/workers-oauth-provider':
-        specifier: ^0.8.1
-        version: 0.8.1
-      jose:
-        specifier: ^6.2.3
-        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -150,15 +199,15 @@ importers:
 
   servers/nz-geo-mcp:
     dependencies:
+      '@iolab/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
+      '@iolab/mcp-kit':
+        specifier: workspace:*
+        version: link:../../packages/mcp-kit
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
-      '@nz-mcp/credentials':
-        specifier: workspace:*
-        version: link:../../packages/credentials
-      '@nz-mcp/mcp-kit':
-        specifier: workspace:*
-        version: link:../../packages/mcp-kit
       agents:
         specifier: ^0.17.3
         version: 0.17.3(@babel/core@8.0.1)(@babel/runtime@7.29.7)(react@19.2.7)(rolldown@1.1.5)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0))(zod@4.4.3)
@@ -169,12 +218,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
-      '@cloudflare/workers-oauth-provider':
-        specifier: ^0.8.1
-        version: 0.8.1
-      jose:
-        specifier: ^6.2.3
-        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -187,12 +230,12 @@ importers:
 
   servers/nz-govt-mcp:
     dependencies:
+      '@iolab/mcp-kit':
+        specifier: workspace:*
+        version: link:../../packages/mcp-kit
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
-      '@nz-mcp/mcp-kit':
-        specifier: workspace:*
-        version: link:../../packages/mcp-kit
       agents:
         specifier: ^0.17.3
         version: 0.17.3(@babel/core@8.0.1)(@babel/runtime@7.29.7)(react@19.2.7)(rolldown@1.1.5)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0))(zod@4.4.3)
@@ -203,12 +246,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
-      '@cloudflare/workers-oauth-provider':
-        specifier: ^0.8.1
-        version: 0.8.1
-      jose:
-        specifier: ^6.2.3
-        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -221,15 +258,15 @@ importers:
 
   servers/nz-markets-mcp:
     dependencies:
+      '@iolab/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
+      '@iolab/mcp-kit':
+        specifier: workspace:*
+        version: link:../../packages/mcp-kit
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
-      '@nz-mcp/credentials':
-        specifier: workspace:*
-        version: link:../../packages/credentials
-      '@nz-mcp/mcp-kit':
-        specifier: workspace:*
-        version: link:../../packages/mcp-kit
       agents:
         specifier: ^0.17.3
         version: 0.17.3(@babel/core@8.0.1)(@babel/runtime@7.29.7)(react@19.2.7)(rolldown@1.1.5)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0))(zod@4.4.3)
@@ -240,12 +277,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
-      '@cloudflare/workers-oauth-provider':
-        specifier: ^0.8.1
-        version: 0.8.1
-      jose:
-        specifier: ^6.2.3
-        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -258,15 +289,15 @@ importers:
 
   servers/nz-stats-mcp:
     dependencies:
+      '@iolab/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
+      '@iolab/mcp-kit':
+        specifier: workspace:*
+        version: link:../../packages/mcp-kit
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
-      '@nz-mcp/credentials':
-        specifier: workspace:*
-        version: link:../../packages/credentials
-      '@nz-mcp/mcp-kit':
-        specifier: workspace:*
-        version: link:../../packages/mcp-kit
       agents:
         specifier: ^0.17.3
         version: 0.17.3(@babel/core@8.0.1)(@babel/runtime@7.29.7)(react@19.2.7)(rolldown@1.1.5)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0))(zod@4.4.3)
@@ -277,12 +308,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
-      '@cloudflare/workers-oauth-provider':
-        specifier: ^0.8.1
-        version: 0.8.1
-      jose:
-        specifier: ^6.2.3
-        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -295,15 +320,15 @@ importers:
 
   servers/nz-transport-mcp:
     dependencies:
+      '@iolab/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
+      '@iolab/mcp-kit':
+        specifier: workspace:*
+        version: link:../../packages/mcp-kit
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
-      '@nz-mcp/credentials':
-        specifier: workspace:*
-        version: link:../../packages/credentials
-      '@nz-mcp/mcp-kit':
-        specifier: workspace:*
-        version: link:../../packages/mcp-kit
       agents:
         specifier: ^0.17.3
         version: 0.17.3(@babel/core@8.0.1)(@babel/runtime@7.29.7)(react@19.2.7)(rolldown@1.1.5)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0))(zod@4.4.3)
@@ -314,12 +339,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.18.4
         version: 0.18.4(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(yaml@2.9.0)))
-      '@cloudflare/workers-oauth-provider':
-        specifier: ^0.8.1
-        version: 0.8.1
-      jose:
-        specifier: ^6.2.3
-        version: 6.2.3
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

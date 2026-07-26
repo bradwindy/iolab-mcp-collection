@@ -9,7 +9,7 @@ import {
   toolError,
   truncationNotice,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { ArcgisQueryError } from "../clients/arcgisFeatureServer.js";
 import { getAllLicenceHolderRows, SOURCE, type LicenceHolderRow } from "../clients/driverLicenceHolders.js";
 

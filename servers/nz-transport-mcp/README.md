@@ -89,9 +89,9 @@ Reference docs: [developer portal](https://dev-portal.at.govt.nz/) ·
 
 ```
 pnpm install   # from the monorepo root
-pnpm --filter @nz-mcp/nz-transport-mcp typecheck
-pnpm --filter @nz-mcp/nz-transport-mcp test
-pnpm --filter @nz-mcp/nz-transport-mcp dev
+pnpm --filter @iolab/nz-transport-mcp typecheck
+pnpm --filter @iolab/nz-transport-mcp test
+pnpm --filter @iolab/nz-transport-mcp dev
 ```
 
 See `.dev.vars.example` for the local secrets `wrangler dev` expects.

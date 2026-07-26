@@ -1,7 +1,7 @@
-import type { D1LikeDatabase } from "@nz-mcp/credentials";
+import type { D1LikeDatabase } from "@iolab/credentials";
 
 /**
- * In-memory fake satisfying the D1LikeDatabase surface @nz-mcp/credentials depends on —
+ * In-memory fake satisfying the D1LikeDatabase surface @iolab/credentials depends on —
  * same pattern as packages/credentials/test/store.test.ts. Lets route tests exercise the
  * real setCredential/getCredential/listCredentialStatus/deleteCredential functions (and
  * therefore real AES-256-GCM encryption) without a live D1 binding.
@@ -59,6 +59,10 @@ export class FakeD1 implements D1LikeDatabase {
   }
 }
 
+/** Matches the constants signed into test Access JWTs — see test/support/accessJwt.ts. */
+export const TEST_ACCESS_TEAM_DOMAIN = "test-team.cloudflareaccess.com";
+export const TEST_ACCESS_AUD = "test-aud-tag";
+
 /** Build a test Env. Loosely typed on purpose — Hono's `app.request(path, init, env)`
  * accepts `Bindings | {}`, so any shape is accepted; TypeScript inside route handlers still
  * sees the real `Env` type. */
@@ -77,5 +81,7 @@ export function testEnv(
     MCP_SHARED_TOKEN: overrides.sharedToken ?? "test-shared-token",
     BASE_DOMAIN: overrides.baseDomain ?? "example.com",
     ACCESS_EMAIL: overrides.accessEmail ?? "you@example.com",
+    ACCESS_TEAM_DOMAIN: TEST_ACCESS_TEAM_DOMAIN,
+    ACCESS_AUD: TEST_ACCESS_AUD,
   };
 }

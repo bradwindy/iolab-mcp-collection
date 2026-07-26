@@ -1,0 +1,27 @@
+# Copy to .dev.vars for local `wrangler dev`. Never commit the real file.
+# Every secret every registered server + the mounted portal + the OAuth machinery needs — see
+# docs/SETUP.md. This is now the ONE place they're set (was: once per server, eight times).
+
+# Must be the SAME value every MCP client (Claude Code) presents as its bearer token.
+MCP_SHARED_TOKEN=replace-with-a-long-random-string
+# Base URL of this deployed gateway, used only to build the actionable link in
+# missing-credential error messages.
+PORTAL_URL=https://mcp.example.com
+
+# Generate with: node -e "console.log(require('@nz-mcp/credentials').generateEncryptionKey())"
+ENCRYPTION_KEY=replace-with-output-of-generateEncryptionKey
+# Bare base domain this gateway is deployed behind (no protocol, no subdomain).
+BASE_DOMAIN=example.com
+
+# Cloudflare Zero Trust team domain and the AUD tag of the ONE Access application scoped to
+# /authorize (see docs/SETUP.md §8) — shared by the OAuth machinery and the /admin/* guard.
+ACCESS_TEAM_DOMAIN=your-team.cloudflareaccess.com
+ACCESS_AUD=replace-with-the-authorize-access-application-aud-tag
+# Shown on the Connect page as a reminder of who Cloudflare Access allows through, and the one
+# email verifyAccessJwt accepts.
+ACCESS_EMAIL=you@example.com
+
+# Leave unset. Only set to the exact string "true" during cutover if a real OAuth client turns out
+# not to send an RFC 8707 `resource` parameter the way claude.ai is expected to — see
+# packages/mcp-kit/src/oauth.ts's OAuthMcpEnv docstring.
+# DISABLE_RESOURCE_ENFORCEMENT=true

@@ -12,7 +12,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { searchDigitalNz as searchDigitalNzClient, type DigitalNzRecord } from "../clients/digitalnz.js";
 
 export const searchDigitalnzInputShape = {

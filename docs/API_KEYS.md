@@ -34,20 +34,20 @@ is missing and where to set it — everything else works immediately after deplo
 1. Visit [data.tepapa.govt.nz/docs/register.html](https://data.tepapa.govt.nz/docs/register.html) and
    register for an API key (a guest key is also available in their API browser for quick exploration,
    but a self-registered key is recommended for regular use).
-2. Enter it in the portal at `/servers/nz-culture-mcp` as `TE_PAPA_API_KEY`.
+2. Enter it in the portal at `/admin/servers/nz-culture-mcp` as `TE_PAPA_API_KEY`.
 
 ### `STATS_NZ_SUBSCRIPTION_KEY` — Stats NZ Aotearoa Data Explorer (`nz-stats-mcp`)
 
 1. Create an account at [portal.apis.stats.govt.nz](https://portal.apis.stats.govt.nz/).
 2. Follow [How to subscribe](https://portal.apis.stats.govt.nz/how-to-subscribe) to subscribe to the
    relevant API product and generate a subscription key.
-3. Enter it in the portal at `/servers/nz-stats-mcp` as `STATS_NZ_SUBSCRIPTION_KEY`.
+3. Enter it in the portal at `/admin/servers/nz-stats-mcp` as `STATS_NZ_SUBSCRIPTION_KEY`.
 
 ### `LINZ_API_KEY` — LINZ Data Service (`nz-geo-mcp`)
 
 1. Create a LINZ Data Service account and follow
    [Create an API key](https://www.linz.govt.nz/guidance/data-service/linz-data-service-guide/web-services/creating-api-key).
-2. Enter it in the portal at `/servers/nz-geo-mcp` as `LINZ_API_KEY`.
+2. Enter it in the portal at `/admin/servers/nz-geo-mcp` as `LINZ_API_KEY`.
 
 ### `LINZ_BASEMAPS_API_KEY` — LINZ Basemaps (`nz-geo-mcp`)
 
@@ -56,7 +56,7 @@ A **separate** credential system from LINZ Data Service, even though both are ru
 1. Follow [Get started](https://basemaps.linz.govt.nz/docs/user-guide/_get-started/) — a no-signup,
    90-day "dynamic" key is issued automatically when you visit basemaps.linz.govt.nz, or email
    basemaps@linz.govt.nz for a non-expiring Developer key for production use.
-2. Enter it in the portal at `/servers/nz-geo-mcp` as `LINZ_BASEMAPS_API_KEY`.
+2. Enter it in the portal at `/admin/servers/nz-geo-mcp` as `LINZ_BASEMAPS_API_KEY`.
 
 ### `NIWA_API_KEY` — NIWA Tides / UV / CO2 (`nz-environment-mcp`)
 
@@ -64,20 +64,20 @@ One key covers all three NIWA APIs this server wraps.
 
 1. Sign in to the [NIWA developer portal](https://developer.niwa.co.nz/get-started), register an app
    name, and generate an API key.
-2. Enter it in the portal at `/servers/nz-environment-mcp` as `NIWA_API_KEY`.
+2. Enter it in the portal at `/admin/servers/nz-environment-mcp` as `NIWA_API_KEY`.
 
 ### `AT_SUBSCRIPTION_KEY` — Auckland Transport Developer APIs (`nz-transport-mcp`)
 
 1. Sign up at the [AT developer portal](https://dev-portal.at.govt.nz/) and subscribe to the Realtime
    and GTFS API products to get a subscription key. Free tier limits: 600 calls/minute, 35,000/week —
    this server caches the realtime feeds to stay well inside that budget.
-2. Enter it in the portal at `/servers/nz-transport-mcp` as `AT_SUBSCRIPTION_KEY`.
+2. Enter it in the portal at `/admin/servers/nz-transport-mcp` as `AT_SUBSCRIPTION_KEY`.
 
 ### `NZXPLORER_API_KEY` — NZXplorer (`nz-markets-mcp`)
 
 1. Create an account at [nzxplorer.co.nz](https://nzxplorer.co.nz/), then go to
    **Settings → API & Developer** and generate a key. Free tier: 10 requests/minute.
-2. Enter it in the portal at `/servers/nz-markets-mcp` as `NZXPLORER_API_KEY`.
+2. Enter it in the portal at `/admin/servers/nz-markets-mcp` as `NZXPLORER_API_KEY`.
 
 ### `EA_ICP_API_KEY` and `EA_DISPATCH_API_KEY` — Electricity Authority EMI APIs (`nz-markets-mcp`)
 
@@ -88,7 +88,7 @@ One key covers all three NIWA APIs this server wraps.
 2. Subscribe to the **ICP connection data** product for `EA_ICP_API_KEY`, and separately to the
    **Wholesale market prices** product for `EA_DISPATCH_API_KEY` (this is what gates the real-time
    dispatch tool — the product is not named "dispatch"). Both require manual EA admin approval.
-3. Enter both in the portal at `/servers/nz-markets-mcp`.
+3. Enter both in the portal at `/admin/servers/nz-markets-mcp`.
 
 ## A note on scope
 

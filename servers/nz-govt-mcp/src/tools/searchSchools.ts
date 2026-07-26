@@ -12,7 +12,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { datastoreSearch, type DatastoreRecord } from "../clients/datagovt.js";
 import { SCHOOLS_DIRECTORY_RESOURCE_ID } from "../constants.js";
 

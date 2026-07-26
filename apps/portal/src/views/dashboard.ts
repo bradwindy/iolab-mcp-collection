@@ -1,5 +1,5 @@
 import { html } from "hono/html";
-import type { CredentialStatus } from "@nz-mcp/credentials";
+import type { CredentialStatus } from "@iolab/credentials";
 import type { ServerManifestEntry } from "../manifest.js";
 import { layout } from "./layout.js";
 
@@ -17,11 +17,11 @@ function statusBadge(status: CredentialStatus) {
 function serverCard(row: DashboardServerRow, baseDomain: string) {
   const { entry, statuses } = row;
   const statusByKey = new Map(statuses.map((status) => [status.keyName, status]));
-  const url = `https://${entry.subdomain}.${baseDomain}/mcp`;
+  const url = `https://mcp.${baseDomain}/${entry.pathPrefix}/mcp`;
 
   return html`
     <article class="card">
-      <h2><a href="/servers/${entry.slug}">${entry.slug}</a></h2>
+      <h2><a href="/admin/servers/${entry.slug}">${entry.slug}</a></h2>
       <p class="url"><a href="${url}">${url}</a></p>
       ${
         entry.credentialKeys.length === 0
@@ -33,7 +33,7 @@ function serverCard(row: DashboardServerRow, baseDomain: string) {
               })}
             </ul>`
       }
-      <p><a class="button" href="/servers/${entry.slug}">Manage credentials</a></p>
+      <p><a class="button" href="/admin/servers/${entry.slug}">Manage credentials</a></p>
     </article>
   `;
 }
@@ -45,7 +45,7 @@ export function renderDashboard(rows: readonly DashboardServerRow[], baseDomain:
       <h1>MCP Server Dashboard</h1>
       <p>
         Every server in the nz-mcp-collection, its live MCP endpoint, and whether its required
-        upstream API keys are set. See <a href="/connect">Connect</a> for how to add these to
+        upstream API keys are set. See <a href="/admin/connect">Connect</a> for how to add these to
         Claude Code or claude.ai.
       </p>
       <div class="grid">${rows.map((row) => serverCard(row, baseDomain))}</div>

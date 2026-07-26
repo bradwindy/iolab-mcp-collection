@@ -1,4 +1,4 @@
-import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
+import { fetchWithBackoff, UpstreamHttpError } from "@iolab/mcp-kit";
 
 const REALTIME_BASE = "https://api.at.govt.nz/realtime/legacy";
 const GTFS_BASE = "https://api.at.govt.nz/gtfs/v3";

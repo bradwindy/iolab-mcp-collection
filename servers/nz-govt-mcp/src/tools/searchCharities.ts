@@ -12,7 +12,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { searchCharities as searchCharitiesClient, type CharityRecord } from "../clients/charities.js";
 
 export const searchCharitiesInputShape = {

@@ -1,5 +1,5 @@
 /**
- * A minimal in-memory stand-in for a Workers KV namespace, satisfying @nz-mcp/mcp-kit's
+ * A minimal in-memory stand-in for a Workers KV namespace, satisfying @iolab/mcp-kit's
  * CacheNamespace structural interface (get/put only — that's all `cached()` uses).
  */
 export function createFakeKv() {

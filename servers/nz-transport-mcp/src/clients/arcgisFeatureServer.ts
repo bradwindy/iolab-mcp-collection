@@ -1,4 +1,4 @@
-import { fetchWithBackoff } from "@nz-mcp/mcp-kit";
+import { fetchWithBackoff } from "@iolab/mcp-kit";
 
 // Shared query helper for NZTA's three open ArcGIS FeatureServer/0 layers (TMS daily traffic counts,
 // motor vehicle register, driver licence holders) — all three expose the identical Esri REST query

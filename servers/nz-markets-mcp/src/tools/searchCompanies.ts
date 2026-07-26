@@ -14,8 +14,8 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
-import { getCredential } from "@nz-mcp/credentials";
+} from "@iolab/mcp-kit";
+import { getCredential } from "@iolab/credentials";
 import { NZXPLORER_API_KEY, SERVER_SLUG } from "../constants.js";
 import { listAllCompanies, type CompanySummary } from "../clients/nzxplorer.js";
 

@@ -1,4 +1,4 @@
-import { fetchWithBackoff, UpstreamHttpError } from "@nz-mcp/mcp-kit";
+import { fetchWithBackoff, UpstreamHttpError } from "@iolab/mcp-kit";
 
 const BASE_URL = "https://data.tepapa.govt.nz/collection";
 const SOURCE = "Te Papa Collections API";

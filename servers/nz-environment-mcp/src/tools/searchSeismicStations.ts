@@ -12,7 +12,7 @@ import {
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
-} from "@nz-mcp/mcp-kit";
+} from "@iolab/mcp-kit";
 import { searchStations, type FdsnStationRecord } from "../clients/geonetFdsn.js";
 
 export const searchSeismicStationsInputShape = {

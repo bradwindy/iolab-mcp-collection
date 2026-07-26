@@ -1,5 +1,5 @@
-import { getCredential } from "@nz-mcp/credentials";
-import { missingCredentialError, type ToolTextResult } from "@nz-mcp/mcp-kit";
+import { getCredential } from "@iolab/credentials";
+import { missingCredentialError, type ToolTextResult } from "@iolab/mcp-kit";
 import { CREDENTIAL_SERVER_SLUG, SUBSCRIPTION_KEY_NAME } from "./constants.js";
 
 export type CredentialResolution =

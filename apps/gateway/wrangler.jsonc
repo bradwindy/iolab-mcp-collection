@@ -1,0 +1,48 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "iolab-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "NZ_CULTURE_MCP", "class_name": "NzCultureMcp" },
+      { "name": "NZ_ENVIRONMENT_MCP", "class_name": "NzEnvironmentMcp" },
+      { "name": "NZ_GEO_MCP", "class_name": "NzGeoMcp" },
+      { "name": "NZ_GOVT_MCP", "class_name": "NzGovtMcp" },
+      { "name": "NZ_MARKETS_MCP", "class_name": "NzMarketsMcp" },
+      { "name": "NZ_STATS_MCP", "class_name": "NzStatsMcp" },
+      { "name": "NZ_TRANSPORT_MCP", "class_name": "NzTransportMcp" }
+      // IA_MCP / InternetArchiveMcp is added here in Part 2 of the gateway plan.
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "NzCultureMcp",
+        "NzEnvironmentMcp",
+        "NzGeoMcp",
+        "NzGovtMcp",
+        "NzMarketsMcp",
+        "NzStatsMcp",
+        "NzTransportMcp"
+      ]
+    }
+  ],
+  "kv_namespaces": [
+    // Shared cache, unchanged from the per-server layout — reused as-is, no reason to recreate it.
+    { "binding": "MCP_CACHE", "id": "bac29680ac6a419284c9a522b241ae8a" },
+    // NEW namespace, deliberately not one of the seven old per-server OAUTH_KV namespaces (see
+    // docs/SETUP.md and the plan's §1.4): one shared authorization server means one token store,
+    // so starting clean means every client re-authorizes once during the cutover, which is the
+    // intended behaviour.
+    { "binding": "OAUTH_KV", "id": "bc24c9d543d64858965f6decaf9dda4b" }
+  ],
+  "d1_databases": [
+    // Same shared credentials database every server and the portal already use — unchanged.
+    { "binding": "CREDENTIALS_DB", "database_name": "nz-mcp-credentials", "database_id": "5c6248bf-f226-46b0-aa2b-a6a9bc2ca790" }
+  ],
+  "routes": [{ "pattern": "mcp.yourdomain.com", "custom_domain": true }],
+  "observability": { "enabled": true }
+}

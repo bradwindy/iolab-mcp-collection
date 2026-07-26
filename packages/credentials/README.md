@@ -1,4 +1,4 @@
-# @nz-mcp/credentials
+# @iolab/credentials
 
 The shared, encrypted credential store: the portal writes upstream API keys here; every MCP server reads
 and decrypts them at request time. Internal workspace package, not published to npm.
@@ -9,7 +9,7 @@ One D1 database (`nz-mcp-credentials`), one table:
 
 ```sql
 CREATE TABLE credentials (
-  server TEXT NOT NULL,      -- matches the reading/writing server's wrangler.jsonc "name"
+  server TEXT NOT NULL,      -- matches the reading/writing server's SERVER_SLUG constant
   key_name TEXT NOT NULL,    -- e.g. "LINZ_API_KEY"
   value TEXT NOT NULL,       -- base64(iv[12] || AES-256-GCM ciphertext+tag)
   updated_at TEXT NOT NULL,

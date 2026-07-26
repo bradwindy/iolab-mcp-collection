@@ -1,4 +1,4 @@
-import { getCredential } from "@nz-mcp/credentials";
+import { getCredential } from "@iolab/credentials";
 import { NIWA_API_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 /** Look up the shared NIWA API key from the encrypted credentials store. Null if unset. */

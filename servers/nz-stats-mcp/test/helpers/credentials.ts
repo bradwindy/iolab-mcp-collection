@@ -1,4 +1,4 @@
-import { setCredential } from "@nz-mcp/credentials";
+import { setCredential } from "@iolab/credentials";
 
 const CREATE_TABLE_SQL =
   "CREATE TABLE IF NOT EXISTS credentials (server TEXT NOT NULL, key_name TEXT NOT NULL, value TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (server, key_name))";

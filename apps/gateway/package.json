@@ -1,0 +1,35 @@
+{
+  "name": "@iolab/gateway",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The single deployed Worker for the whole fleet: one OAuth authorization server, one Cloudflare Access application scoped to /authorize, the credential portal mounted under /admin, and every MCP server routed by path — /{slug}/mcp.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@iolab/mcp-kit": "workspace:*",
+    "@iolab/nz-culture-mcp": "workspace:*",
+    "@iolab/nz-environment-mcp": "workspace:*",
+    "@iolab/nz-geo-mcp": "workspace:*",
+    "@iolab/nz-govt-mcp": "workspace:*",
+    "@iolab/nz-markets-mcp": "workspace:*",
+    "@iolab/nz-stats-mcp": "workspace:*",
+    "@iolab/nz-transport-mcp": "workspace:*",
+    "@iolab/portal": "workspace:*",
+    "agents": "^0.17.3",
+    "zod": "^4.1.10"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.4",
+    "@cloudflare/workers-oauth-provider": "^0.8.1",
+    "jose": "^6.2.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.110.0"
+  }
+}
