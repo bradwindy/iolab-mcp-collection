@@ -2,7 +2,7 @@
 
 A collection of remote [MCP](https://modelcontextprotocol.io) servers clustered by research domain
 and served from **one Cloudflare Worker** at one hostname — free and self-service New Zealand
-public APIs, plus Internet Archive / Wayback Machine research.
+public APIs, plus Internet Archive / Wayback Machine and Wikimedia reference research.
 
 Built from the API inventory in [api-catalog](https://github.com/bradwindy/api-catalog) (24 NZ public
 APIs) following the clustering and tool-design guidance in
@@ -22,11 +22,12 @@ than 1:1 endpoint wraps, paginate everything, and keep response payloads lean.
 | [`nz-environment-mcp`](servers/nz-environment-mcp) | Hazards, weather & climate | 9 | GeoNet, GeoNet FDSN, NIWA Tides/UV/CO2 | `/nz-environment/mcp` |
 | [`nz-transport-mcp`](servers/nz-transport-mcp) | Traffic & transport | 10 | Auckland Transport, NZTA Traffic & Travel, NZTA TMS/MVR/Licence datasets | `/nz-transport/mcp` |
 | [`nz-markets-mcp`](servers/nz-markets-mcp) | Lending rates & markets | 7 | Rates API, NZXplorer, Electricity Authority EMI | `/nz-markets/mcp` |
+| [`wikimedia-mcp`](servers/wikimedia-mcp) | Encyclopedia, media & structured knowledge | 11 | Wikipedia + sister-project Action APIs, Wikimedia Commons, Wikibase REST API, Wikidata Query Service | `/wikimedia/mcp` |
 
 Every server:
 
 - exposes tools designed around research questions, not raw endpoints (`{prefix}_verb_noun` — `nz_{domain}_`
-  for the NZ servers, `ia_` for `ia-mcp` — always paginated, always attributed to its upstream source and license)
+  for the NZ servers, `ia_` for `ia-mcp`, `wikimedia_` for `wikimedia-mcp` — always paginated, always attributed to its upstream source and license)
 - runs read-only, with `readOnlyHint`/`openWorldHint` annotations on every tool
 - is an `McpAgent` (Cloudflare [Agents SDK](https://developers.cloudflare.com/agents/)) served over
   Streamable HTTP at its own path on the one gateway Worker (`/{slug}/mcp` — see the table above)
@@ -52,7 +53,7 @@ research questions it can answer.
                     │   ONE Worker · ONE OAuthProvider             │
                     │                                              │
                     │   /authorize /token /register /.well-known/* │
-                    │   /{slug}/mcp  ×8  (bearer OR OAuth token,   │
+                    │   /{slug}/mcp  ×9  (bearer OR OAuth token,   │
                     │                     per-path audience check) │
                     │   /             public landing page          │
                     │   /admin/*      portal — Access checked in   │
@@ -68,12 +69,13 @@ research questions it can answer.
     ┌───────────┬───────────────┬───────────────┼───────────────┬───────────────┬──────────────┐
     ▼           ▼               ▼               ▼               ▼               ▼              ▼
  ia-mcp   nz-govt-mcp    nz-culture-mcp   nz-stats-mcp     nz-geo-mcp    nz-environment  nz-transport
-                                                                                nz-markets-mcp
-   (8 servers, each an McpAgent Durable Object registered into the one gateway Worker)
+ wikimedia-mcp                                                                  nz-markets-mcp
+   (9 servers, each an McpAgent Durable Object registered into the one gateway Worker)
     │           │               │               │               │               │              │
     ▼           ▼               ▼               ▼               ▼               ▼              ▼
  Internet Archive / Wayback     live NZ public / self-service APIs (Charities Register, GeoNet,
-     Machine, Open Library            LINZ, NIWA, Stats NZ, AT, NZTA, ...)
+  Machine, Open Library,             LINZ, NIWA, Stats NZ, AT, NZTA, ...)
+  Wikipedia / Commons / Wikidata
 ```
 
 - **Gateway** (`apps/gateway`): the one deployed Worker. Owns the `wrangler.jsonc`, the one shared
@@ -146,7 +148,7 @@ apps/
   gateway/        the one deployed Worker — OAuth machinery, server registry, wrangler.jsonc
   portal/         credential-management web app (Hono), mounted by the gateway under /admin
 servers/
-  nz-govt-mcp/    (and 6 more — one directory per MCP server, no wrangler.jsonc of its own)
+  nz-govt-mcp/    (and 8 more — one directory per MCP server, no wrangler.jsonc of its own)
 docs/
   SETUP.md
   API_KEYS.md

@@ -263,6 +263,14 @@ describe("multi-server OAuth security", () => {
       const response = await attemptAuthorize(client, [resourceFor("nz-geo")]);
       expect(response.status).toBe(200);
     });
+
+    it("accepts the wikimedia slug, proving a newly registered server joins the audience allowlist", async () => {
+      // The allowlist is derived from SERVERS, so a server that is registered but somehow not
+      // routed would fail here rather than silently 400ing every OAuth authorization for it.
+      const client = await registerClient();
+      const response = await attemptAuthorize(client, [resourceFor("wikimedia")]);
+      expect(response.status).toBe(200);
+    });
   });
 
   describe("revokeExistingGrants: false (finding A)", () => {

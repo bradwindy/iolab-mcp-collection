@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { findServer, SERVERS } from "../src/manifest.js";
 
 describe("manifest", () => {
-  it("has 8 servers with unique slugs and unique path prefixes", () => {
+  it("has 9 servers with unique slugs and unique path prefixes", () => {
     const slugs = SERVERS.map((server) => server.slug);
     const pathPrefixes = SERVERS.map((server) => server.pathPrefix);
 
-    expect(SERVERS).toHaveLength(8);
+    expect(SERVERS).toHaveLength(9);
     expect(new Set(slugs).size).toBe(slugs.length);
     expect(new Set(pathPrefixes).size).toBe(pathPrefixes.length);
   });

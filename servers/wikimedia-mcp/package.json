@@ -1,0 +1,27 @@
+{
+  "name": "@iolab/wikimedia-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MCP server for Wikimedia reference research: search and read Wikipedia and its sister projects in any language, browse categories and backlinks, find Wikimedia Commons media with licensing, and look up structured Wikidata entities including a SPARQL escape hatch. All upstream APIs are public; an optional Wikimedia OAuth 2.0 token raises rate limits but no tool requires it.",
+  "exports": {
+    ".": "./src/agent.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@iolab/credentials": "workspace:*",
+    "@iolab/mcp-kit": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "agents": "^0.17.3",
+    "zod": "^4.1.10"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.110.0"
+  }
+}
