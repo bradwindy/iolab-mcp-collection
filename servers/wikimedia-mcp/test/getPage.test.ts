@@ -220,6 +220,33 @@ describe("wikimedia_get_page", () => {
     expect(result.structuredContent?.text).not.toContain("Burbidge");
   });
 
+  it("still falls back to rendering when include_references is also set", async () => {
+    // Review finding: `|| include_references` intercepted before the empty-extract fallback, so an
+    // article opening with a template returned text:"" with no notice the moment references were
+    // also asked for.
+    stubFetchRoutes([
+      { match: isExtract, body: extractBody({ extract: "" }) },
+      { match: isDocument, body: documentBody("<p>Rendered instead.</p>") },
+    ]);
+
+    const result = await getPageHandler({ title: "Kiwi (bird)", include_references: true }, fakeEnv());
+
+    expect(result.structuredContent?.text).toBe("Rendered instead.");
+    expect(result.structuredContent?.references).toEqual([]);
+  });
+
+  it("names the sections it returned, not the ones it was asked for", async () => {
+    stubFetchRoutes([
+      { match: isExtract, body: extractBody() },
+      { match: isDocument, body: documentBody() },
+    ]);
+
+    const result = await getPageHandler({ title: "Kiwi (bird)", section: ["1", "3", "99"] }, fakeEnv());
+
+    expect(result.structuredContent?.section).toBe("1,3");
+    expect(result.structuredContent?.notice).toContain("99");
+  });
+
   it("falls back to rendering the page when TextExtracts returns nothing", async () => {
     // Documented TextExtracts behaviour: an article that does not begin with a lead paragraph — one
     // opening with a template, or an unclosed element — yields an empty extract.

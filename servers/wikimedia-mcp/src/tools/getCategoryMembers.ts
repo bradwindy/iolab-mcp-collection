@@ -77,7 +77,7 @@ export async function getCategoryMembersHandler(rawInput: unknown, env: Env): Pr
       returned: rows.length,
       has_more: next_cursor !== null,
       next_cursor,
-      notice: categoryExists
+      notice: categoryExists || rows.length > 0
         ? ""
         : `No category page '${category}' exists on ${host}, so this empty result means the name is wrong rather than that the category is empty. ` +
           `Find it with wikimedia_search_pages using \`namespace: 14\`, which searches category pages.`,

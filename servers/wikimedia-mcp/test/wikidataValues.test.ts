@@ -17,6 +17,17 @@ describe("formatTime", () => {
     expect(formatTime("+1901-00-00T00:00:00Z", 7)).toBe("20th century");
   });
 
+  it("uses the right ordinal suffix, not a hardcoded 'th'", () => {
+    expect(formatTime("+2050-00-00T00:00:00Z", 7)).toBe("21st century");
+    expect(formatTime("+2150-00-00T00:00:00Z", 7)).toBe("22nd century");
+    expect(formatTime("+2250-00-00T00:00:00Z", 7)).toBe("23rd century");
+    expect(formatTime("+0050-00-00T00:00:00Z", 7)).toBe("1st century");
+    expect(formatTime("+2050-00-00T00:00:00Z", 6)).toBe("3rd millennium");
+    expect(formatTime("+0500-00-00T00:00:00Z", 6)).toBe("1st millennium");
+    // The teens are the exception the naive rule gets wrong in the other direction.
+    expect(formatTime("+1150-00-00T00:00:00Z", 7)).toBe("12th century");
+  });
+
   it("handles the zeroed month and day the format explicitly allows", () => {
     // "Month and day may be 00 if they are unknown or insignificant" — new Date() gives Invalid Date.
     expect(formatTime("+1000-00-00T00:00:00Z", 11)).toBe("1000");

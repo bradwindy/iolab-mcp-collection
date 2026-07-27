@@ -161,7 +161,8 @@ export async function getPageHandler(rawInput: unknown, env: Env): Promise<ToolT
       const single = matched.length === 1 ? (matched[0] as ParsedSection) : undefined;
       return jsonResult({
         ...base,
-        section: single !== undefined ? single.index : requested.join(","),
+        // The indexes actually returned, not the ones asked for — `notice` names the misses.
+        section: matched.map((section) => section.index).join(","),
         section_title: single?.title ?? null,
         ...(single === undefined
           ? {
@@ -177,6 +178,29 @@ export async function getPageHandler(rawInput: unknown, env: Env): Promise<ToolT
         text: single !== undefined ? single.text : matched.map((section) => section.text).join("\n\n"),
         ...(input.include_references ? { references: document.references } : {}),
         notice: notices.join(" "),
+      });
+    }
+
+    // Checked before the outline/references branch, not after: an empty extract is 0 characters and
+    // so never "over budget", but `include_references` alone would otherwise route it into that
+    // branch and return `text: ""` with no explanation.
+    if (summary.extract.length === 0) {
+      // TextExtracts documents that an article which does not begin with a lead paragraph — one
+      // opening with a template, or an unclosed/empty element — yields an empty extract. Rendering
+      // the page ourselves is the fallback rather than returning nothing.
+      const document = await cachedDocument(env, host, resolvedTitle);
+      const text = document.sections
+        .map((section) => section.text)
+        .join("\n\n")
+        .trim();
+      return jsonResult({
+        ...base,
+        section: null,
+        section_title: null,
+        outline_only: false,
+        text: truncateAtWord(text, input.max_chars),
+        ...(input.include_references ? { references: document.references } : {}),
+        notice: text.length === 0 ? `'${resolvedTitle}' rendered as empty. It may be a redirect or contain only templates.` : "",
       });
     }
 
@@ -224,22 +248,6 @@ export async function getPageHandler(rawInput: unknown, env: Env): Promise<ToolT
       });
     }
 
-    if (summary.extract.length === 0) {
-      // TextExtracts documents that an article which does not begin with a lead paragraph — one
-      // opening with a template, or an unclosed/empty element — yields an empty extract. Rendering
-      // the page ourselves is the fallback rather than returning nothing.
-      const document = await cachedDocument(env, host, resolvedTitle);
-      const text = document.sections.map((section) => section.text).join("\n\n").trim();
-      return jsonResult({
-        ...base,
-        section: null,
-        section_title: null,
-        outline_only: false,
-        text: truncateAtWord(text, input.max_chars),
-        notice: text.length === 0 ? `'${resolvedTitle}' rendered as empty. It may be a redirect or contain only templates.` : "",
-      });
-    }
-
     return jsonResult({
       ...base,
       section: null,
@@ -273,10 +281,18 @@ function normaliseSections(section: string | string[]): string[] {
  */
 export function truncateAtWord(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
-  const cut = text.slice(0, maxChars);
+  // Back off a code unit when the budget lands between the halves of a surrogate pair, or the
+  // client renders U+FFFD. Reachable whenever no word break sits near the budget — CJK, or one very
+  // long token.
+  const end = isHighSurrogate(text.charCodeAt(maxChars - 1)) ? maxChars - 1 : maxChars;
+  const cut = text.slice(0, end);
   const lastBreak = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("\n"));
   const trimmed = lastBreak > maxChars * 0.8 ? cut.slice(0, lastBreak) : cut;
   return `${trimmed.trimEnd()}…`;
+}
+
+function isHighSurrogate(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdbff;
 }
 
 function cachedDocument(env: Env, host: string, title: string): Promise<ParsedDocument & { title: string }> {

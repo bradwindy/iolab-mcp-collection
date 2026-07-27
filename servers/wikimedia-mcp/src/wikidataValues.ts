@@ -107,10 +107,18 @@ export function formatTime(timestamp: string, precision: number | undefined): st
   }
   if (precision === 9) return `${year}${era}`;
   if (precision === 8) return `${Math.floor(year / 10) * 10}s${era}`;
-  if (precision === 7) return `${Math.floor((year - 1) / 100) + 1}th century${era}`;
-  if (precision === 6) return `${Math.floor((year - 1) / 1000) + 1}th millennium${era}`;
+  if (precision === 7) return `${ordinal(Math.floor((year - 1) / 100) + 1)} century${era}`;
+  if (precision === 6) return `${ordinal(Math.floor((year - 1) / 1000) + 1)} millennium${era}`;
   // Coarser than a millennium: an order of magnitude is the only honest rendering.
   return `${year.toLocaleString("en-US")} years${era === "" ? " CE" : " BCE"}`;
+}
+
+/** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st. Hardcoding "th" gave "21th century". */
+function ordinal(value: number): string {
+  const lastTwo = value % 100;
+  if (lastTwo >= 11 && lastTwo <= 13) return `${value}th`;
+  const suffix = { 1: "st", 2: "nd", 3: "rd" }[value % 10] ?? "th";
+  return `${value}${suffix}`;
 }
 
 /** `http://www.wikidata.org/entity/Q712226` -> `Q712226`; `"1"` (unitless) -> undefined. */
@@ -190,8 +198,14 @@ export function renderValue(
   return { value: stringify(content) };
 }
 
-/** Every entity id a statement, its qualifiers and its units refer to, for one label batch. */
-export function collectValueIds(statement: RestStatement): string[] {
+/**
+ * Every entity id a statement, its qualifiers and its units refer to, for one label batch.
+ *
+ * `includeReferences` is opt-in and tracks the tool's own flag: a reference's `stated in` value is a
+ * Q-id like any other and reads as noise unbatched, but pulling every reference's ids in when the
+ * caller did not ask for references would inflate the batch for nothing.
+ */
+export function collectValueIds(statement: RestStatement, includeReferences = false): string[] {
   const ids = new Set<string>();
   const visit = (part: Pick<RestStatement, "property" | "value">) => {
     const dataType = part.property?.data_type;
@@ -215,6 +229,13 @@ export function collectValueIds(statement: RestStatement): string[] {
 
   visit(statement);
   for (const qualifier of statement.qualifiers ?? []) visit(qualifier);
+  if (includeReferences) {
+    // A reference's `stated in` value is a Q-id like any other; without this it renders as the bare
+    // id while the reference's *property* label resolves, which reads as half-broken.
+    for (const reference of statement.references ?? []) {
+      for (const part of reference.parts ?? []) visit(part);
+    }
+  }
   return [...ids];
 }
 

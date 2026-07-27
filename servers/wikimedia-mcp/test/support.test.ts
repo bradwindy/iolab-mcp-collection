@@ -178,8 +178,55 @@ describe("parsePageDocument", () => {
     ]);
   });
 
+  it("survives a void element carrying a skip class", async () => {
+    // Review finding: `onEndTag` throws `TypeError: Parser error: No end tag.` on <br>/<hr>/<img>,
+    // which aborted the whole page read as a protocol error. `class` on a void element is
+    // sanitizer-allowed on every wiki. There is no `canHaveContent` property in this workerd
+    // version to test with — it is `undefined` even on <div> — so the guard has to catch.
+    // <br> is a block element here, so it still contributes its line break — the point is that the
+    // read completes at all, and that the text either side survives.
+    expect(await textOf('<p>Alpha<br class="noprint" />Beta</p>')).toBe("Alpha\nBeta");
+    expect(await textOf('<p>A</p><hr class="metadata"><p>B</p>')).toBe("A\nB");
+    expect(await textOf('<p>A</p><img class="metadata"><p>B</p>')).toBe("A\nB");
+  });
+
+  it("keeps skipping after a void element inside the skipped subtree", async () => {
+    // The undo must not leak: a <br> inside a navbox must not end the navbox's suppression.
+    const text = await textOf('<p>Kept.</p><div class="navbox">Junk<br/>More junk</div><p>Also kept.</p>');
+    expect(text).toContain("Kept.");
+    expect(text).toContain("Also kept.");
+    expect(text).not.toContain("Junk");
+  });
+
   it("collapses runs of whitespace and blank lines", async () => {
     expect(await textOf("<p>a   b</p><p></p><p></p><p>c</p>")).toBe("a b\n\nc");
+  });
+
+  it("keeps the backlink markers out of a citation's text", async () => {
+    // Review finding: the text handler checked `currentRef` before `skipDepth`, so `.mw-cite-backlink`
+    // — which is in the skip list precisely because it lives inside the <li> — was collected into the
+    // reference, prefixing every real citation with "^ " or "^ a b ".
+    const html =
+      '<div class="mw-references-wrap"><ol class="references">' +
+      '<li id="cite_note-1"><span class="mw-cite-backlink">^ <a href="#a"><i><b>a</b></i></a> <a href="#b"><i><b>b</b></i></a></span> ' +
+      '<span class="reference-text">Seebeck, H. A. (2014).</span></li>' +
+      "</ol></div>";
+
+    const { references } = await parsePageDocument(html, OUTLINE);
+
+    expect(references).toEqual([{ ref_id: "cite_note-1", text: "Seebeck, H. A. (2014)." }]);
+  });
+
+  it("resumes the outer reference after a nested one closes", async () => {
+    const html =
+      '<div class="mw-references-wrap"><ol class="references">' +
+      '<li id="cite_note-outer">Outer <ol class="references"><li id="cite_note-inner">Inner</li></ol> Tail</li>' +
+      "</ol></div>";
+
+    const { references } = await parsePageDocument(html, OUTLINE);
+
+    expect(references.find((reference) => reference.ref_id === "cite_note-inner")?.text).toBe("Inner");
+    expect(references.find((reference) => reference.ref_id === "cite_note-outer")?.text).toBe("Outer Tail");
   });
 
   it("returns an empty lead for empty input", async () => {

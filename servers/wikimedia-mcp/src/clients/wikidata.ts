@@ -161,6 +161,11 @@ export async function fetchLabels(env: Env, ids: string[], language: string): Pr
  */
 export async function fetchUnitSymbols(env: Env, ids: string[], language: string): Promise<Record<string, string>> {
   if (ids.length === 0) return {};
+  // Throws rather than truncating, for the same reason fetchLabels does: a silently dropped id
+  // renders its quantity without a unit and says nothing about it. Callers chunk.
+  if (ids.length > LABEL_BATCH_LIMIT) {
+    throw new Error(`fetchUnitSymbols accepts at most ${LABEL_BATCH_LIMIT} ids per call, received ${ids.length}.`);
+  }
   const body = await actionApi<{
     entities?: Record<
       string,
@@ -168,7 +173,7 @@ export async function fetchUnitSymbols(env: Env, ids: string[], language: string
     >;
   }>(env, WIKIDATA_HOST, {
     action: "wbgetentities",
-    ids: ids.slice(0, LABEL_BATCH_LIMIT).join("|"),
+    ids: ids.join("|"),
     props: "claims",
   });
 

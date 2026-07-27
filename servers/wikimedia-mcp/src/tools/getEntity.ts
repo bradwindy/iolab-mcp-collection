@@ -139,7 +139,7 @@ export async function getEntityHandler(rawInput: unknown, env: Env): Promise<Too
     // Q-ids, so dropping everything past the 50-id batch cap would quietly break it on exactly the
     // dense entities where it matters most. Chunks run serially — the Action API's unauthenticated
     // concurrency limit is 1.
-    const referenced = page.items.flatMap((row) => collectValueIds(row.statement));
+    const referenced = page.items.flatMap((row) => collectValueIds(row.statement, input.include_references));
     const propertyIds = [
       ...new Set([
         ...page.items.map((row) => row.propertyId),
@@ -169,7 +169,12 @@ export async function getEntityHandler(rawInput: unknown, env: Env): Promise<Too
     const unitIds = [
       ...new Set(page.items.flatMap((row) => collectUnitIds(row.statement))),
     ];
-    const unitSymbols = unitIds.length > 0 ? await fetchUnitSymbols(env, unitIds, input.language) : {};
+    const unitBatches: Array<() => Promise<Record<string, string>>> = [];
+    for (let start = 0; start < unitIds.length; start += LABEL_BATCH_LIMIT) {
+      const chunk = unitIds.slice(start, start + LABEL_BATCH_LIMIT);
+      unitBatches.push(() => fetchUnitSymbols(env, chunk, input.language));
+    }
+    const unitSymbols: Record<string, string> = Object.assign({}, ...(await serially(unitBatches)));
 
     const renderSnak = (snak: RestSnak) => {
       const rendered = renderValue(snak, labels, unitSymbols);

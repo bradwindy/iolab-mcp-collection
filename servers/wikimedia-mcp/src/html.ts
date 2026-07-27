@@ -151,15 +151,15 @@ export async function parsePageDocument(html: string, outline: SectionMeta[]): P
   let skipDepth = 0;
 
   const references: ParsedReference[] = [];
-  let currentRef: { id: string; parts: string[]; coins?: string } | null = null;
+  /** A stack, not a single slot: a reference list can nest, and the outer one must resume. */
+  const openRefs: RefBucket[] = [];
+  const currentRef = () => openRefs[openRefs.length - 1];
 
   const rewriter = new HTMLRewriter()
     .on(HARD_SKIP_SELECTOR, {
       element(el) {
         hardSkipDepth++;
-        el.onEndTag(() => {
-          hardSkipDepth--;
-        });
+        if (!trackEndTag(el, () => hardSkipDepth--)) hardSkipDepth--;
       },
     })
     // Registered before the reference-list skip so it still sees its own start tag: element handlers
@@ -168,15 +168,20 @@ export async function parsePageDocument(html: string, outline: SectionMeta[]): P
       element(el) {
         const id = el.getAttribute("id");
         if (id === null || !id.startsWith("cite_note")) return;
-        const ref: { id: string; parts: string[]; coins?: string } = { id, parts: [] };
-        currentRef = ref;
-        el.onEndTag(() => {
+        // The depth on entry is the baseline: the enclosing `.mw-references-wrap` has already
+        // incremented it. Anything deeper is junk *inside* the reference — notably
+        // `.mw-cite-backlink`, which is what put a leading "^ a b" on every citation.
+        const ref: RefBucket = { id, parts: [], baseSkipDepth: skipDepth };
+        openRefs.push(ref);
+        const tracked = trackEndTag(el, () => {
+          const index = openRefs.indexOf(ref);
+          if (index !== -1) openRefs.splice(index, 1);
           const text = collapseWhitespace(decodeEntities(ref.parts.join("")));
           if (text.length > 0 || ref.coins !== undefined) {
             references.push({ ref_id: id, text, ...parseCoins(ref.coins) });
           }
-          if (currentRef === ref) currentRef = null;
         });
+        if (!tracked) openRefs.pop();
       },
     })
     .on('span[class~="Z3988"]', {
@@ -185,15 +190,16 @@ export async function parsePageDocument(html: string, outline: SectionMeta[]): P
         // the only machine-readable citation data Wikimedia exposes — there is no references API
         // (/api/rest_v1/page/references/ 404s, and /w/rest.php/v1/ has no equivalent).
         const coins = el.getAttribute("title");
-        if (coins !== null && currentRef !== null) currentRef.coins = coins;
+        const ref = currentRef();
+        if (coins !== null && ref !== undefined) ref.coins = coins;
       },
     })
     .on(SKIP_SELECTOR, {
       element(el) {
         skipDepth++;
-        el.onEndTag(() => {
-          skipDepth--;
-        });
+        // A void element has no content to skip and never fires an end tag, so undo the increment
+        // rather than leaving the rest of the document suppressed.
+        if (!trackEndTag(el, () => skipDepth--)) skipDepth--;
       },
     })
     .on(HEADING_SELECTOR, {
@@ -215,10 +221,11 @@ export async function parsePageDocument(html: string, outline: SectionMeta[]): P
     .on("*", {
       text(chunk) {
         if (hardSkipDepth > 0) return;
-        // A reference's own text is inside the skipped reference list, so it is collected here and
-        // nowhere else — the two destinations never both apply.
-        if (currentRef !== null) {
-          currentRef.parts.push(chunk.text);
+        const ref = currentRef();
+        if (ref !== undefined) {
+          // Only text at the reference's own nesting depth. Deeper means it is inside something the
+          // skip list named — the backlink markers and the inline `[n]` superscripts.
+          if (skipDepth === ref.baseSkipDepth) ref.parts.push(chunk.text);
           return;
         }
         if (skipDepth > 0) return;
@@ -249,7 +256,32 @@ export async function parsePageDocument(html: string, outline: SectionMeta[]): P
   return { sections, references };
 }
 
+/**
+ * Register an end-tag handler, reporting whether the element can actually have one.
+ *
+ * `onEndTag` **throws** `TypeError: Parser error: No end tag.` for a void element — verified in this
+ * repo's own workerd runtime for `<br>`, `<hr>` and `<img>` — and an uncaught throw here aborts the
+ * whole page read with a protocol error rather than a tool error. `class` on `<br class="noprint">`
+ * is sanitizer-allowed on every wiki, so this is reachable input.
+ *
+ * The obvious guard, `el.canHaveContent`, is **not available** in this workerd version: the property
+ * is `undefined` on every element, including `<div>`. Catching is the only reliable test.
+ */
+// Typed structurally rather than as `HtmlRewriterElement`: that interface is ambient to this
+// package, and apps/gateway typechecks these sources against its own tsconfig, where it is not in
+// scope. Naming it here fails the gateway's `tsc` while passing this package's.
+function trackEndTag(el: { onEndTag(handler: () => void): void }, handler: () => void): boolean {
+  try {
+    el.onEndTag(handler);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 type SectionBucket = { meta: SectionMeta | null; parts: string[] };
+
+type RefBucket = { id: string; parts: string[]; baseSkipDepth: number; coins?: string };
 
 /** Pull the useful fields out of a COinS OpenURL blob. */
 function parseCoins(coins: string | undefined): Omit<ParsedReference, "ref_id" | "text"> {

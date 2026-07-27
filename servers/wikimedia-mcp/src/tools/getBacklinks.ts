@@ -73,7 +73,9 @@ export async function getBacklinksHandler(rawInput: unknown, env: Env): Promise<
       returned: rows.length,
       has_more: next_cursor !== null,
       next_cursor,
-      notice: targetExists
+      // Guarded on `rows.length` too: these list modules can return real rows for a target page
+      // that does not exist — confirmed live, an uncreated File: page still has imageusage rows.
+      notice: targetExists || rows.length > 0
         ? ""
         : `No page titled '${input.title}' exists on ${host}, so this empty result means the title is wrong rather than that nothing links to it. ` +
           `Check the namespace prefix — 'Template:' for transclusions, 'File:' for file usage — or find the title with wikimedia_search_pages.`,

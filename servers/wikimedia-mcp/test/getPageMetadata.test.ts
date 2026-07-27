@@ -140,6 +140,9 @@ describe("wikimedia_get_page_metadata", () => {
     expect(url.searchParams.get("palimit")).toBe("max");
     expect(url.searchParams.get("prop")).toContain("pageassessments");
     expect(url.searchParams.get("clshow")).toBe("hidden");
+    // Without clprop the rows come back as bare {ns, title} with no `hidden` flag — confirmed live —
+    // so every maintenance signal silently reads as absent on every page.
+    expect(url.searchParams.get("clprop")).toBe("hidden");
   });
 
   it("returns rows in the order asked for, with an index and the requested title", async () => {

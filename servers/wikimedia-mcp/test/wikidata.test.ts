@@ -313,6 +313,51 @@ describe("wikimedia_get_entity", () => {
     expect(result.structuredContent?.label_fallbacks).toEqual({ Q16521: "en" });
   });
 
+  it("resolves labels for reference values, not just reference properties", async () => {
+    // Review finding: collectValueIds skipped references entirely, so `stated in` came back as the
+    // bare "Q328" while its property label resolved — half-working reads worse than not working.
+    stubFetchRoutes([
+      {
+        match: isRest,
+        body: {
+          id: "Q42",
+          statements: {
+            P31: [
+              {
+                property: { id: "P31", data_type: "wikibase-item" },
+                value: { type: "value", content: "Q5" },
+                references: [
+                  {
+                    hash: "abc",
+                    parts: [{ property: { id: "P248", data_type: "wikibase-item" }, value: { type: "value", content: "Q328" } }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      {
+        match: isLabels,
+        body: {
+          entities: {
+            P31: { labels: { en: { value: "instance of", language: "en" } } },
+            P248: { labels: { en: { value: "stated in", language: "en" } } },
+            Q5: { labels: { en: { value: "human", language: "en" } } },
+            Q328: { labels: { en: { value: "English Wikipedia", language: "en" } } },
+          },
+        },
+      },
+    ]);
+
+    const result = await getEntityHandler({ entity_id: "Q42", include_references: true }, fakeEnv());
+
+    const statements = result.structuredContent?.statements as Array<Record<string, unknown>>;
+    expect(statements[0]?.["references"]).toEqual([
+      { property_id: "P248", property_label: "stated in", value: "English Wikipedia", entity_id: "Q328" },
+    ]);
+  });
+
   it("pages sitelinks separately and reports their own total", async () => {
     // `limit` governs statements; a country has 300+ sitelinks, so `include_sitelinks: true` with
     // `limit: 10` used to return every one of them — thousands of tokens in a call that looked bounded.

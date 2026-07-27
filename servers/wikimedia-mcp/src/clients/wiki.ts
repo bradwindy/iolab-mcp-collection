@@ -332,6 +332,10 @@ export async function fetchPageMetadata(
     // `clshow=!hidden` is not used here for the same reason getPageCategories avoids it (see
     // CATEGORY_FETCH_LIMIT); the hidden ones are exactly what the maintenance signals need anyway.
     clshow: "hidden",
+    // `clprop=hidden` is what actually puts the `hidden` flag on each row. Without it the rows are
+    // bare `{ns, title}` — confirmed live — and every maintenance signal reads as absent on every
+    // page, which is a silent total failure rather than an error.
+    clprop: "hidden",
     cllimit: "max",
     titles: params.titles.join("|"),
     redirects: 1,
