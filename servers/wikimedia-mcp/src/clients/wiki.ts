@@ -1,3 +1,4 @@
+import { foldDiacritics } from "../text.js";
 import { actionApi, readCursor, requireSinglePage, resolveTitle, type QueryPage, type TitleResolution } from "./actionApi.js";
 
 export type SearchHit = {
@@ -12,18 +13,57 @@ export type SearchHit = {
 export type SearchResult = {
   hits: SearchHit[];
   total_hits: number;
+  /** CirrusSearch's own "did you mean", when it offers one. Advisory only — see searchPages.ts. */
+  suggestion?: string;
+  suggestion_snippet?: string;
+  /** Set only when `enableRewrites` was passed: the query the service actually ran instead. */
+  rewritten_query?: string;
 };
 
 /** CirrusSearch's documented ceiling for offset paging. Past it the API errors rather than truncating. */
 export const SEARCH_OFFSET_CEILING = 10000;
 
+/**
+ * CirrusSearch query-builder profiles, which control how many of the query's terms a page must
+ * match. This is the single most important recall lever the Action API exposes.
+ *
+ * The wiki default (`perfield_builder`) makes every term a `MUST`, so one absent word zeroes out an
+ * otherwise perfect match. `perfield_builder_relaxed` differs by exactly one setting —
+ * `minimum_should_match: '3<-1 5<50%'`, i.e. up to 3 terms all required, 4-5 terms allow one miss,
+ * 6+ require half. Short queries are therefore completely unaffected.
+ *
+ * Confirmed live against en.wikipedia.org:
+ *   "Ōpepe ambush 1869 Taupō"                     strict: 1 hit    relaxed: 10 hits, target #1
+ *   "Ngāti Tūwharetoa Taupō lakebed ownership …"  strict: 0 hits   relaxed: 780 hits, target #1
+ *
+ * `perfield_builder_title_filter` is deliberately not offered: it adds a `3<80%` constraint on the
+ * title/redirect fields and made the first query above return zero.
+ */
+export const QUERY_BUILDER_PROFILES = {
+  relaxed: "perfield_builder_relaxed",
+  all: "perfield_builder",
+} as const;
+
+export type MatchMode = keyof typeof QUERY_BUILDER_PROFILES;
+
 export async function searchPages(
   env: Env,
   host: string,
-  params: { search: string; namespace: number; sort: string; limit: number; offset: number },
+  params: {
+    search: string;
+    namespace: number;
+    sort: string;
+    limit: number;
+    offset: number;
+    match: MatchMode;
+    enableRewrites?: boolean;
+  },
 ): Promise<SearchResult> {
   const body = await actionApi<{
-    query?: { searchinfo?: { totalhits?: number }; search?: SearchHit[] };
+    query?: {
+      searchinfo?: { totalhits?: number; suggestion?: string; suggestionsnippet?: string; rewrittenquery?: string };
+      search?: SearchHit[];
+    };
   }>(env, host, {
     action: "query",
     list: "search",
@@ -32,13 +72,23 @@ export async function searchPages(
     srsort: params.sort,
     srlimit: params.limit,
     sroffset: params.offset,
-    srinfo: "totalhits",
+    srqdprofile: QUERY_BUILDER_PROFILES[params.match],
+    // The API's own default for `srinfo` is `totalhits|suggestion|rewrittenquery`. Asking for only
+    // `totalhits` — as this once did — narrows it and throws away the "did you mean" for free.
+    srinfo: "totalhits|suggestion|rewrittenquery",
     srprop: "snippet|size|wordcount|timestamp",
+    // Opt-in, because it makes the service re-run a corrected query and return *those* rows. Useful
+    // as a last resort on zero results, wrong as a default.
+    ...(params.enableRewrites ? { srenablerewrites: 1 } : {}),
   });
 
+  const info = body.query?.searchinfo;
   return {
     hits: body.query?.search ?? [],
-    total_hits: body.query?.searchinfo?.totalhits ?? 0,
+    total_hits: info?.totalhits ?? 0,
+    ...(info?.suggestion !== undefined ? { suggestion: info.suggestion } : {}),
+    ...(info?.suggestionsnippet !== undefined ? { suggestion_snippet: info.suggestionsnippet } : {}),
+    ...(info?.rewrittenquery !== undefined ? { rewritten_query: info.rewrittenquery } : {}),
   };
 }
 
@@ -54,6 +104,14 @@ export async function searchPages(
  * Double quotes are stripped from filter values rather than escaped: CirrusSearch has no documented
  * escape for a quote inside a quoted phrase, so an embedded one would silently terminate the phrase
  * and turn the remainder into unrelated search terms.
+ *
+ * `in_title` and `in_source` are diacritic-folded on the way in, because both are emitted as quoted
+ * phrases and quoted phrases search the `plain` field, whose query-side analyzer has no
+ * `icu_folding` (see src/text.ts). Confirmed live: `intitle:"Ōpepe"` returns **0** hits while
+ * `intitle:"Opepe"` returns 2, and `insource:"Ōpepe"` returns 4 against `insource:"Opepe"`'s 20.
+ * The folded form is a strict superset — the index keeps the original alongside the folded token —
+ * so this only ever adds matches. A caller who genuinely wants the exact macronised phrase can pass
+ * `insource:"Ōpepe"` through `query`, which is never folded.
  */
 export function buildSearchQuery(input: {
   query?: string | undefined;
@@ -67,12 +125,16 @@ export function buildSearchQuery(input: {
   const terms: string[] = [];
   const quote = (value: string) => `"${value.replace(/"/g, "")}"`;
 
-  if (input.in_title) terms.push(`intitle:${quote(input.in_title)}`);
+  if (input.in_title) terms.push(`intitle:${quote(foldDiacritics(input.in_title))}`);
   if (input.in_category) {
+    // Not folded: a category filter is an exact name, and `incategory:"Ngāti Tūwharetoa"` must keep
+    // its macrons to resolve to the real category page.
     terms.push(`${input.in_category_deep ? "deepcat" : "incategory"}:${quote(input.in_category)}`);
   }
-  if (input.in_source) terms.push(`insource:${quote(input.in_source)}`);
-  if (input.edited_after) terms.push(`lasteditdate:>${input.edited_after}`);
+  if (input.in_source) terms.push(`insource:${quote(foldDiacritics(input.in_source))}`);
+  // `>=`, not `>`: this parameter documents itself as "on or after", and `lasteditdate:>2024-01-01`
+  // excludes every edit made on 2024-01-01 itself — a silently missing day at the boundary.
+  if (input.edited_after) terms.push(`lasteditdate:>=${input.edited_after}`);
   // `morelike:` is the documented replacement for the removed RESTBase /page/related endpoint. It
   // must not be quoted — the operator takes a bare page title, spaces and all.
   if (input.more_like) terms.push(`morelike:${input.more_like}`);

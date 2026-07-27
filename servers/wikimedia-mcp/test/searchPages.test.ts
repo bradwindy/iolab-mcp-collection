@@ -71,10 +71,10 @@ describe("wikimedia_search_pages", () => {
     );
 
     const url = calledUrls(mock)[0] as URL;
-    expect(url.searchParams.get("srsearch")).toBe('intitle:"kiwi" incategory:"Birds of New Zealand" lasteditdate:>2025-01-01');
+    expect(url.searchParams.get("srsearch")).toBe('intitle:"kiwi" incategory:"Birds of New Zealand" lasteditdate:>=2025-01-01');
     expect(url.searchParams.get("srsort")).toBe("title_natural_asc");
     expect(result.structuredContent?.effective_query).toBe(
-      'intitle:"kiwi" incategory:"Birds of New Zealand" lasteditdate:>2025-01-01',
+      'intitle:"kiwi" incategory:"Birds of New Zealand" lasteditdate:>=2025-01-01',
     );
   });
 
@@ -174,6 +174,115 @@ describe("wikimedia_search_pages", () => {
     expect(result.structuredContent?.has_more).toBe(false);
     expect(result.structuredContent?.next_offset).toBeNull();
   });
+
+  it("defaults to the relaxed query-builder profile, and sends the strict one on request", async () => {
+    // Live on en.wikipedia.org, "Ōpepe ambush 1869 Taupō" returns 1 unrelated hit under the wiki
+    // default and 10 under relaxed with `Opepe, New Zealand` first; the whole search-recall report
+    // this fixes came down to this parameter.
+    const relaxed = stubFetchRoutes([{ match: anyUrl, body: searchBody([]) }]);
+    await searchPagesHandler({ query: "kiwi" }, fakeEnv());
+    expect((calledUrls(relaxed)[0] as URL).searchParams.get("srqdprofile")).toBe("perfield_builder_relaxed");
+    vi.unstubAllGlobals();
+
+    const strict = stubFetchRoutes([{ match: anyUrl, body: searchBody([]) }]);
+    await searchPagesHandler({ query: "kiwi", match: "all" }, fakeEnv());
+    expect((calledUrls(strict)[0] as URL).searchParams.get("srqdprofile")).toBe("perfield_builder");
+  });
+
+  it("asks for the suggestion fields instead of narrowing srinfo to totalhits", async () => {
+    // The API's own default for srinfo is totalhits|suggestion|rewrittenquery. Passing "totalhits"
+    // narrowed it and threw the "did you mean" away for no saving.
+    const mock = stubFetchRoutes([{ match: anyUrl, body: searchBody([]) }]);
+    await searchPagesHandler({ query: "kiwi" }, fakeEnv());
+    expect((calledUrls(mock)[0] as URL).searchParams.get("srinfo")).toBe("totalhits|suggestion|rewrittenquery");
+  });
+
+  it("passes a suggestion through as advisory, with its highlight markup stripped", async () => {
+    stubFetchRoutes([
+      {
+        match: anyUrl,
+        body: {
+          batchcomplete: true,
+          query: {
+            searchinfo: { totalhits: 61, suggestion: "nelson mandela", suggestionsnippet: "nelson <em>mandela</em>" },
+            search: [{ ns: 0, title: "Nelson Mandela", pageid: 1, snippet: "" }],
+          },
+        },
+      },
+    ]);
+
+    const result = await searchPagesHandler({ query: "Nelson Mandella" }, fakeEnv());
+
+    expect(result.structuredContent?.did_you_mean).toBe("nelson mandela");
+    expect(result.structuredContent?.fallback_applied).toBeNull();
+  });
+
+  it("suppresses the suggestion for a macronised query, where the suggester is blind and wrong", async () => {
+    // The phrase suggester works off the already-folded index, so a diacritic has zero edit distance
+    // to it. Live it emits `Taupō` -> `tampa`, `Opepe` -> `opera`, `Ōpepe Taupō` -> `ōhope tampa`.
+    stubFetchRoutes([
+      {
+        match: anyUrl,
+        body: {
+          batchcomplete: true,
+          query: {
+            searchinfo: { totalhits: 10, suggestion: "ōhope tampa" },
+            search: [{ ns: 0, title: "Opepe, New Zealand", pageid: 39360194, snippet: "" }],
+          },
+        },
+      },
+    ]);
+
+    const result = await searchPagesHandler({ query: "Ōpepe Taupō" }, fakeEnv());
+
+    expect(result.structuredContent?.did_you_mean).toBeUndefined();
+  });
+
+  it("retries a zero-result first page with the service's own query rewriting", async () => {
+    // Routed on the parameter itself rather than a call counter, so the assertion holds whatever
+    // order the two requests happen to be made in.
+    const mock = stubFetchRoutes([
+      {
+        match: (url) => url.includes("srenablerewrites"),
+        body: {
+          batchcomplete: true,
+          query: {
+            searchinfo: { totalhits: 26, rewrittenquery: "teh brown fox jumped" },
+            search: [{ ns: 0, title: "Fox", pageid: 2, snippet: "" }],
+          },
+        },
+      },
+      { match: anyUrl, body: searchBody([], 0) },
+    ]);
+
+    const result = await searchPagesHandler({ query: "teh brown fox jumpd" }, fakeEnv());
+
+    expect(calledUrls(mock)).toHaveLength(2);
+    expect((calledUrls(mock)[0] as URL).searchParams.get("srenablerewrites")).toBeNull();
+    expect((calledUrls(mock)[1] as URL).searchParams.get("srenablerewrites")).toBe("1");
+    expect(result.structuredContent?.total_count).toBe(26);
+    expect(result.structuredContent?.fallback_applied).toContain("teh brown fox jumped");
+  });
+
+  it("does not retry a zero-result later page, which is just the end of the results", async () => {
+    // Swapping in a rewritten query mid-pagination would interleave two unrelated result sets.
+    const mock = stubFetchRoutes([{ match: anyUrl, body: searchBody([], 0) }]);
+
+    const result = await searchPagesHandler({ query: "kiwi", offset: 40 }, fakeEnv());
+
+    expect(calledUrls(mock)).toHaveLength(1);
+    expect(result.structuredContent?.fallback_applied).toBeNull();
+  });
+
+  it("keeps the original results when the rewrite also finds nothing", async () => {
+    const mock = stubFetchRoutes([{ match: anyUrl, body: searchBody([], 0) }]);
+
+    const result = await searchPagesHandler({ query: "zzzzznotathing" }, fakeEnv());
+
+    expect(calledUrls(mock)).toHaveLength(2);
+    expect(result.structuredContent?.results).toEqual([]);
+    expect(result.structuredContent?.fallback_applied).toBeNull();
+  });
 });
 
 describe("buildSearchQuery", () => {
@@ -203,5 +312,23 @@ describe("buildSearchQuery", () => {
 
   it("returns an empty string when nothing was supplied", () => {
     expect(buildSearchQuery({})).toBe("");
+  });
+
+  it("folds macrons out of the quoted phrase filters, which search the unfolded `plain` field", () => {
+    // Confirmed live on en.wikipedia.org: `intitle:"Ōpepe"` returns 0 hits and `intitle:"Opepe"`
+    // returns 2; `insource:"Ōpepe"` returns 4 against `insource:"Opepe"`'s 20. The index keeps the
+    // original alongside the folded token, so the folded phrase is a strict superset.
+    expect(buildSearchQuery({ in_title: "Ōpepe" })).toBe('intitle:"Opepe"');
+    expect(buildSearchQuery({ in_source: "Taupō" })).toBe('insource:"Taupo"');
+  });
+
+  it("leaves in_category macronised, since it has to resolve to a real category page", () => {
+    expect(buildSearchQuery({ in_category: "Ngāti Tūwharetoa" })).toBe('incategory:"Ngāti Tūwharetoa"');
+  });
+
+  it("never folds the raw query, which CirrusSearch already folds better than we can", () => {
+    // Live: `Ōpepe` and `Opepe` both return the same 20 hits, but with the macron the target article
+    // ranks #2 rather than #4 — folding here would cost ranking signal for nothing.
+    expect(buildSearchQuery({ query: "Ōpepe Taupō" })).toBe("Ōpepe Taupō");
   });
 });
