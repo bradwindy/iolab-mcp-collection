@@ -3,6 +3,7 @@ import { describePage, jsonResult, limitParam, offsetParam, toolError, type Tool
 import { buildSearchQuery, searchPages, SEARCH_OFFSET_CEILING } from "../clients/wiki.js";
 import { stripInlineHtml } from "../html.js";
 import { langParam, projectParam } from "../projects.js";
+import { hasFoldableDiacritic } from "../text.js";
 import { mapCommonWikiError, attributionSchema, wikiAttribution, wikiPageUrl, wikiTarget } from "../toolSupport.js";
 
 export const searchPagesInputShape = {
@@ -31,7 +32,17 @@ export const searchPagesInputShape = {
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date like 2025-01-31.")
     .optional()
-    .describe("Only match pages last edited on or after this date (YYYY-MM-DD)."),
+    .describe("Only match pages last edited on or after this date (YYYY-MM-DD). The date itself is included."),
+  match: z
+    .enum(["relaxed", "all"])
+    .default("relaxed")
+    .describe(
+      "How many of the query's terms a page must contain. 'relaxed' (the default) requires all of them for " +
+        "queries of three terms or fewer, allows one miss at four or five, and half at six or more — so a long " +
+        "descriptive query degrades gracefully instead of returning nothing when a single word is absent. " +
+        "'all' requires every term, which is stricter and can return zero results for a query that describes " +
+        "the right page in words the article happens not to use.",
+    ),
   namespace: z.number().int().min(0).default(0).describe("Wiki namespace to search. 0 is articles; 14 is categories."),
   sort: z
     .enum([
@@ -68,6 +79,13 @@ export const searchPagesOutputShape = {
     }),
   ),
   effective_query: z.string(),
+  /** What was changed to rescue a zero-result search, or null when the first attempt succeeded. */
+  fallback_applied: z.string().nullable(),
+  /**
+   * CirrusSearch's own "did you mean". Advisory: it is generated against an already-folded index, so
+   * it is blind to diacritics and its output is noise for macronised queries — see the handler.
+   */
+  did_you_mean: z.string().optional(),
   wiki: z.string(),
   total_count: z.number(),
   has_more: z.boolean(),
@@ -99,13 +117,43 @@ export async function searchPagesHandler(rawInput: unknown, env: Env): Promise<T
   }
 
   try {
-    const { hits, total_hits } = await searchPages(env, host, {
+    const query = {
       search,
       namespace: input.namespace,
       sort: input.sort,
       limit: input.limit,
       offset: input.offset,
-    });
+      match: input.match,
+    };
+
+    let result = await searchPages(env, host, query);
+    let fallbackApplied: string | null = null;
+
+    // Zero-result rescue. Deliberately NOT client-side term dropping: `match: "relaxed"` already
+    // asks CirrusSearch to drop the weakest terms, and the server knows the IDFs. What is left to
+    // try is the service's own spelling correction, which `srenablerewrites` runs and then re-queries
+    // with, returning the corrected rows rather than just naming them.
+    //
+    // Only on a first page — a later page legitimately runs out of results, and silently swapping in
+    // a different query mid-pagination would interleave two unrelated result sets.
+    if (result.total_hits === 0 && input.offset === 0) {
+      const rewritten = await searchPages(env, host, { ...query, enableRewrites: true });
+      if (rewritten.total_hits > 0) {
+        result = rewritten;
+        fallbackApplied = rewritten.rewritten_query
+          ? `No results for the query as written; the search service corrected it to '${rewritten.rewritten_query}' and those results are shown.`
+          : "No results for the query as written; the search service's own query rewriting was enabled and those results are shown.";
+      }
+    }
+
+    const { hits, total_hits } = result;
+
+    // The phrase suggester runs against the folded index, so a diacritic difference has zero edit
+    // distance to it and it spends its budget elsewhere. Live, it turns `Taupō` into `tampa`,
+    // `Opepe` into `opera`, and `Ōpepe Taupō` into `ōhope tampa`. Passing that on for a te reo Māori
+    // place name is worse than saying nothing, so it is dropped whenever the query carries a
+    // foldable diacritic.
+    const suggestion = result.suggestion !== undefined && !hasFoldableDiacritic(search) ? stripInlineHtml(result.suggestion) : undefined;
 
     const results = hits.map((hit) => ({
       title: hit.title,
@@ -123,6 +171,8 @@ export async function searchPagesHandler(rawInput: unknown, env: Env): Promise<T
     return jsonResult({
       results,
       effective_query: search,
+      fallback_applied: fallbackApplied,
+      ...(suggestion !== undefined ? { did_you_mean: suggestion } : {}),
       wiki: host,
       ...pageInfo,
       attribution: wikiAttribution(input.project, host),

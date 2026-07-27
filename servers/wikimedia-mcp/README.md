@@ -9,15 +9,15 @@ Wikimedia Commons, and look up structured facts in Wikidata. Served at `/wikimed
 | Tool | What it does | Upstream API | Needs a key? |
 |---|---|---|---|
 | `wikimedia_search_pages` | Full-text search with structured CirrusSearch filters: category (optionally deep), title, wikitext source, last-edit date, "more like this" | Action API `list=search` | No |
-| `wikimedia_get_page` | Read a page's text; section-targeted, with an outline returned instead of the text for over-long articles | Action API `prop=extracts` + `action=parse` | No |
-| `wikimedia_get_page_metadata` | Description, thumbnail, coordinates, size, Wikidata id, disambiguation flag, and language editions — up to 50 titles at once | Action API `prop=info\|description\|pageimages\|coordinates\|pageprops\|langlinks` | No |
+| `wikimedia_get_page` | Read an article's full text, one section, or several at once; over-long articles return an outline with exact per-section sizes; optional structured citations | Action API `prop=extracts` + `action=parse&prop=text\|tocdata` | No |
+| `wikimedia_get_page_metadata` | Description, thumbnail, coordinates, size, Wikidata id, disambiguation flag, quality grade, maintenance flags, protection and language editions — up to 50 titles at once, in order | Action API `prop=info\|description\|pageimages\|coordinates\|pageprops\|langlinks\|pageassessments\|categories` | No |
 | `wikimedia_get_backlinks` | What links to a page, transcludes a template, or uses a file | Action API `list=backlinks\|embeddedin\|imageusage` | No |
 | `wikimedia_get_page_categories` | The categories a page is in, maintenance categories hidden by default | Action API `prop=categories` | No |
 | `wikimedia_get_category_members` | The articles, subcategories, or files inside a category | Action API `list=categorymembers` | No |
 | `wikimedia_search_media` | Search Commons for images, diagrams, audio, and video with licence and author | Commons Action API `generator=search` + `prop=imageinfo` | No |
 | `wikimedia_get_media_info` | One file's URLs, dimensions, description, and full reuse requirements | Commons Action API `prop=imageinfo` + `extmetadata` | No |
 | `wikimedia_search_entities` | Turn a name into a Wikidata Q-id or P-id | Action API `wbsearchentities` | No |
-| `wikimedia_get_entity` | An entity's labels, aliases, and statements with referenced entities resolved to labels | Wikibase REST API v1 | No |
+| `wikimedia_get_entity` | An entity's labels, aliases, and statements with qualifiers, units, time precision and references; entity ids resolved to labels | Wikibase REST API v1 + `wbgetentities` | No |
 | `wikimedia_query_wikidata_sparql` | Read-only SPARQL against either Wikidata graph | Wikidata Query Service | No |
 
 Every tool works fully with no upstream API key — see "Upstream API keys" below for the one optional
@@ -25,7 +25,7 @@ exception and what it actually buys.
 
 ## Projects and languages
 
-The six wiki-content tools take `project` and `lang`. All seven projects expose the identical
+The six wiki-content tools take `project` and `lang`. All eight projects expose the identical
 MediaWiki Action API, so they cost nothing extra to support:
 
 | `project` | Host | Note |
@@ -37,8 +37,9 @@ MediaWiki Action API, so they cost nothing extra to support:
 | `wikivoyage` | `{lang}.wikivoyage.org` | Travel guides |
 | `wikinews` | `{lang}.wikinews.org` | |
 | `wikispecies` | `species.wikimedia.org` | **No language editions** — `lang` is ignored |
+| `commons` | `commons.wikimedia.org` | **No language editions** — `lang` is ignored. For browsing media *categories*; files themselves have dedicated tools |
 
-Commons and Wikidata have their own tools and no language editions, so they are not in the enum.
+Wikidata has its own tools and no language editions, so it is not in the enum.
 
 ## Upstream API keys
 
@@ -60,76 +61,83 @@ Commons and Wikidata have their own tools and no language editions, so they are 
 
 Everything below was confirmed by live HTTP probes on 2026-07-27, not read from documentation.
 
-- **A library-default User-Agent gets a hard 403 from the CDN edge, before MediaWiki.** `curl -A
-  'python-requests/2.31.0'` returned **403**; the same request with this server's descriptive
-  User-Agent returned **200**. Enforcement rolled out under
-  [T400119](https://phabricator.wikimedia.org/T400119) from September 2025. A compliant User-Agent is
-  also worth 20x the throughput — an "unidentified" client is capped at 10 requests/minute against 200.
-  Every request goes through `wikimediaFetch` in `src/clients/http.ts` for exactly this reason.
-  (An *empty* User-Agent header was not blocked in testing; only library defaults were. The
-  requirement is met regardless.)
-- **`action=parse&prop=sections` is deprecated; `prop=tocdata` replaces it.** The live API says so
-  itself: *"prop=sections has been deprecated. Please use prop=tocdata instead."* `tocdata` carries
-  the same data under camelCase keys (`tocLevel`, `hLevel`, `fromTitle`, `codepointOffset`) and still
-  exposes the `index` that `&section=N` consumes. Every other Wikipedia MCP server surveyed still uses
-  the deprecated form.
-- **`clshow=!hidden` silently loses categories.** Confirmed on `Kiwi (bird)` — 28 categories, 19 of
-  them hidden maintenance categories: the filter is applied *after* the `cllimit` window is selected,
-  and the response carries **no continuation token**. So `cllimit=3` returns **zero** categories and
-  `cllimit=10` returns **one**, both reporting that there is nothing more to fetch, when the page
-  actually has nine visible categories. `wikimedia_get_page_categories` therefore fetches the full 500
-  with `clprop=hidden` and filters and paginates client-side.
-- **Wikidata's query service is split into two disjoint graphs, and querying the wrong one returns
-  zero rows rather than an error.** Counting `?s wdt:P31 wd:Q13442814` (scholarly article):
-  `query.wikidata.org` → **0**, `query-scholarly.wikidata.org` → **45,681,217**. The split was
-  finalised 20 January 2026 and re-merging is not planned. `wikimedia_query_wikidata_sparql` exposes
-  the choice as a required-by-default `graph` parameter and, when a `main` query returns nothing,
-  says so in the notice.
-- **The Action API reports its own failures as HTTP 200.** Paging past the CirrusSearch ceiling
-  returns `200` with `{"error":{"code":"cirrussearch-offset-too-large",...}}` in the body, so a
-  status-only check treats a failure as success. `actionApi()` inspects the body and raises
-  `ActionApiError`.
-- **Only search is offset-paginated.** `list=search` and `generator=search` take `sroffset`/`gsroffset`
-  (ceiling 10,000). Every other list module returns an opaque cursor — `blcontinue` is `ns|pageid`,
-  `cmcontinue` is a hex sortkey blob. Those tools expose `cursor`/`next_cursor` rather than pretending
-  to offset: synthesising an offset would mean re-walking every prior page on each call, against an
-  API whose unauthenticated concurrency limit is **1**.
-- **`en.wikispecies.org` does not exist** — it 301s away. Wikispecies is served only from
-  `species.wikimedia.org`, with no language prefix, so the obvious `{lang}.{project}.org` template
-  breaks for exactly this one project.
-- **Commons `extmetadata` values are wrapped and sometimes contain HTML.** Every field is
-  `{value, source, hidden?}` and must be unwrapped, and `Artist` is sometimes plain text
-  ("John Gerrard Keulemans") and sometimes a raw anchor
-  (`<a href="//commons.wikimedia.org/wiki/User:Alvesgaspar" ...>Alvesgaspar</a>`). Both are stripped
-  before being returned.
-- **Requested thumbnail widths are advisory.** `iiurlwidth=400` returned `thumbwidth: 400` alongside a
-  `thumburl` containing `500px-`; `pithumbsize=400` behaved the same way. Commons rounds to standard
-  buckets, so `thumbnail_url` is authoritative and the requested width is not promised.
-- **Normalisation and redirection are separate steps.** `kiwi bird` is *normalised* to `Kiwi bird` and
-  then *redirected* to `Kiwi (bird)`, reported in two distinct arrays. Both are surfaced, because
-  collapsing them loses the difference between a capitalisation fixup and an editorial redirect.
-- **`pageprops.disambiguation` is an empty string in both format versions** — key presence is the
-  signal, not truthiness. `wikimedia_get_page` returns a disambiguation page's linked options instead
-  of its prose, since the prose reads like an answer while naming several unrelated subjects.
-- **Full article extracts are large.** `World War II` measures ~86,000 characters as plain text
-  (~250,000 as wikitext, ~1.8 MB as Parsoid HTML). `wikimedia_get_page` returns a section outline plus
-  the opening text above a `max_chars` budget rather than flooding the caller's context. Raw HTML is
-  never exposed.
-- **`exlimit` degrades silently.** Requesting multiple titles with `prop=extracts` but without
-  `exintro` returns a full extract for the first title and `""` for the rest, with a warning rather
-  than an error. Batching only works for intro extracts.
-- **Wikidata property pages live under a `Property:` namespace.** `/wiki/P31` is a **404**;
-  `/wiki/Property:P31` is a 200. Both Wikidata tools build the namespaced form for P-ids, since
-  `type: "property"` searches return exactly the ids the naive form breaks on.
-- **A SPARQL `VALUES` clause comes after the solution modifiers**, so appending `LIMIT n` to a query
-  ending in `VALUES ?s { ... }` is a syntax error — confirmed live, the same query returns 200
-  unmodified and 400 with the injection. The row cap is therefore injected only when it is provably
-  safe, and enforced again on the returned rows regardless.
-- **`api.wikimedia.org` and RESTBase are both being retired**; this server uses neither. The API
-  Gateway was shut down in 2026 and Core API deprecation began July 2026, with no replacement routes
-  announced. RESTBase's `page/related`, `page/mobile-sections`, and `page/data-parsoid` already return
-  403, and `page/summary` — which every other Wikipedia MCP server depends on — has no announced
-  replacement. Everything here runs on the per-wiki Action API and the Wikibase REST API, both stable.
+- **CirrusSearch already folds macrons; the recall problem is the AND, not the diacritics.** `Ōpepe`
+  and `Opepe` return the identical 20 hits — `action=cirrus-schema-dump` shows the `text` and
+  `text_search` analyzers both ending in `icu_folding`. What loses the article is that every term is
+  a `MUST`: `Ōpepe ambush 1869 Taupō` returned **1** unrelated hit because `Opepe, New Zealand` never
+  uses the word "ambush". `srqdprofile=perfield_builder_relaxed` (`minimum_should_match: '3<-1
+  5<50%'`) returns **10** with the right article first, and turned
+  `Ngāti Tūwharetoa Taupō lakebed ownership fishing licences` from **0** hits into **780**. Queries of
+  three terms or fewer are unaffected. Do not use `perfield_builder_title_filter` — it made the same
+  query return zero.
+- **Quoted phrases and `insource:` are diacritic-*sensitive*, unlike free text.** The `plain_search`
+  analyzer has no `icu_folding`. `intitle:"Ōpepe"` returns **0** hits against `intitle:"Opepe"`'s 2,
+  and `insource:"Ōpepe"` returns 4 against 20. This is the only place client-side folding helps, and
+  it is applied to exactly those two parameters.
+- **Never act on `searchinfo.suggestion` for macronised queries.** The phrase suggester runs against
+  the already-folded index, so a diacritic has zero edit distance to it and it spends its budget
+  elsewhere: `Taupō` → `tampa`, `Opepe` → `opera`, `Ōpepe Taupō` → `ōhope tampa`.
+- **`lasteditdate:>` excludes the boundary day.** `lasteditdate:>2026-07-27 Taupō` returned **0**
+  hits where `>=2026-07-27` returned **35**.
+- **`action=parse&section=N` is the wrong way to read a section.** It renders the section in
+  isolation, so a `<ref name>` defined elsewhere emits
+  `Cite error: The named reference X was invoked but never defined` into the prose; it appends a
+  partial reference list (56% of one `Taupō Volcano` section's payload); it takes one section per
+  call (`section=1|2` is `invalidsection`); and it cannot address a transcluded section, whose index
+  is `T-1`. A whole-page parse has **zero** cite errors — checked on `Taupō Volcano`, `Lake Taupō`,
+  `World War II` and `New Zealand`.
+- **`HTMLRewriter` does not decode character references.** Both text chunks and `getAttribute` hand
+  back the raw source slice, so `&#160;` and `&amp;` survive unless decoded explicitly.
+  `mobileformat=1` removes most of the problem upstream — on `Taupō Volcano` it took `&#160;` from
+  141 to 0, `&#8202;` from 68 to 0 and `&#91;` from 86 to 0. **Never send `mobileformat=0`**:
+  MediaWiki booleans are true whenever the parameter is present at all.
+- **There is no references API.** `/api/rest_v1/page/references/{title}` 404s on every title tried,
+  `mobile-sections` now returns 403, and `/w/rest.php/v1/` has no equivalent. The COinS
+  `span.Z3988` OpenURL blobs in the rendered HTML are the only machine-readable citations available
+  — 49 of them on `Taupō Volcano`, with DOIs, bibcodes, authors and URLs.
+- **`prop=extracts` cannot batch a full article.** `exlimit` caps at 20 but is silently forced to 1
+  whenever `exintro` is absent, with a warning rather than an error. The gate is `exintro` alone;
+  `explaintext`, `exchars` and `exsentences` do not unlock it.
+- **`palimit` defaults to 10 across the whole batch, not per page.** Three titles at the default
+  returned assessments for one and silently nothing for the other two. `palimit=max` is mandatory.
+  Assessments are stored on the talk page but must be queried on the *subject* title — passing
+  `Talk:X` returns no `pageassessments` key at all.
+- **Hidden `All …` categories are not all maintenance issues.** `All Wikipedia articles written in
+  New Zealand English` has 38,000 members. The quality flags use an explicit allow-list, and the
+  project-independent WP:PIQA pseudo-project is what carries a single grade per article. A
+  disambiguation page reports an **empty-string** class, not `Disambig`.
+- **`watchers` absent means fewer than 30**, not zero — MediaWiki suppresses the count below that
+  so unwatched pages cannot be identified.
+- **WDQS never reports a timeout as HTTP 500.** An aggregate query past the 60-second deadline
+  returns **504** `upstream request timeout` at ~65.5s; a streaming `SELECT` returns **200** with a
+  body truncated mid-token and a `TimeoutException` trace appended — measured at **1,684,247,442
+  bytes**, which is an out-of-memory kill for a 128 MB Worker if buffered. Response bodies are read
+  through a byte cap for this reason.
+- **A WDQS 400 carries the parser's own diagnosis**, `MalformedQueryException: Encountered "<EOF>" at
+  line 1, column 35`, followed by ~40 frames of Java stack trace. The first is worth surfacing; the
+  rest is not. A malformed query is never transient.
+- **WDQS refuses writes outright**, so the read-only guard is defence in depth rather than the only
+  barrier: `POST update=INSERT DATA {...}` returns **405 `Not writable.`**, and `query=INSERT DATA`
+  is rejected by the parser, whose accepted start set is only
+  `BASE | PREFIX | SELECT | CONSTRUCT | DESCRIBE | ASK`.
+- **The scholarly graph split is by `instance of`, not by subject.** `?s wdt:P31 wd:Q13442814` is 0
+  on main and 45,685,285 on scholarly, but `?work wdt:P921 wd:Q43642` returns rows on **both** — the
+  main graph holds encyclopedia articles (Q13433827), articles (Q191067) and editions (Q3331189).
+  `query-legacy-full.wikidata.org` no longer resolves; cross-graph questions federate from main with
+  `SERVICE <https://query-scholarly.wikidata.org/sparql>`.
+- **The Wikibase REST API has no `_language` parameter.** Passing one returns all ~180 languages with
+  HTTP 200 and no warning. Bulk label lookup with a fallback is `wbgetentities` with
+  `languagefallback=1`, capped at 50 ids; the fallback target is not always English — Q3621064 falls
+  back to `mul`.
+- **A quantity's unit is an entity URI, and its readable symbol is P5061**, not its label: Q712226 is
+  "square kilometre" by label and `km²` by P5061. `"1"` is the unitless marker. One `wbgetentities`
+  call with `props=claims` resolves every unit on a page at once.
+- **Wikibase time values cannot be parsed with `Date`.** Month and day are legitimately `00` when
+  unknown, days run to 31 in any month to allow "leap dates", and Q2 carries the year
+  `-4540000000`. `precision` is what makes a value honest: 9 means the year only, so
+  `+1986-00-00T00:00:00Z` means 1986, not 1 January 1986.
+- **`list=backlinks` and `list=categorymembers` return HTTP 200 with an empty list** for a title that
+  does not exist, so `prop=info` rides along on the same request to tell a typo from a real absence.
 
 ## Example research questions
 
@@ -143,3 +151,6 @@ Everything below was confirmed by live HTTP probes on 2026-07-27, not read from 
   `wikimedia_query_wikidata_sparql`)
 - "How is this topic covered differently in te reo Māori?" (`wikimedia_get_page_metadata` with
   `include_languages` → `wikimedia_get_page` with `lang: "mi"`)
+- "Which of these twenty articles are reliable enough to cite, and what do the shakiest ones
+  actually cite?" (`wikimedia_get_page_metadata` for `assessment_class` and `maintenance` →
+  `wikimedia_get_page` with `include_references` on the ones that need checking)

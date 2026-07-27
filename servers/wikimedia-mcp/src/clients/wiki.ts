@@ -1,3 +1,5 @@
+import { parsePageDocument, stripInlineHtml, type ParsedDocument } from "../html.js";
+import { foldDiacritics } from "../text.js";
 import { actionApi, readCursor, requireSinglePage, resolveTitle, type QueryPage, type TitleResolution } from "./actionApi.js";
 
 export type SearchHit = {
@@ -12,18 +14,57 @@ export type SearchHit = {
 export type SearchResult = {
   hits: SearchHit[];
   total_hits: number;
+  /** CirrusSearch's own "did you mean", when it offers one. Advisory only — see searchPages.ts. */
+  suggestion?: string;
+  suggestion_snippet?: string;
+  /** Set only when `enableRewrites` was passed: the query the service actually ran instead. */
+  rewritten_query?: string;
 };
 
 /** CirrusSearch's documented ceiling for offset paging. Past it the API errors rather than truncating. */
 export const SEARCH_OFFSET_CEILING = 10000;
 
+/**
+ * CirrusSearch query-builder profiles, which control how many of the query's terms a page must
+ * match. This is the single most important recall lever the Action API exposes.
+ *
+ * The wiki default (`perfield_builder`) makes every term a `MUST`, so one absent word zeroes out an
+ * otherwise perfect match. `perfield_builder_relaxed` differs by exactly one setting —
+ * `minimum_should_match: '3<-1 5<50%'`, i.e. up to 3 terms all required, 4-5 terms allow one miss,
+ * 6+ require half. Short queries are therefore completely unaffected.
+ *
+ * Confirmed live against en.wikipedia.org:
+ *   "Ōpepe ambush 1869 Taupō"                     strict: 1 hit    relaxed: 10 hits, target #1
+ *   "Ngāti Tūwharetoa Taupō lakebed ownership …"  strict: 0 hits   relaxed: 780 hits, target #1
+ *
+ * `perfield_builder_title_filter` is deliberately not offered: it adds a `3<80%` constraint on the
+ * title/redirect fields and made the first query above return zero.
+ */
+export const QUERY_BUILDER_PROFILES = {
+  relaxed: "perfield_builder_relaxed",
+  all: "perfield_builder",
+} as const;
+
+export type MatchMode = keyof typeof QUERY_BUILDER_PROFILES;
+
 export async function searchPages(
   env: Env,
   host: string,
-  params: { search: string; namespace: number; sort: string; limit: number; offset: number },
+  params: {
+    search: string;
+    namespace: number;
+    sort: string;
+    limit: number;
+    offset: number;
+    match: MatchMode;
+    enableRewrites?: boolean;
+  },
 ): Promise<SearchResult> {
   const body = await actionApi<{
-    query?: { searchinfo?: { totalhits?: number }; search?: SearchHit[] };
+    query?: {
+      searchinfo?: { totalhits?: number; suggestion?: string; suggestionsnippet?: string; rewrittenquery?: string };
+      search?: SearchHit[];
+    };
   }>(env, host, {
     action: "query",
     list: "search",
@@ -32,13 +73,23 @@ export async function searchPages(
     srsort: params.sort,
     srlimit: params.limit,
     sroffset: params.offset,
-    srinfo: "totalhits",
+    srqdprofile: QUERY_BUILDER_PROFILES[params.match],
+    // The API's own default for `srinfo` is `totalhits|suggestion|rewrittenquery`. Asking for only
+    // `totalhits` — as this once did — narrows it and throws away the "did you mean" for free.
+    srinfo: "totalhits|suggestion|rewrittenquery",
     srprop: "snippet|size|wordcount|timestamp",
+    // Opt-in, because it makes the service re-run a corrected query and return *those* rows. Useful
+    // as a last resort on zero results, wrong as a default.
+    ...(params.enableRewrites ? { srenablerewrites: 1 } : {}),
   });
 
+  const info = body.query?.searchinfo;
   return {
     hits: body.query?.search ?? [],
-    total_hits: body.query?.searchinfo?.totalhits ?? 0,
+    total_hits: info?.totalhits ?? 0,
+    ...(info?.suggestion !== undefined ? { suggestion: info.suggestion } : {}),
+    ...(info?.suggestionsnippet !== undefined ? { suggestion_snippet: info.suggestionsnippet } : {}),
+    ...(info?.rewrittenquery !== undefined ? { rewritten_query: info.rewrittenquery } : {}),
   };
 }
 
@@ -54,6 +105,14 @@ export async function searchPages(
  * Double quotes are stripped from filter values rather than escaped: CirrusSearch has no documented
  * escape for a quote inside a quoted phrase, so an embedded one would silently terminate the phrase
  * and turn the remainder into unrelated search terms.
+ *
+ * `in_title` and `in_source` are diacritic-folded on the way in, because both are emitted as quoted
+ * phrases and quoted phrases search the `plain` field, whose query-side analyzer has no
+ * `icu_folding` (see src/text.ts). Confirmed live: `intitle:"Ōpepe"` returns **0** hits while
+ * `intitle:"Opepe"` returns 2, and `insource:"Ōpepe"` returns 4 against `insource:"Opepe"`'s 20.
+ * The folded form is a strict superset — the index keeps the original alongside the folded token —
+ * so this only ever adds matches. A caller who genuinely wants the exact macronised phrase can pass
+ * `insource:"Ōpepe"` through `query`, which is never folded.
  */
 export function buildSearchQuery(input: {
   query?: string | undefined;
@@ -67,12 +126,16 @@ export function buildSearchQuery(input: {
   const terms: string[] = [];
   const quote = (value: string) => `"${value.replace(/"/g, "")}"`;
 
-  if (input.in_title) terms.push(`intitle:${quote(input.in_title)}`);
+  if (input.in_title) terms.push(`intitle:${quote(foldDiacritics(input.in_title))}`);
   if (input.in_category) {
+    // Not folded: a category filter is an exact name, and `incategory:"Ngāti Tūwharetoa"` must keep
+    // its macrons to resolve to the real category page.
     terms.push(`${input.in_category_deep ? "deepcat" : "incategory"}:${quote(input.in_category)}`);
   }
-  if (input.in_source) terms.push(`insource:${quote(input.in_source)}`);
-  if (input.edited_after) terms.push(`lasteditdate:>${input.edited_after}`);
+  if (input.in_source) terms.push(`insource:${quote(foldDiacritics(input.in_source))}`);
+  // `>=`, not `>`: this parameter documents itself as "on or after", and `lasteditdate:>2024-01-01`
+  // excludes every edit made on 2024-01-01 itself — a silently missing day at the boundary.
+  if (input.edited_after) terms.push(`lasteditdate:>=${input.edited_after}`);
   // `morelike:` is the documented replacement for the removed RESTBase /page/related endpoint. It
   // must not be quoted — the operator takes a bare page title, spaces and all.
   if (input.more_like) terms.push(`morelike:${input.more_like}`);
@@ -136,40 +199,63 @@ export type TocSection = {
   anchor: string;
 };
 
-/**
- * Fetch a page's section outline.
- *
- * Uses `prop=tocdata`, NOT `prop=sections`: the latter is deprecated and the live API says so
- * ("prop=sections has been deprecated. Please use prop=tocdata instead."). `tocdata` carries the
- * same information under camelCase keys — `tocLevel`/`hLevel`/`fromTitle`/`codepointOffset` — and
- * still exposes the `index` that `&section=N` consumes.
- */
-export async function fetchSectionOutline(env: Env, host: string, title: string): Promise<TocSection[]> {
-  const body = await actionApi<{
-    parse?: {
-      tocdata?: { sections?: Array<{ index?: string; tocLevel?: number; hLevel?: number; number?: string; line?: string; anchor?: string }> };
-    };
-  }>(env, host, { action: "parse", page: title, prop: "tocdata", redirects: 1 });
+type RawTocSection = {
+  index?: string;
+  tocLevel?: number;
+  hLevel?: number;
+  number?: string;
+  line?: string;
+  anchor?: string;
+  fromTitle?: string | false;
+  codepointOffset?: number | null;
+};
 
-  return (body.parse?.tocdata?.sections ?? []).map((section) => ({
+function mapTocData(sections: RawTocSection[] | undefined): TocSection[] {
+  return (sections ?? []).map((section) => ({
     index: section.index ?? "",
     level: section.hLevel ?? section.tocLevel ?? 1,
     number: section.number ?? "",
-    title: section.line ?? "",
+    // `line` is the rendered heading HTML, not text — the API's own example returns "Foo &amp; Bar"
+    // against an anchor of "Foo_&_Bar".
+    title: stripInlineHtml(section.line ?? ""),
     anchor: section.anchor ?? "",
   }));
 }
 
-/** Fetch one section of a page as rendered HTML, ready for htmlToPlainText. */
-export async function fetchSectionHtml(env: Env, host: string, title: string, section: string): Promise<{ html: string; title: string }> {
-  const body = await actionApi<{ parse?: { title?: string; text?: string } }>(env, host, {
+
+/**
+ * Fetch and parse a whole page in one request: every section's plain text, its exact length, and
+ * the article's citations.
+ *
+ * `mobileformat` runs the output through MobileFormatter, which pre-decodes numeric character
+ * references. Measured on `Taupō Volcano`: `&#160;` 141 -> 0, `&#8202;` 68 -> 0, `&#91;` 86 -> 0,
+ * leaving only the structural `&amp;`/`&lt;`/`&gt;`/`&quot;` that `decodeEntities` handles. **Never
+ * send `mobileformat: 0`** — MediaWiki booleans are true whenever the parameter is present at all,
+ * so `0` would enable it while reading as if it disabled it.
+ *
+ * `disablelimitreport` drops the NewPP HTML comment block, which is pure noise over the wire.
+ */
+export async function fetchPageDocument(env: Env, host: string, title: string): Promise<ParsedDocument & { title: string }> {
+  const body = await actionApi<{
+    parse?: {
+      title?: string;
+      text?: string;
+      tocdata?: { sections?: RawTocSection[] };
+    };
+  }>(env, host, {
     action: "parse",
     page: title,
-    section,
-    prop: "text",
+    prop: "text|tocdata",
     redirects: 1,
+    mobileformat: 1,
+    disableeditsection: 1,
+    disabletoc: 1,
+    disablelimitreport: 1,
   });
-  return { html: body.parse?.text ?? "", title: body.parse?.title ?? title };
+
+  const outline = mapTocData(body.parse?.tocdata?.sections);
+  const document = await parsePageDocument(body.parse?.text ?? "", outline);
+  return { ...document, title: body.parse?.title ?? title };
 }
 
 /** Fetch the mainspace links on a page — used to list a disambiguation page's options. */
@@ -196,6 +282,12 @@ export type PageMetadata = QueryPage & {
   original?: { source: string; width: number; height: number };
   coordinates?: Array<{ lat: number; lon: number; primary?: boolean; globe?: string }>;
   langlinks?: Array<{ lang: string; url?: string; langname?: string; autonym?: string; title: string }>;
+  pageassessments?: Record<string, { class?: string; importance?: string }>;
+  categories?: Array<{ title: string; hidden?: boolean }>;
+  protection?: Array<{ type: string; level: string; expiry: string }>;
+  talkid?: number;
+  /** Absent below MediaWiki's 30-watcher privacy floor. Absent is "fewer than 30", never "zero". */
+  watchers?: number;
 };
 
 export async function fetchPageMetadata(
@@ -211,13 +303,24 @@ export async function fetchPageMetadata(
     };
   }>(env, host, {
     action: "query",
-    prop: "info|description|pageimages|coordinates|pageprops|langlinks",
-    inprop: "url",
+    prop: "info|description|pageimages|coordinates|pageprops|langlinks|pageassessments|categories",
+    inprop: "url|protection|talkid|watchers",
     ppprop: "disambiguation|wikibase_item",
     piprop: "thumbnail|original",
     pithumbsize: params.thumbnailWidth,
     lllimit: 500,
     llprop: "url|langname|autonym",
+    // `palimit` defaults to 10 **across all pages in the batch**, not per page. Verified live: three
+    // titles at the default silently returned zero assessments for two of them, with no warning.
+    palimit: "max",
+    // `clshow=!hidden` is not used here for the same reason getPageCategories avoids it (see
+    // CATEGORY_FETCH_LIMIT); the hidden ones are exactly what the maintenance signals need anyway.
+    clshow: "hidden",
+    // `clprop=hidden` is what actually puts the `hidden` flag on each row. Without it the rows are
+    // bare `{ns, title}` — confirmed live — and every maintenance signal reads as absent on every
+    // page, which is a silent total failure rather than an error.
+    clprop: "hidden",
+    cllimit: "max",
     titles: params.titles.join("|"),
     redirects: 1,
   });
@@ -243,20 +346,29 @@ export async function fetchBacklinks(
   env: Env,
   host: string,
   params: { title: string; type: BacklinkType; namespace?: number | undefined; limit: number; cursor?: string | undefined },
-): Promise<{ rows: LinkRow[]; next_cursor: string | null }> {
+): Promise<{ rows: LinkRow[]; next_cursor: string | null; targetExists: boolean }> {
   const module = BACKLINK_MODULES[params.type];
-  const body = await actionApi<{ query?: Record<string, LinkRow[]> }>(env, host, {
+  // `prop=info` on the same request answers "does the target exist" for free. Without it an empty
+  // list is indistinguishable from a typo'd or wrong-namespace title: these modules return HTTP 200
+  // with `[]` for a page that does not exist, and there is no error to map.
+  const body = await actionApi<{ query?: Record<string, LinkRow[]> & { pages?: QueryPage[] } }>(env, host, {
     action: "query",
     list: module.list,
+    prop: "info",
+    titles: params.title,
     [module.titleParam]: params.title,
     [module.limitParam]: params.limit,
     ...(params.namespace !== undefined ? { [module.nsParam]: params.namespace } : {}),
     ...(params.cursor ? { [module.cursorKey]: params.cursor } : {}),
   });
 
+  const page = body.query?.pages?.[0];
   return {
-    rows: body.query?.[module.list] ?? [],
+    rows: (body.query?.[module.list] as LinkRow[] | undefined) ?? [],
     next_cursor: readCursor(body, module.cursorKey),
+    // Absent `pages` means the check could not be made; assume the target is real rather than
+    // inventing a "does not exist" notice from a missing field.
+    targetExists: page === undefined || (page.missing !== true && page.invalid !== true),
   };
 }
 
@@ -305,10 +417,14 @@ export async function fetchCategoryMembers(
   env: Env,
   host: string,
   params: { category: string; type: string; namespace?: number | undefined; limit: number; cursor?: string | undefined },
-): Promise<{ rows: CategoryMember[]; next_cursor: string | null }> {
-  const body = await actionApi<{ query?: { categorymembers?: CategoryMember[] } }>(env, host, {
+): Promise<{ rows: CategoryMember[]; next_cursor: string | null; categoryExists: boolean }> {
+  const body = await actionApi<{ query?: { categorymembers?: CategoryMember[]; pages?: QueryPage[] } }>(env, host, {
     action: "query",
     list: "categorymembers",
+    // Same reason as fetchBacklinks: an empty member list and a misspelled category name are
+    // otherwise the same response.
+    prop: "info",
+    titles: params.category,
     cmtitle: params.category,
     cmtype: params.type,
     cmlimit: params.limit,
@@ -320,8 +436,10 @@ export async function fetchCategoryMembers(
     ...(params.cursor ? { cmcontinue: params.cursor } : {}),
   });
 
+  const page = body.query?.pages?.[0];
   return {
     rows: body.query?.categorymembers ?? [],
     next_cursor: readCursor(body, "cmcontinue"),
+    categoryExists: page === undefined || (page.missing !== true && page.invalid !== true),
   };
 }

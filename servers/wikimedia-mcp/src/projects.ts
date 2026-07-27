@@ -13,6 +13,7 @@ export const PROJECTS = [
   "wikivoyage",
   "wikinews",
   "wikispecies",
+  "commons",
 ] as const;
 
 export type Project = (typeof PROJECTS)[number];
@@ -23,7 +24,8 @@ export const projectParam = z
   .describe(
     "Which Wikimedia project to read: 'wikipedia' (encyclopedia), 'wiktionary' (dictionary definitions), " +
       "'wikisource' (source texts), 'wikiquote' (quotations), 'wikivoyage' (travel guides), 'wikinews', " +
-      "or 'wikispecies' (taxonomy — note it has no per-language edition, so `lang` is ignored for it).",
+      "'wikispecies' (taxonomy), or 'commons' (the shared media repository — use it to browse media " +
+      "categories). Neither 'wikispecies' nor 'commons' has per-language editions, so `lang` is ignored for both.",
   );
 
 export const langParam = z
@@ -32,7 +34,12 @@ export const langParam = z
   .default("en")
   .describe("Wiki language edition code, e.g. 'en', 'mi' (te reo Maori), 'fr'. Ignored for project 'wikispecies'.");
 
-/** Wikimedia Commons is not in the `project` enum — it has its own dedicated tools and no language editions. */
+/**
+ * Wikimedia Commons.
+ *
+ * Also reachable as a `project`, so category browsing works there — the dedicated media tools cover
+ * files, but `wikimedia_get_category_members` had no way to reach a Commons category at all.
+ */
 export const COMMONS_HOST = "commons.wikimedia.org";
 
 /** Wikidata's Action API host, used for `wbsearchentities` and the Wikibase REST API. */
@@ -47,6 +54,7 @@ export const WIKIDATA_HOST = "www.wikidata.org";
  */
 export function resolveWikiHost(project: Project, lang: string): string {
   if (project === "wikispecies") return "species.wikimedia.org";
+  if (project === "commons") return COMMONS_HOST;
   return `${lang.toLowerCase()}.${project}.org`;
 }
 

@@ -85,6 +85,36 @@ describe("wikimedia_get_backlinks", () => {
     expect((calledUrls(scoped)[0] as URL).searchParams.get("blnamespace")).toBe("0");
   });
 
+  it("says so when the target page does not exist, instead of a bare empty list", async () => {
+    // These list modules answer HTTP 200 with [] for a title that does not exist, so an empty result
+    // was indistinguishable from a real page nothing links to. `prop=info` rides along to tell them
+    // apart.
+    const mock = stubFetchRoutes([
+      { match: anyUrl, body: { query: { pages: [{ ns: 0, title: "Zzzz Nope", missing: true }], backlinks: [] } } },
+    ]);
+
+    const result = await getBacklinksHandler({ title: "Zzzz Nope" }, fakeEnv());
+
+    expect((calledUrls(mock)[0] as URL).searchParams.get("prop")).toBe("info");
+    expect(result.structuredContent?.notice).toContain("No page titled 'Zzzz Nope' exists");
+  });
+
+  it("stays quiet when the target is missing but rows came back anyway", async () => {
+    // Confirmed live: an uncreated File: page still has imageusage rows. Asserting "this empty
+    // result means the title is wrong" over a populated list would be flatly false.
+    stubFetchRoutes([
+      {
+        match: anyUrl,
+        body: { query: { pages: [{ ns: 6, title: "File:X.pdf", missing: true }], imageusage: [{ pageid: 1, ns: 0, title: "Uses it" }] } },
+      },
+    ]);
+
+    const result = await getBacklinksHandler({ title: "File:X.pdf", type: "file_usage" }, fakeEnv());
+
+    expect((result.structuredContent?.links as unknown[]).length).toBe(1);
+    expect(result.structuredContent?.notice).toBe("");
+  });
+
   it("surfaces an upstream error as an actionable tool error", async () => {
     stubFetchRoutes([{ match: anyUrl, body: { error: { code: "invalidtitle", info: "Bad title" } } }]);
 

@@ -6,6 +6,7 @@ import {
   runSparql,
   SPARQL_ENDPOINTS,
   SparqlRejectedError,
+  SparqlSyntaxError,
   SparqlTimeoutError,
   type SparqlBinding,
 } from "../clients/sparql.js";
@@ -22,7 +23,10 @@ export const queryWikidataSparqlInputShape = {
     .describe(
       "Which Wikidata graph to query. These hold DIFFERENT data and querying the wrong one returns zero rows rather than an error: " +
         "'main' excludes every scholarly article (Q13442814) entirely, and 'scholarly' holds those ~45 million items and little else. " +
-        "Use 'scholarly' for anything about academic papers, citations, or authorship; 'main' for everything else.",
+        "Use 'scholarly' for anything about academic papers, citations, or authorship; 'main' for everything else. " +
+        "The split is by `instance of` alone, not by subject, so works about an academic topic can sit in either graph — " +
+        "for a question that genuinely spans both, query 'main' and federate with " +
+        "`SERVICE <https://query-scholarly.wikidata.org/sparql> { ... }`.",
     ),
   limit: limitParam(500, 100),
 };
@@ -117,6 +121,11 @@ export async function queryWikidataSparqlHandler(rawInput: unknown, env: Env): P
   } catch (error) {
     if (error instanceof SparqlTimeoutError) {
       return toolError(error.message, "Add a more selective triple pattern, restrict by type first, or lower `limit`.");
+    }
+    if (error instanceof SparqlSyntaxError) {
+      // Explicitly NOT routed through the generic upstream path, whose advice is "this may be
+      // transient; retry" — a malformed query fails identically every time.
+      return toolError(error.message, "Fix the syntax at the position reported above and call again. Do not retry the query unchanged.");
     }
     const mapped = mapCommonWikiError(error, "Check the SPARQL syntax; the service returns an error page for a malformed query.");
     if (mapped) return mapped;

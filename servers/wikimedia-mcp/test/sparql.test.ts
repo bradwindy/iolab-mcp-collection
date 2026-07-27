@@ -196,4 +196,68 @@ describe("wikimedia_query_wikidata_sparql", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain("500");
   });
+
+  it("recognises a 504 as the timeout it actually is", async () => {
+    // The 500-with-a-Java-trace case above could not be reproduced live at all. What WDQS really
+    // returns for an aggregate query past the deadline is HTTP 504, text/plain "upstream request
+    // timeout", at ~65.5s — so checking only for 500 left SparqlTimeoutError unreachable.
+    stubFetchRoutes([{ match: anyUrl, text: "upstream request timeout", status: 504 }]);
+
+    const result = await queryWikidataSparqlHandler({ query: "SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o }" }, fakeEnv());
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("60-second");
+    expect(result.content[0]?.text).toContain("selective");
+  });
+
+  it("recognises a truncated 200 body with a timeout trace appended", async () => {
+    // The streaming case: a SELECT that outruns the deadline returns HTTP 200 with
+    // content-type: application/sparql-results+json, cut off mid-token, with the Java trace tacked
+    // on. Measured live at 1,684,247,442 bytes — `await response.json()` on that is an OOM kill in a
+    // 128 MB Worker rather than an error message.
+    stubFetchRoutes([
+      {
+        match: anyUrl,
+        text: '{"head":{"vars":["a"]},"results":{"bindings":[{"a":{"type":"uri","value":"http://www.wikjava.util.concurrent.TimeoutException\n\tat java.util.concurrent.FutureTask.get(FutureTask.java:205)',
+        status: 200,
+      },
+    ]);
+
+    const result = await queryWikidataSparqlHandler({ query: "SELECT ?a ?b WHERE { ?a wdt:P31 ?b }" }, fakeEnv());
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("60-second");
+  });
+
+  it("surfaces the parser's own message for a syntax error and says not to retry", async () => {
+    // A 400 previously fell through to the generic upstream path, whose advice is "this may be
+    // transient; retry" — for a query that is malformed and will fail identically every time.
+    stubFetchRoutes([
+      {
+        match: anyUrl,
+        text:
+          "SPARQL-QUERY: queryStr=SELECT ?x WHERE { ?x wdt:P31 wd:Q5 \n" +
+          'java.util.concurrent.ExecutionException: org.openrdf.query.MalformedQueryException: Encountered "<EOF>" at line 1, column 35.\n' +
+          "\tat java.util.concurrent.FutureTask.report(FutureTask.java:122)\n\tat java.util.concurrent.FutureTask.get(FutureTask.java:206)",
+        status: 400,
+      },
+    ]);
+
+    const result = await queryWikidataSparqlHandler({ query: "SELECT ?x WHERE { ?x wdt:P31 wd:Q5" }, fakeEnv());
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("line 1, column 35");
+    expect(result.content[0]?.text).toContain("Do not retry");
+    // The forty frames of Java stack trace are not something a caller can act on.
+    expect(result.content[0]?.text).not.toContain("FutureTask");
+    expect(result.content[0]?.text).not.toContain("transient");
+  });
+
+  it("does not retry a 504, which would re-run a query already known to be too slow", async () => {
+    const mock = stubFetchRoutes([{ match: anyUrl, text: "upstream request timeout", status: 504 }]);
+
+    await queryWikidataSparqlHandler({ query: "SELECT ?s WHERE { ?s ?p ?o }" }, fakeEnv());
+
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
 });

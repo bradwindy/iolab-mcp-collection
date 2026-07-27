@@ -18,6 +18,11 @@ interface HtmlRewriterElementHandlers {
 interface HtmlRewriterElement {
   tagName: string;
   getAttribute(name: string): string | null;
+  /**
+   * Throws `TypeError: Parser error: No end tag.` when the element is void (`<br>`, `<hr>`,
+   * `<img>`) — verified in this repo's workerd runtime. There is no `canHaveContent` property in
+   * this version to test first, so callers must catch. See `trackEndTag` in src/html.ts.
+   */
   onEndTag(handler: () => void): void;
 }
 

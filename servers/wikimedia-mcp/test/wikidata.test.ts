@@ -224,4 +224,198 @@ describe("wikimedia_get_entity", () => {
     const error = await getEntityHandler({ entity_id: "not-an-id" }, fakeEnv()).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(Error);
   });
+
+  it("surfaces the qualifiers that tell two statements of the same property apart", async () => {
+    // The reported defect: Q664 returned 36 `population` values with no point in time, no unit and
+    // no way to order them. The data was in the payload the whole time.
+    stubFetchRoutes([
+      {
+        match: isRest,
+        body: {
+          id: "Q664",
+          statements: {
+            P1082: [
+              {
+                id: "Q664$a",
+                rank: "normal",
+                property: { id: "P1082", data_type: "quantity" },
+                value: { type: "value", content: { amount: "+3516000", unit: "1" } },
+                qualifiers: [
+                  {
+                    property: { id: "P585", data_type: "time" },
+                    value: {
+                      type: "value",
+                      content: { time: "+1991-12-31T00:00:00Z", precision: 11, calendarmodel: "http://www.wikidata.org/entity/Q1985727" },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      {
+        match: isLabels,
+        body: { entities: { P1082: { labels: { en: { value: "population", language: "en" } } }, P585: { labels: { en: { value: "point in time", language: "en" } } } } },
+      },
+    ]);
+
+    const result = await getEntityHandler({ entity_id: "Q664", properties: ["P1082"] }, fakeEnv());
+
+    const statements = result.structuredContent?.statements as Array<Record<string, unknown>>;
+    expect(statements[0]?.["value"]).toBe("+3516000");
+    expect(statements[0]?.["qualifiers"]).toEqual([
+      {
+        property_id: "P585",
+        property_label: "point in time",
+        value: "31 December 1991",
+        precision: 11,
+        precision_label: "day",
+        calendar_model: "proleptic Gregorian",
+      },
+    ]);
+  });
+
+  it("asks for a language fallback and reports which language actually answered", async () => {
+    // With `language: "mi"` and no fallback, wbgetentities returns {} for an id with no te reo label
+    // and the tool degraded into a wall of bare Q-ids — the exact thing it exists to prevent.
+    const mock = stubFetchRoutes([
+      {
+        match: isRest,
+        body: {
+          id: "Q43642",
+          statements: {
+            P31: [{ property: { id: "P31", data_type: "wikibase-item" }, value: { type: "value", content: "Q16521" } }],
+          },
+        },
+      },
+      {
+        match: isLabels,
+        body: {
+          entities: {
+            P31: { labels: { mi: { value: "he tauira o", language: "mi" } } },
+            // The live shape of a fallback: `language` reports what served it, `for-language` marks
+            // that it is a fallback. Note it is not always English — some ids fall back to `mul`.
+            Q16521: { labels: { mi: { value: "taxon", language: "en", "for-language": "mi" } } },
+          },
+        },
+      },
+    ]);
+
+    const result = await getEntityHandler({ entity_id: "Q43642", language: "mi" }, fakeEnv());
+
+    const labelsUrl = calledUrls(mock).find((url) => url.searchParams.has("languages")) as URL;
+    expect(labelsUrl.searchParams.get("languages")).toBe("mi|en");
+    expect(labelsUrl.searchParams.get("languagefallback")).toBe("1");
+
+    const statements = result.structuredContent?.statements as Array<Record<string, unknown>>;
+    expect(statements[0]?.["value"]).toBe("taxon");
+    expect(result.structuredContent?.label_fallbacks).toEqual({ Q16521: "en" });
+  });
+
+  it("resolves labels for reference values, not just reference properties", async () => {
+    // Review finding: collectValueIds skipped references entirely, so `stated in` came back as the
+    // bare "Q328" while its property label resolved — half-working reads worse than not working.
+    stubFetchRoutes([
+      {
+        match: isRest,
+        body: {
+          id: "Q42",
+          statements: {
+            P31: [
+              {
+                property: { id: "P31", data_type: "wikibase-item" },
+                value: { type: "value", content: "Q5" },
+                references: [
+                  {
+                    hash: "abc",
+                    parts: [{ property: { id: "P248", data_type: "wikibase-item" }, value: { type: "value", content: "Q328" } }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      {
+        match: isLabels,
+        body: {
+          entities: {
+            P31: { labels: { en: { value: "instance of", language: "en" } } },
+            P248: { labels: { en: { value: "stated in", language: "en" } } },
+            Q5: { labels: { en: { value: "human", language: "en" } } },
+            Q328: { labels: { en: { value: "English Wikipedia", language: "en" } } },
+          },
+        },
+      },
+    ]);
+
+    const result = await getEntityHandler({ entity_id: "Q42", include_references: true }, fakeEnv());
+
+    const statements = result.structuredContent?.statements as Array<Record<string, unknown>>;
+    expect(statements[0]?.["references"]).toEqual([
+      {
+        hash: "abc",
+        parts: [{ property_id: "P248", property_label: "stated in", value: "English Wikipedia", entity_id: "Q328" }],
+      },
+    ]);
+  });
+
+  it("pages sitelinks separately and reports their own total", async () => {
+    // `limit` governs statements; a country has 300+ sitelinks, so `include_sitelinks: true` with
+    // `limit: 10` used to return every one of them — thousands of tokens in a call that looked bounded.
+    stubFetchRoutes([
+      {
+        match: isRest,
+        body: {
+          id: "Q664",
+          statements: {},
+          sitelinks: Object.fromEntries(
+            Array.from({ length: 40 }, (_, index) => [`wiki${index}`, { title: `Title ${index}`, url: `https://example.org/${index}` }]),
+          ),
+        },
+      },
+      { match: isLabels, body: { entities: {} } },
+    ]);
+
+    const result = await getEntityHandler({ entity_id: "Q664", include_sitelinks: true, sitelinks_limit: 5, sitelinks_offset: 10 }, fakeEnv());
+
+    expect((result.structuredContent?.sitelinks as unknown[]).length).toBe(5);
+    expect(result.structuredContent?.sitelinks_total).toBe(40);
+    expect(result.structuredContent?.sitelinks_next_offset).toBe(15);
+    // total_count is statements, and now says so in the schema rather than implying it bounds the
+    // sitelinks too.
+    expect(result.structuredContent?.total_count).toBe(0);
+  });
+
+  it("resolves a quantity's unit symbol from P5061 in one extra batched call", async () => {
+    const mock = stubFetchRoutes([
+      {
+        match: isRest,
+        body: {
+          id: "Q664",
+          statements: {
+            P2046: [
+              {
+                property: { id: "P2046", data_type: "quantity" },
+                value: { type: "value", content: { amount: "+268021", unit: "http://www.wikidata.org/entity/Q712226" } },
+              },
+            ],
+          },
+        },
+      },
+      {
+        match: (url: string) => url.includes("props=claims"),
+        body: { entities: { Q712226: { claims: { P5061: [{ mainsnak: { datavalue: { value: { text: "km²", language: "en" } } } }] } } } },
+      },
+      { match: isLabels, body: { entities: { P2046: { labels: { en: { value: "area", language: "en" } } } } } },
+    ]);
+
+    const result = await getEntityHandler({ entity_id: "Q664", properties: ["P2046"] }, fakeEnv());
+
+    const statements = result.structuredContent?.statements as Array<Record<string, unknown>>;
+    expect(statements[0]?.["value"]).toBe("+268021 km²");
+    expect(statements[0]?.["unit_id"]).toBe("Q712226");
+    expect(calledUrls(mock).filter((url) => url.searchParams.get("props") === "claims")).toHaveLength(1);
+  });
 });

@@ -10,11 +10,19 @@ export const SOURCE = "Wikidata Query Service";
  *
  * Confirmed live (2026-07-27), counting `?s wdt:P31 wd:Q13442814` (scholarly article):
  *   query.wikidata.org           ->          0
- *   query-scholarly.wikidata.org -> 45,681,217
+ *   query-scholarly.wikidata.org -> 45,685,285
  *
- * The split was executed 9 May 2025 and finalised 20 January 2026, and re-merging is not planned
+ * The split was executed 9 May 2025 and re-merging is not planned
  * (https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/WDQS_graph_split). A tool that only
  * ever hit the default endpoint would silently return nothing for roughly a third of Wikidata.
+ *
+ * Membership is decided by `P31`/`P13046` alone, so the division is **not** by subject matter. A
+ * work carrying a subject-matter property such as `P921` can legitimately live in either graph —
+ * confirmed live, `?work wdt:P921 wd:Q43642` returns rows on both, with the main graph holding
+ * encyclopedia articles (Q13433827), articles (Q191067) and editions (Q3331189). For a question
+ * genuinely spanning both, federate from main with
+ * `SERVICE <https://query-scholarly.wikidata.org/sparql> { ... }`, which is supported and works.
+ * `query-legacy-full.wikidata.org` no longer resolves, so there is no full-graph endpoint left.
  */
 export const SPARQL_ENDPOINTS = {
   main: "https://query.wikidata.org/sparql",
@@ -192,8 +200,13 @@ export function assertReadOnlySparql(query: string): void {
     // these words are identifiers rather than operations. A real update verb sits at statement
     // position, preceded by whitespace or a separator, so it still matches.
     if (new RegExp(`(?<![?$:\\w])${keyword}\\b`, "i").test(scrubbed)) {
+      // "anywhere in the query" overstated what this does and read as a bug when a caller found
+      // that `VALUES ?s { "DELETE" }` runs fine. It does, deliberately: the scan is over `scrubbed`,
+      // with literal and IRI contents and comments already blanked out, so only a keyword in
+      // executable position is rejected.
       throw new SparqlRejectedError(
-        `This tool only runs read-only SELECT or ASK queries; '${keyword}' is not allowed anywhere in the query.`,
+        `This tool only runs read-only SELECT or ASK queries; '${keyword}' appears as query syntax. ` +
+          `The same word inside a string literal or a comment is fine.`,
       );
     }
   }
@@ -255,6 +268,28 @@ export class SparqlTimeoutError extends Error {
   }
 }
 
+/** A malformed query. Deterministic — retrying it is guaranteed to fail the same way. */
+export class SparqlSyntaxError extends Error {
+  constructor(readonly detail: string) {
+    super(detail.length > 0 ? `The Wikidata Query Service rejected the query as malformed: ${detail}` : "The Wikidata Query Service rejected the query as malformed.");
+    this.name = "SparqlSyntaxError";
+  }
+}
+
+/**
+ * Hard ceiling on the response body.
+ *
+ * A SPARQL result set that answers a sensible question is kilobytes. This exists for the case
+ * below, where the service streams until it times out: measured live, a `SELECT ?a ?b WHERE { ?a
+ * wdt:P31 ?b }` returned **1,684,247,442 bytes** with HTTP 200 before being cut off mid-token.
+ * `await response.json()` on that is an out-of-memory kill in a 128 MB Worker, not an error message.
+ */
+const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+
+
+/** Enough of the tail to catch a Java trace appended after a truncated result set. */
+const TIMEOUT_TRACE = /TimeoutException|QueryTimeout/i;
+
 export async function runSparql(env: Env, params: { query: string; graph: SparqlGraph }): Promise<SparqlResponse> {
   const url = new URL(SPARQL_ENDPOINTS[params.graph]);
   url.searchParams.set("query", params.query);
@@ -265,23 +300,85 @@ export async function runSparql(env: Env, params: { query: string; graph: Sparql
     url,
     { headers: { Accept: "application/sparql-results+json" } },
     {
-      // 500 is deliberately excluded from the retry set here, unlike everywhere else in this
-      // server. WDQS reports a query that blew its 60-second ceiling as a 500, and the default
-      // policy would re-run that same expensive query up to two more times — three minutes of
-      // load for a query already known to be too slow — before this client ever gets to inspect
-      // the body and raise SparqlTimeoutError.
+      // 500 and 504 are deliberately excluded from the retry set here, unlike everywhere else in
+      // this server: both are how WDQS reports a query that blew its 60-second ceiling, and the
+      // default policy would re-run that same expensive query up to two more times — three minutes
+      // of load for a query already known to be too slow.
       retryOn: (candidate) => candidate === undefined || candidate.status === 429 || candidate.status === 503,
     },
   );
 
-  // WDQS reports a query that ran past its 60-second ceiling as a 500 with a Java timeout trace in
-  // the body, which is indistinguishable from a real server fault unless the body is inspected.
+  // A query that exceeds the 60-second deadline reports itself three different ways, and the
+  // obvious one — HTTP 500 — is the one that could not be reproduced at all. Measured live:
+  //   aggregate query   -> HTTP 504, text/plain "upstream request timeout", at ~65.5s
+  //   streaming SELECT  -> HTTP 200, a truncated JSON body with a TimeoutException trace appended
+  // Checking only for 500, as this once did, left SparqlTimeoutError unreachable and sent the 200
+  // case straight into an unbounded JSON parse.
+  if (response.status === 504) throw new SparqlTimeoutError();
   if (response.status === 500) {
-    const body = await response.text();
-    if (/TimeoutException|QueryTimeout/i.test(body)) throw new SparqlTimeoutError();
+    const body = await readCapped(response);
+    if (TIMEOUT_TRACE.test(body)) throw new SparqlTimeoutError();
     throw new UpstreamHttpError(SOURCE, response);
+  }
+  if (response.status === 400) {
+    throw new SparqlSyntaxError(parseMalformedQuery(await readCapped(response)));
   }
   if (!response.ok) throw new UpstreamHttpError(SOURCE, response);
 
-  return (await response.json()) as SparqlResponse;
+  const body = await readCapped(response);
+  try {
+    return JSON.parse(body) as SparqlResponse;
+  } catch {
+    // A body that is not JSON at this point is a result set truncated mid-token by the deadline.
+    if (TIMEOUT_TRACE.test(body)) throw new SparqlTimeoutError();
+    throw new UpstreamHttpError(SOURCE, response);
+  }
+}
+
+/**
+ * Read a response body, refusing to buffer more than `MAX_RESPONSE_BYTES`.
+ *
+ * `response.text()` would happily accumulate the whole 1.6 GB. Reading the stream and stopping lets
+ * the truncated prefix still be inspected for a timeout trace.
+ */
+async function readCapped(response: Response): Promise<string> {
+  const body = response.body;
+  if (body === null) return "";
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  // Counted in bytes off the wire, not in string length: a decoded JS string is UTF-16, so its
+  // `.length` and the byte count diverge for any multi-byte sequence. Bytes are what the cap is
+  // actually protecting.
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      text += decoder.decode(value, { stream: true });
+      if (bytes >= MAX_RESPONSE_BYTES) {
+        // Everything past the cap is discarded; the tail carries the trace when there is one.
+        text += decoder.decode();
+        return text;
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  return text + decoder.decode();
+}
+
+/**
+ * Pull the useful line out of a Blazegraph parser error, discarding the Java stack trace.
+ *
+ * A live 400 body is a `MalformedQueryException` naming the offending token and position, followed
+ * by ~40 frames of `java.util.concurrent...` that say nothing a caller can act on.
+ */
+export function parseMalformedQuery(body: string): string {
+  const encountered = /Encountered\s+.*?at line \d+, column \d+\./s.exec(body);
+  if (encountered !== null) return encountered[0].replace(/\s+/g, " ").trim();
+  const malformed = /MalformedQueryException:\s*(.+)/.exec(body);
+  if (malformed !== null) return (malformed[1] as string).split("\n")[0]?.trim() ?? "";
+  return "";
 }
