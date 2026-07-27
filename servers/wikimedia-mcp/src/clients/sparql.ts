@@ -286,6 +286,7 @@ export class SparqlSyntaxError extends Error {
  */
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
+
 /** Enough of the tail to catch a Java trace appended after a truncated result set. */
 const TIMEOUT_TRACE = /TimeoutException|QueryTimeout/i;
 
@@ -346,12 +347,17 @@ async function readCapped(response: Response): Promise<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let text = "";
+  // Counted in bytes off the wire, not in string length: a decoded JS string is UTF-16, so its
+  // `.length` and the byte count diverge for any multi-byte sequence. Bytes are what the cap is
+  // actually protecting.
+  let bytes = 0;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      bytes += value.byteLength;
       text += decoder.decode(value, { stream: true });
-      if (text.length >= MAX_RESPONSE_BYTES) {
+      if (bytes >= MAX_RESPONSE_BYTES) {
         // Everything past the cap is discarded; the tail carries the trace when there is one.
         text += decoder.decode();
         return text;

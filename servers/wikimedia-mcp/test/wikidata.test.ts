@@ -354,7 +354,10 @@ describe("wikimedia_get_entity", () => {
 
     const statements = result.structuredContent?.statements as Array<Record<string, unknown>>;
     expect(statements[0]?.["references"]).toEqual([
-      { property_id: "P248", property_label: "stated in", value: "English Wikipedia", entity_id: "Q328" },
+      {
+        hash: "abc",
+        parts: [{ property_id: "P248", property_label: "stated in", value: "English Wikipedia", entity_id: "Q328" }],
+      },
     ]);
   });
 

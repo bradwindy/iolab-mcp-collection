@@ -247,6 +247,28 @@ describe("wikimedia_get_page", () => {
     expect(result.structuredContent?.notice).toContain("99");
   });
 
+  it("says when a requested section rendered as empty", async () => {
+    stubFetchRoutes([
+      { match: isExtract, body: extractBody() },
+      { match: isDocument, body: documentBody('<p>Lead.</p><div class="mw-heading"><h3 id="Species">Species</h3></div>') },
+    ]);
+
+    const result = await getPageHandler({ title: "Kiwi (bird)", section: "3" }, fakeEnv());
+
+    expect(result.structuredContent?.notice).toContain("rendered as empty");
+  });
+
+  it("treats a blank section as no section at all, rather than as an unmatched index", async () => {
+    // `z.string().min(1)` accepts " ", which normalised to an empty list and produced
+    // "has any of the indexes ." after a wasted whole-page render.
+    stubFetchRoutes([{ match: isExtract, body: extractBody() }]);
+
+    const result = await getPageHandler({ title: "Kiwi (bird)", section: "   " }, fakeEnv());
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent?.text).toBe("Kiwi are flightless birds endemic to New Zealand.");
+  });
+
   it("falls back to rendering the page when TextExtracts returns nothing", async () => {
     // Documented TextExtracts behaviour: an article that does not begin with a lead paragraph — one
     // opening with a template, or an unclosed element — yields an empty extract.

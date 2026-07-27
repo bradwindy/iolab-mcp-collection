@@ -199,22 +199,6 @@ export type TocSection = {
   anchor: string;
 };
 
-/**
- * Fetch a page's section outline.
- *
- * Uses `prop=tocdata`, NOT `prop=sections`: the latter is deprecated and the live API says so
- * ("prop=sections has been deprecated. Please use prop=tocdata instead."). `tocdata` carries the
- * same information under camelCase keys — `tocLevel`/`hLevel`/`fromTitle`/`codepointOffset` — and
- * still exposes the `index` that `&section=N` consumes.
- */
-export async function fetchSectionOutline(env: Env, host: string, title: string): Promise<TocSection[]> {
-  const body = await actionApi<{
-    parse?: { tocdata?: { sections?: RawTocSection[] } };
-  }>(env, host, { action: "parse", page: title, prop: "tocdata", redirects: 1 });
-
-  return mapTocData(body.parse?.tocdata?.sections);
-}
-
 type RawTocSection = {
   index?: string;
   tocLevel?: number;

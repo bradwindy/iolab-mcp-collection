@@ -300,14 +300,18 @@ function parseCoins(coins: string | undefined): Omit<ParsedReference, "ref_id" |
   const year = /^(\d{4})/.exec(fields.get("rft.date") ?? "")?.[1];
   const url = identifiers.find((id) => id.startsWith("http"));
 
+  const doi = prefixed("info:doi/");
+  const pmid = prefixed("info:pmid/");
+  const bibcode = prefixed("info:bibcode/");
+
   return {
-    ...(title !== null && title !== undefined ? { title } : {}),
-    ...(publication !== null && publication !== undefined ? { publication } : {}),
+    ...(title !== null ? { title } : {}),
+    ...(publication !== null ? { publication } : {}),
     ...(year !== undefined ? { year } : {}),
     ...(authors.length > 0 ? { authors } : {}),
-    ...(prefixed("info:doi/") !== undefined ? { doi: prefixed("info:doi/") as string } : {}),
-    ...(prefixed("info:pmid/") !== undefined ? { pmid: prefixed("info:pmid/") as string } : {}),
-    ...(prefixed("info:bibcode/") !== undefined ? { bibcode: prefixed("info:bibcode/") as string } : {}),
+    ...(doi !== undefined ? { doi } : {}),
+    ...(pmid !== undefined ? { pmid } : {}),
+    ...(bibcode !== undefined ? { bibcode } : {}),
     ...(url !== undefined ? { url } : {}),
   };
 }

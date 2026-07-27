@@ -94,7 +94,10 @@ const inputSchema = z.object(getPageInputShape);
 export async function getPageHandler(rawInput: unknown, env: Env): Promise<ToolTextResult> {
   const input = inputSchema.parse(rawInput);
   const { host } = wikiTarget(input.project, input.lang);
-  const requested = input.section === undefined ? undefined : normaliseSections(input.section);
+  // An all-blank `section` collapses to an empty list, which is "no section supplied", not "no
+  // section matched" — `z.string().min(1)` accepts " ". Without this it rendered the whole document
+  // and then reported `has any of the indexes .`
+  const requested = input.section === undefined ? undefined : emptyToUndefined(normaliseSections(input.section));
 
   try {
     // Fetched first regardless of mode: it resolves redirects/normalisation and classifies the page,
@@ -155,7 +158,9 @@ export async function getPageHandler(rawInput: unknown, env: Env): Promise<ToolT
 
       const notices: string[] = [];
       if (missing.length > 0) notices.push(`No section matched ${missing.join(", ")}; the rest are returned.`);
-      const empty = matched.filter((section) => section.chars === 0).map((section) => section.index);
+      // "Empty" means nothing beyond the heading, not zero characters: a headed section always
+      // carries its own title, so a `chars === 0` test could effectively only ever fire on the lead.
+      const empty = matched.filter((section) => section.text.trim() === section.title.trim()).map((section) => section.index);
       if (empty.length > 0) notices.push(`Section ${empty.join(", ")} rendered as empty.`);
 
       const single = matched.length === 1 ? (matched[0] as ParsedSection) : undefined;
@@ -264,6 +269,10 @@ export async function getPageHandler(rawInput: unknown, env: Env): Promise<ToolT
     if (mapped) return mapped;
     throw error;
   }
+}
+
+function emptyToUndefined(indexes: string[]): string[] | undefined {
+  return indexes.length === 0 ? undefined : indexes;
 }
 
 /** Accept one index or several, de-duplicated but in the order the caller asked for. */

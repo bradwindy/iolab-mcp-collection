@@ -220,7 +220,7 @@ export function collectValueIds(statement: RestStatement, includeReferences = fa
     if (isRecord(content)) {
       // Units, calendar models and globes are entity references too, and reading a bare Q-id for a
       // unit is exactly the ambiguity this is meant to remove.
-      for (const key of ["unit", "globe"]) {
+      for (const key of ["unit", "globe", "calendarmodel"]) {
         const id = unitId(content[key]);
         if (id !== undefined) ids.add(id);
       }

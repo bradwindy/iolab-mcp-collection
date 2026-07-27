@@ -90,7 +90,7 @@ export const getEntityOutputShape = {
        * these, repeated statements of the same property are indistinguishable from each other.
        */
       qualifiers: z.array(qualifierSchema).optional(),
-      references: z.array(qualifierSchema).optional(),
+      references: z.array(z.object({ hash: z.string().optional(), parts: z.array(qualifierSchema) })).optional(),
     }),
   ),
   /** Ids whose label came from a fallback language, keyed to the language that supplied it. */
@@ -189,7 +189,15 @@ export async function getEntityHandler(rawInput: unknown, env: Env): Promise<Too
     const statements = page.items.map(({ propertyId, statement }) => {
       const rendered = renderValue(statement, labels, unitSymbols);
       const qualifiers = (statement.qualifiers ?? []).map(renderSnak);
-      const references = (statement.references ?? []).flatMap((reference) => (reference.parts ?? []).map(renderSnak));
+      // Grouped by source, not flattened: a statement with two references each carrying `stated in`
+      // + `retrieved` would otherwise return four undifferentiated rows. Skipped entirely when not
+      // requested — the labels those parts need are not fetched on that path either.
+      const references = input.include_references
+        ? (statement.references ?? []).map((reference) => ({
+            ...(reference.hash !== undefined ? { hash: reference.hash } : {}),
+            parts: (reference.parts ?? []).map(renderSnak),
+          }))
+        : [];
       return {
         property_id: propertyId,
         ...(labels[propertyId] !== undefined ? { property_label: labels[propertyId] } : {}),
@@ -206,7 +214,7 @@ export async function getEntityHandler(rawInput: unknown, env: Env): Promise<Too
         ...(rendered.language !== undefined ? { language: rendered.language } : {}),
         ...(rendered.globe !== undefined ? { globe: rendered.globe } : {}),
         ...(qualifiers.length > 0 ? { qualifiers } : {}),
-        ...(input.include_references && references.length > 0 ? { references } : {}),
+        ...(references.length > 0 ? { references } : {}),
       };
     });
 
