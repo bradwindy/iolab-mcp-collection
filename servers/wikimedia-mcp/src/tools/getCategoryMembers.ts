@@ -42,9 +42,16 @@ export async function getCategoryMembersHandler(rawInput: unknown, env: Env): Pr
   const input = inputSchema.parse(rawInput);
   const { host } = wikiTarget(input.project, input.lang);
 
-  // `cmtitle` is rejected outright without the namespace prefix, which is an easy thing for a
-  // caller to omit — normalise rather than erroring.
-  const category = /^category:/i.test(input.category.trim()) ? input.category.trim() : `Category:${input.category.trim()}`;
+  // `cmtitle` is rejected outright without a namespace prefix, which is an easy thing for a caller
+  // to omit — normalise rather than erroring.
+  //
+  // The test is "does it already carry any namespace prefix", not "does it start with 'Category:'":
+  // every wiki has a localised alias for namespace 14 (`Catégorie:` on frwiki, `Kategorie:` on
+  // dewiki — confirmed against each wiki's own siteinfo), so matching only the English form would
+  // turn `Catégorie:Oiseaux` into the nonexistent `Category:Catégorie:Oiseaux`. The canonical
+  // `Category:` prefix is accepted by every wiki, which is why it is safe to add to a bare name.
+  const trimmed = input.category.trim();
+  const category = trimmed.includes(":") ? trimmed : `Category:${trimmed}`;
 
   try {
     const { rows, next_cursor } = await fetchCategoryMembers(env, host, {

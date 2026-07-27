@@ -33,7 +33,7 @@ export function createFakeCache() {
  * Empty by default, which is the case every tool must work in: the Wikimedia OAuth token is
  * optional and nothing here requires it.
  */
-export function createFakeCredentialsDb() {
+export function createFakeCredentialsDb(storedValue: string | null = null) {
   return {
     prepare() {
       return {
@@ -44,7 +44,7 @@ export function createFakeCredentialsDb() {
           return {};
         },
         async first() {
-          return null;
+          return storedValue === null ? null : { value: storedValue };
         },
         async all() {
           return { results: [] };
@@ -54,12 +54,43 @@ export function createFakeCredentialsDb() {
   };
 }
 
-/** Builds a fake Env for wikimedia-mcp tool tests — no upstream credential configured. */
-export function fakeEnv(): Env {
+/** A credentials store whose every read rejects — a D1 outage or a corrupted row. */
+export function createFailingCredentialsDb() {
+  return {
+    prepare() {
+      return {
+        bind() {
+          return this;
+        },
+        async run(): Promise<never> {
+          throw new Error("D1 unavailable");
+        },
+        async first(): Promise<never> {
+          throw new Error("D1 unavailable");
+        },
+        async all(): Promise<never> {
+          throw new Error("D1 unavailable");
+        },
+      };
+    },
+  };
+}
+
+export const TEST_ENCRYPTION_KEY = "NOnV4EUJ4r07rvPzrNy6SGdvJPCoAJQL+j7i2004jpo=";
+
+/**
+ * Builds a fake Env for wikimedia-mcp tool tests.
+ *
+ * Defaults to no upstream credential, which is the case every tool must work in. Pass
+ * `encryptedToken` (produced with `@iolab/credentials`' own `encryptValue`) to exercise the
+ * optional Bearer path without needing a real Wikimedia token, or `failingCredentials` to check
+ * that a broken credential store degrades to anonymous rather than breaking every tool.
+ */
+export function fakeEnv(opts: { encryptedToken?: string; failingCredentials?: boolean } = {}): Env {
   return {
     MCP_CACHE: createFakeCache(),
-    CREDENTIALS_DB: createFakeCredentialsDb(),
-    ENCRYPTION_KEY: "NOnV4EUJ4r07rvPzrNy6SGdvJPCoAJQL+j7i2004jpo=",
+    CREDENTIALS_DB: opts.failingCredentials ? createFailingCredentialsDb() : createFakeCredentialsDb(opts.encryptedToken ?? null),
+    ENCRYPTION_KEY: TEST_ENCRYPTION_KEY,
   } as unknown as Env;
 }
 

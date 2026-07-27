@@ -12,6 +12,9 @@ import {
 import { serially } from "../clients/http.js";
 import { mapCommonWikiError, attributionSchema } from "../toolSupport.js";
 
+/** Declared once so the advertised limit and the enforced limit cannot drift apart. */
+const STATEMENT_BOUNDS = { maxLimit: 100, defaultLimit: 40 } as const;
+
 export const getEntityInputShape = {
   entity_id: z
     .string()
@@ -26,7 +29,7 @@ export const getEntityInputShape = {
     .boolean()
     .default(false)
     .describe("Include the list of wikis with an article about this entity, with their titles and URLs. Popular entities have 100+ of these."),
-  limit: limitParam(100, 40),
+  limit: limitParam(STATEMENT_BOUNDS.maxLimit, STATEMENT_BOUNDS.defaultLimit),
   offset: offsetParam,
 };
 
@@ -62,7 +65,12 @@ function renderValue(statement: RestStatement, labels: Record<string, string>): 
   if (statement.value?.type === "novalue") return { value: "(no value)" };
   if (statement.value?.type === "somevalue") return { value: "(unknown value)" };
   if (typeof content === "string") {
-    if (/^[QP]\d+$/.test(content)) return { value: labels[content] ?? content, entityId: content };
+    // Gate on the declared data type, not the string shape: an `external-id` or `string` value that
+    // happens to read "Q42" (catalogue codes do) would otherwise be rendered as an entity label and
+    // handed a `value_entity_id` the caller is told they can fetch.
+    const dataType = statement.property?.data_type;
+    const isEntityRef = dataType === undefined || dataType === "wikibase-item" || dataType === "wikibase-property";
+    if (isEntityRef && /^[QP]\d+$/.test(content)) return { value: labels[content] ?? content, entityId: content };
     return { value: content };
   }
   if (content && typeof content === "object") {
@@ -100,7 +108,7 @@ export async function getEntityHandler(rawInput: unknown, env: Env): Promise<Too
     }
 
     const flat = grouped.flatMap(([propertyId, statements]) => statements.map((statement) => ({ propertyId, statement })));
-    const page = paginate(flat, { limit: input.limit, offset: input.offset }, { maxLimit: 100, defaultLimit: 40 });
+    const page = paginate(flat, { limit: input.limit, offset: input.offset }, STATEMENT_BOUNDS);
 
     // Only the statements actually being returned need labels resolving, which usually keeps this
     // to a single batch even for an entity with hundreds of statements. When it doesn't, the ids are

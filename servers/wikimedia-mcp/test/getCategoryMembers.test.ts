@@ -40,6 +40,10 @@ describe("wikimedia_get_category_members", () => {
       ["Birds of New Zealand", "Category:Birds of New Zealand"],
       ["Category:Birds of New Zealand", "Category:Birds of New Zealand"],
       ["category:Birds of New Zealand", "category:Birds of New Zealand"],
+      // Localised namespace aliases: frwiki calls namespace 14 "Catégorie", dewiki "Kategorie".
+      // Matching only the English prefix would produce "Category:Catégorie:Oiseaux".
+      ["Catégorie:Oiseaux", "Catégorie:Oiseaux"],
+      ["Kategorie:Vögel", "Kategorie:Vögel"],
     ] as const) {
       const mock = stubFetchRoutes([{ match: anyUrl, body: { query: { categorymembers: [] } } }]);
       const result = await getCategoryMembersHandler({ category: input }, fakeEnv());

@@ -11,6 +11,15 @@ describe("manifest", () => {
     expect(new Set(pathPrefixes).size).toBe(pathPrefixes.length);
   });
 
+  it("registers wikimedia-mcp with the path prefix and credential name its server reads", () => {
+    // The count and uniqueness checks above would be satisfied by any ninth entry. A slug or
+    // key-name mismatch here writes a credential row the server can never read back, which
+    // docs/ADDING_A_SERVER.md §7 records as having happened once already.
+    const wikimedia = findServer("wikimedia-mcp");
+    expect(wikimedia?.pathPrefix).toBe("wikimedia");
+    expect(wikimedia?.credentialKeys.map((key) => key.envName)).toEqual(["WIKIMEDIA_OAUTH_TOKEN"]);
+  });
+
   it("gives every credential key a label and an https signup URL", () => {
     for (const server of SERVERS) {
       for (const key of server.credentialKeys) {

@@ -3,7 +3,8 @@ import { htmlToPlainText, stripInlineHtml } from "../src/html.js";
 import { resolveWikiHost, PROJECTS } from "../src/projects.js";
 import { getOptionalWikimediaToken } from "../src/credentials.js";
 import { wikimediaFetch, serially, USER_AGENT } from "../src/clients/http.js";
-import { calledHeaders, fakeEnv, jsonResponse } from "./support/fakeEnv.js";
+import { encryptValue } from "@iolab/credentials";
+import { calledHeaders, fakeEnv, jsonResponse, TEST_ENCRYPTION_KEY } from "./support/fakeEnv.js";
 
 describe("resolveWikiHost", () => {
   it("builds a per-language host for every project that has language editions", () => {
@@ -86,6 +87,20 @@ describe("credentials", () => {
     // User-Agent is well beyond interactive use, so the token is genuinely optional.
     expect(await getOptionalWikimediaToken(fakeEnv())).toBeNull();
   });
+
+  it("returns a configured token", async () => {
+    // A real Wikimedia token can't be obtained here, but the decrypt path is the repo's own and can
+    // be exercised with a dummy value — otherwise a typo in the key name would ship silently.
+    const stored = await encryptValue("tok-123", TEST_ENCRYPTION_KEY);
+    expect(await getOptionalWikimediaToken(fakeEnv({ encryptedToken: stored }))).toBe("tok-123");
+  });
+
+  it("degrades to anonymous when the credential store fails, rather than breaking every tool", async () => {
+    // getCredential can reject on a D1 outage, a bad ENCRYPTION_KEY, or a corrupted row. Since
+    // every upstream request awaits it, propagating would take down all eleven tools — including
+    // the anonymous path that needs no credential at all.
+    expect(await getOptionalWikimediaToken(fakeEnv({ failingCredentials: true }))).toBeNull();
+  });
 });
 
 describe("wikimediaFetch", () => {
@@ -110,6 +125,18 @@ describe("wikimediaFetch", () => {
     await wikimediaFetch(fakeEnv(), "https://en.wikipedia.org/w/api.php");
 
     expect(calledHeaders(mock).has("authorization")).toBe(false);
+  });
+
+  it("sends a Bearer header when a token is configured, and never leaks it into a response", async () => {
+    const mock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({})));
+    vi.stubGlobal("fetch", mock);
+    const stored = await encryptValue("tok-123", TEST_ENCRYPTION_KEY);
+
+    const response = await wikimediaFetch(fakeEnv({ encryptedToken: stored }), "https://en.wikipedia.org/w/api.php");
+
+    expect(calledHeaders(mock).get("authorization")).toBe("Bearer tok-123");
+    // The decrypted credential must never reach the caller, at any response format.
+    expect(JSON.stringify(await response.json())).not.toContain("tok-123");
   });
 
   it("preserves caller-supplied headers alongside the User-Agent", async () => {

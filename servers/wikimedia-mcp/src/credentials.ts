@@ -16,6 +16,16 @@ import { SERVER_SLUG, WIKIMEDIA_OAUTH_TOKEN } from "./constants.js";
  * until the operator enters one via the portal.
  */
 export async function getOptionalWikimediaToken(env: Env): Promise<string | null> {
-  const token = await getCredential(env.CREDENTIALS_DB, SERVER_SLUG, WIKIMEDIA_OAUTH_TOKEN, env.ENCRYPTION_KEY);
-  return token && token.length > 0 ? token : null;
+  try {
+    const token = await getCredential(env.CREDENTIALS_DB, SERVER_SLUG, WIKIMEDIA_OAUTH_TOKEN, env.ENCRYPTION_KEY);
+    return token && token.length > 0 ? token : null;
+  } catch (error) {
+    // `getCredential` can reject on a D1 failure, a malformed ENCRYPTION_KEY, or a corrupted row.
+    // Since every upstream request awaits this, letting any of those propagate would turn an
+    // optional throughput upgrade into a hard failure for all eleven tools — including the
+    // anonymous path that is meant to be the default. Degrade to anonymous instead, and leave a
+    // trace so a genuinely broken credential store is still diagnosable from Workers Logs.
+    console.error("[wikimedia-mcp] optional OAuth token lookup failed; continuing anonymously", error);
+    return null;
+  }
 }

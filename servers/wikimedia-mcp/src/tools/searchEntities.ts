@@ -38,7 +38,7 @@ export async function searchEntitiesHandler(rawInput: unknown, env: Env): Promis
   const input = inputSchema.parse(rawInput);
 
   try {
-    const { hits, has_more } = await searchEntities(env, {
+    const { hits, has_more, next_offset } = await searchEntities(env, {
       search: input.query,
       language: input.language,
       type: input.type,
@@ -57,9 +57,10 @@ export async function searchEntitiesHandler(rawInput: unknown, env: Env): Promis
       })),
       returned: hits.length,
       has_more,
-      // wbsearchentities' `continue` parameter is a plain result offset, so unlike the wiki list
-      // modules this genuinely is offset pagination and can be reported as one.
-      next_offset: has_more ? input.offset + hits.length : null,
+      // `search-continue` is the offset to resume from, echoed back rather than recomputed as
+      // `offset + hits.length`: the API can consume more of the result space than it returns hits
+      // for, so recomputing it silently skips matches.
+      next_offset,
       attribution: attribution("Wikidata", { license: "CC0 1.0", url: "https://www.wikidata.org/" }),
     });
   } catch (error) {

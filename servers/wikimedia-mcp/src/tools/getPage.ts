@@ -3,7 +3,7 @@ import { CACHE_TTL, cached, jsonResult, type ToolTextResult } from "@iolab/mcp-k
 import { fetchPageExtract, fetchPageLinks, fetchSectionHtml, fetchSectionOutline, type TocSection } from "../clients/wiki.js";
 import { htmlToPlainText } from "../html.js";
 import { langParam, projectParam } from "../projects.js";
-import { mapCommonWikiError, attributionSchema, wikiAttribution, wikiTarget } from "../toolSupport.js";
+import { mapCommonWikiError, attributionSchema, wikiAttribution, wikiPageUrl, wikiTarget } from "../toolSupport.js";
 
 export const getPageInputShape = {
   title: z.string().min(1).describe("Exact page title, e.g. 'Kiwi (bird)'. Redirects and capitalisation are resolved automatically."),
@@ -76,7 +76,7 @@ export async function getPageHandler(rawInput: unknown, env: Env): Promise<ToolT
     const base = {
       title: resolvedTitle,
       wiki: host,
-      url: summary.canonical_url ?? `https://${host}/wiki/${encodeURIComponent(resolvedTitle.replace(/ /g, "_"))}`,
+      url: summary.canonical_url ?? wikiPageUrl(host, resolvedTitle),
       normalized_from: summary.resolution.normalized_from,
       redirected_from: summary.resolution.redirected_from,
       ...(summary.description !== undefined ? { description: summary.description } : {}),

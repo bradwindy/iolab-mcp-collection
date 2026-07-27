@@ -1,4 +1,4 @@
-import { fetchWithBackoff } from "@iolab/mcp-kit";
+import { fetchWithBackoff, type RetryOptions } from "@iolab/mcp-kit";
 import { getOptionalWikimediaToken } from "../credentials.js";
 
 /**
@@ -24,12 +24,17 @@ export const USER_AGENT = "iolab-mcp-collection/wikimedia-mcp (+https://github.c
  *
  * Always GET: Wikimedia's API:Etiquette asks clients to prefer GET because POSTs are not cacheable.
  */
-export async function wikimediaFetch(env: Env, url: string | URL, init: RequestInit = {}): Promise<Response> {
+export async function wikimediaFetch(
+  env: Env,
+  url: string | URL,
+  init: RequestInit = {},
+  retry: RetryOptions = {},
+): Promise<Response> {
   const token = await getOptionalWikimediaToken(env);
   const headers = new Headers(init.headers);
   headers.set("User-Agent", USER_AGENT);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetchWithBackoff(url, { ...init, headers });
+  return fetchWithBackoff(url, { ...init, headers }, retry);
 }
 
 /**

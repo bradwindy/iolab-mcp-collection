@@ -32,7 +32,7 @@ export type EntitySearchHit = {
 export async function searchEntities(
   env: Env,
   params: { search: string; language: string; type: string; limit: number; offset: number },
-): Promise<{ hits: EntitySearchHit[]; has_more: boolean }> {
+): Promise<{ hits: EntitySearchHit[]; has_more: boolean; next_offset: number | null }> {
   const body = await actionApi<{ search?: EntitySearchHit[]; "search-continue"?: number }>(env, WIKIDATA_HOST, {
     action: "wbsearchentities",
     search: params.search,
@@ -43,10 +43,12 @@ export async function searchEntities(
     continue: params.offset,
   });
 
+  const continueAt = body["search-continue"];
   return {
     hits: body.search ?? [],
     // `search-continue` is the offset of the next result; its absence is how the API signals the end.
-    has_more: body["search-continue"] !== undefined,
+    has_more: continueAt !== undefined,
+    next_offset: continueAt ?? null,
   };
 }
 

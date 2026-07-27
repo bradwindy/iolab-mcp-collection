@@ -47,6 +47,21 @@ describe("wikimedia_search_pages", () => {
     ]);
   });
 
+  it("keeps namespace and subpage separators unescaped in the page URL", async () => {
+    // encodeURIComponent on a whole title escapes ':' and '/', which are path structure in a
+    // MediaWiki URL rather than data — the result is a different page, and these titles are the
+    // norm on Wikisource and Wikispecies, which this tool serves.
+    stubFetchRoutes([
+      { match: anyUrl, body: searchBody([{ ns: 0, title: "Author:Doyle/Chapter 1", pageid: 99, snippet: "" }]) },
+    ]);
+
+    const result = await searchPagesHandler({ query: "doyle", project: "wikisource" }, fakeEnv());
+
+    expect((result.structuredContent?.results as Array<{ url: string }>)[0]?.url).toBe(
+      "https://en.wikisource.org/wiki/Author:Doyle/Chapter_1",
+    );
+  });
+
   it("composes structured filters into CirrusSearch syntax and reports the effective query", async () => {
     const mock = stubFetchRoutes([{ match: anyUrl, body: searchBody([]) }]);
 

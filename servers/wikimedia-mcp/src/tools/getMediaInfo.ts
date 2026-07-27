@@ -49,12 +49,15 @@ export async function getMediaInfoHandler(rawInput: unknown, env: Env): Promise<
   const title = normaliseFileTitle(input.title);
 
   try {
-    // Commons files are immutable once uploaded (a re-upload creates a new revision under a new
-    // URL), so this is safe to cache for a day unlike wiki page text.
+    // Deliberately NOT cached for a day: Commons permits overwriting a file in place under the
+    // same title (https://commons.wikimedia.org/wiki/Commons:Overwriting_existing_files), which
+    // changes the file URL, dimensions, and — the part that matters — its author and licence. This
+    // response is what a caller cites when reusing the image, so serving day-old attribution is a
+    // correctness problem, not a staleness nicety.
     const { title: resolvedTitle, pageid, info } = await cached(
       env.MCP_CACHE,
       `wikimedia:file:${input.thumbnail_width}:${title}`,
-      CACHE_TTL.METADATA,
+      CACHE_TTL.SLOW_MOVING,
       () => fetchMediaInfo(env, { title, thumbnailWidth: input.thumbnail_width }),
     );
 

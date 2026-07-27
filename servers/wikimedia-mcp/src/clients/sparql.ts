@@ -260,7 +260,19 @@ export async function runSparql(env: Env, params: { query: string; graph: Sparql
   url.searchParams.set("query", params.query);
   url.searchParams.set("format", "json");
 
-  const response = await wikimediaFetch(env, url, { headers: { Accept: "application/sparql-results+json" } });
+  const response = await wikimediaFetch(
+    env,
+    url,
+    { headers: { Accept: "application/sparql-results+json" } },
+    {
+      // 500 is deliberately excluded from the retry set here, unlike everywhere else in this
+      // server. WDQS reports a query that blew its 60-second ceiling as a 500, and the default
+      // policy would re-run that same expensive query up to two more times — three minutes of
+      // load for a query already known to be too slow — before this client ever gets to inspect
+      // the body and raise SparqlTimeoutError.
+      retryOn: (candidate) => candidate === undefined || candidate.status === 429 || candidate.status === 503,
+    },
+  );
 
   // WDQS reports a query that ran past its 60-second ceiling as a 500 with a Java timeout trace in
   // the body, which is indistinguishable from a real server fault unless the body is inspected.

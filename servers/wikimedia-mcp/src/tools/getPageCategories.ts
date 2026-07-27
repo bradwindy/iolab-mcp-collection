@@ -4,6 +4,9 @@ import { CATEGORY_FETCH_LIMIT, fetchPageCategories } from "../clients/wiki.js";
 import { langParam, projectParam } from "../projects.js";
 import { mapCommonWikiError, attributionSchema, wikiAttribution, wikiTarget } from "../toolSupport.js";
 
+/** Declared once so the advertised limit and the enforced limit cannot drift apart. */
+const CATEGORY_BOUNDS = { maxLimit: 100, defaultLimit: 50 } as const;
+
 export const getPageCategoriesInputShape = {
   title: z.string().min(1).describe("Exact page title. Redirects are resolved automatically."),
   include_hidden: z
@@ -15,7 +18,7 @@ export const getPageCategoriesInputShape = {
     ),
   project: projectParam,
   lang: langParam,
-  limit: limitParam(100, 50),
+  limit: limitParam(CATEGORY_BOUNDS.maxLimit, CATEGORY_BOUNDS.defaultLimit),
   offset: offsetParam,
 };
 
@@ -54,7 +57,7 @@ export async function getPageCategoriesHandler(rawInput: unknown, env: Env): Pro
     );
 
     const visible = input.include_hidden ? rows : rows.filter((row) => row.hidden !== true);
-    const page = paginate(visible, { limit: input.limit, offset: input.offset }, { maxLimit: 100, defaultLimit: 50 });
+    const page = paginate(visible, { limit: input.limit, offset: input.offset }, CATEGORY_BOUNDS);
 
     return jsonResult({
       categories: page.items.map((row) => ({ title: row.title, hidden: row.hidden === true })),

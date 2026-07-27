@@ -3,7 +3,7 @@ import { describePage, jsonResult, limitParam, offsetParam, toolError, type Tool
 import { buildSearchQuery, searchPages, SEARCH_OFFSET_CEILING } from "../clients/wiki.js";
 import { stripInlineHtml } from "../html.js";
 import { langParam, projectParam } from "../projects.js";
-import { mapCommonWikiError, attributionSchema, wikiAttribution, wikiTarget } from "../toolSupport.js";
+import { mapCommonWikiError, attributionSchema, wikiAttribution, wikiPageUrl, wikiTarget } from "../toolSupport.js";
 
 export const searchPagesInputShape = {
   query: z
@@ -115,7 +115,7 @@ export async function searchPagesHandler(rawInput: unknown, env: Env): Promise<T
       ...(hit.size !== undefined ? { size_bytes: hit.size } : {}),
       ...(hit.wordcount !== undefined ? { word_count: hit.wordcount } : {}),
       ...(hit.timestamp !== undefined ? { last_edited: hit.timestamp } : {}),
-      url: `https://${host}/wiki/${encodeURIComponent(hit.title.replace(/ /g, "_"))}`,
+      url: wikiPageUrl(host, hit.title),
     }));
 
     const pageInfo = describePage({ returned: results.length, total_count: total_hits, offset: input.offset });
