@@ -27,12 +27,38 @@ describe("summariseMaintenance", () => {
     expect(maintenance.flags).toEqual(["accuracy_disputes", "dead_external_links", "unsourced_statements"]);
   });
 
+  it("ignores dated categories that are formatting conventions, not maintenance tags", () => {
+    // Live on `Lake Taupō`: its only dated hidden categories are `Use New Zealand English from
+    // April 2013` and `Use dmy dates from March 2024`. It has no maintenance issues, but taking the
+    // earliest of every dated category reported it as tagged since 2013-04.
+    const maintenance = summariseMaintenance([
+      { title: "Category:Use New Zealand English from April 2013", hidden: true },
+      { title: "Category:Use dmy dates from March 2024", hidden: true },
+    ]);
+
+    expect(maintenance.flags).toEqual([]);
+    expect(maintenance.oldest_tag_month).toBeUndefined();
+  });
+
+  it("takes the month from the maintenance tag, not from a newer formatting category", () => {
+    // `Kiwi (bird)` live: the real tag is from September 2013 and the Use-dmy category from 2020.
+    const maintenance = summariseMaintenance([
+      { title: "Category:All articles with unsourced statements", hidden: true },
+      { title: "Category:Articles with unsourced statements from September 2013", hidden: true },
+      { title: "Category:Use dmy dates from January 2020", hidden: true },
+      { title: "Category:Use New Zealand English from March 2024", hidden: true },
+    ]);
+
+    expect(maintenance.flags).toEqual(["unsourced_statements"]);
+    expect(maintenance.oldest_tag_month).toBe("2013-09");
+  });
+
   it("reports the earliest month a still-open tag was added", () => {
     // The dated siblings are what make staleness visible: "disputed since July 2010" is a much
     // stronger signal than "disputed".
     const maintenance = summariseMaintenance([
       { title: "Category:All accuracy disputes", hidden: true },
-      { title: "Category:Articles with disputed statements from July 2010", hidden: true },
+      { title: "Category:Accuracy disputes from July 2010", hidden: true },
       { title: "Category:Articles with unsourced statements from June 2026", hidden: true },
     ]);
 
