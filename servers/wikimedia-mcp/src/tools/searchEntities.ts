@@ -23,6 +23,12 @@ export const searchEntitiesOutputShape = {
       /** How the query matched: 'label', 'alias', or 'entityId' — an alias match explains a surprising result. */
       matched_on: z.string().optional(),
       matched_text: z.string().optional(),
+      /**
+       * Which language `matched_text` is in. Set only when it differs from `language`, which is the
+       * confusing case: asking in German and getting a German label back beside the English alias
+       * that actually matched reads as a bug otherwise.
+       */
+      matched_language: z.string().optional(),
       url: z.string(),
     }),
   ),
@@ -53,6 +59,7 @@ export async function searchEntitiesHandler(rawInput: unknown, env: Env): Promis
         ...(hit.description !== undefined ? { description: hit.description } : {}),
         ...(hit.match?.type !== undefined ? { matched_on: hit.match.type } : {}),
         ...(hit.match?.text !== undefined ? { matched_text: hit.match.text } : {}),
+        ...(hit.match?.language !== undefined && hit.match.language !== input.language ? { matched_language: hit.match.language } : {}),
         url: entityUrl(hit.id),
       })),
       returned: hits.length,

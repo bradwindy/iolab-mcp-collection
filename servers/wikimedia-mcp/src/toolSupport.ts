@@ -18,7 +18,11 @@ export function mapCommonWikiError(error: unknown, hint: string): ToolTextResult
     return toolError(`Wikimedia rejected the request (${error.code}): ${error.info}`, hint);
   }
   if (error instanceof UpstreamHttpError) {
-    return upstreamError(error.source, error.response);
+    // The hint must be forwarded. Omitting it fell through to `upstreamError`'s generic default,
+    // "This may be transient; retry, or narrow the request if the upstream is rate-limiting" — which
+    // for a deterministic failure such as a SPARQL 400 syntax error tells the model to retry a query
+    // that can never succeed, while the caller's actual advice was silently discarded.
+    return upstreamError(error.source, error.response, hint);
   }
   return null;
 }

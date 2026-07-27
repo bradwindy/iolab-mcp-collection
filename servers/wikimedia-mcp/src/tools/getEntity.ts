@@ -1,14 +1,16 @@
 import { z } from "zod";
 import { attribution, CACHE_TTL, cached, jsonResult, limitParam, offsetParam, paginate, toolError, type ToolTextResult } from "@iolab/mcp-kit";
 import {
-  collectReferencedIds,
   EntityNotFoundError,
   entityUrl,
   fetchEntity,
   fetchLabels,
+  fetchUnitSymbols,
   LABEL_BATCH_LIMIT,
-  type RestStatement,
+  type LabelResult,
+  type RestSnak,
 } from "../clients/wikidata.js";
+import { collectUnitIds, collectValueIds, renderValue } from "../wikidataValues.js";
 import { serially } from "../clients/http.js";
 import { mapCommonWikiError, attributionSchema } from "../toolSupport.js";
 
@@ -25,13 +27,38 @@ export const getEntityInputShape = {
     .optional()
     .describe("Only return statements for these property ids, e.g. ['P31','P171']. Omit to return all (paginated)."),
   language: z.string().min(2).max(20).default("en").describe("Language for labels and descriptions, including the labels of referenced entities."),
+  include_references: z
+    .boolean()
+    .default(false)
+    .describe("Include each statement's sources — the 'stated in', 'reference URL' and 'retrieved' values Wikidata records for it."),
   include_sitelinks: z
     .boolean()
     .default(false)
-    .describe("Include the list of wikis with an article about this entity, with their titles and URLs. Popular entities have 100+ of these."),
+    .describe(
+      "Include the wikis with an article about this entity. Paged separately from statements via " +
+        "`sitelinks_limit`/`sitelinks_offset`, because a country has 300+ of them.",
+    ),
+  sitelinks_limit: z.number().int().min(1).max(100).default(25).describe("Max sitelinks to return (1-100, default 25)."),
+  sitelinks_offset: z.number().int().min(0).default(0).describe("Number of sitelinks to skip, for paging through them."),
   limit: limitParam(STATEMENT_BOUNDS.maxLimit, STATEMENT_BOUNDS.defaultLimit),
   offset: offsetParam,
 };
+
+/** A qualifier or reference part: the same property/value pair a statement is, minus the ranking. */
+const qualifierSchema = z.object({
+  property_id: z.string().optional(),
+  property_label: z.string().optional(),
+  value: z.string(),
+  entity_id: z.string().optional(),
+  precision: z.number().optional(),
+  precision_label: z.string().optional(),
+  calendar_model: z.string().optional(),
+  unit_id: z.string().optional(),
+  upper_bound: z.string().optional(),
+  lower_bound: z.string().optional(),
+  language: z.string().optional(),
+  globe: z.string().optional(),
+});
 
 export const getEntityOutputShape = {
   id: z.string(),
@@ -47,9 +74,33 @@ export const getEntityOutputShape = {
       value_entity_id: z.string().optional(),
       value_type: z.string().optional(),
       rank: z.string().optional(),
+      /** Time values: 9 means the value is significant to the year only, 10 the month, 11 the day. */
+      precision: z.number().optional(),
+      precision_label: z.string().optional(),
+      calendar_model: z.string().optional(),
+      /** Quantity values. Absent `unit_id` means the quantity is unitless. */
+      unit_id: z.string().optional(),
+      upper_bound: z.string().optional(),
+      lower_bound: z.string().optional(),
+      /** Monolingual text values: which language the text is in. */
+      language: z.string().optional(),
+      globe: z.string().optional(),
+      /**
+       * The statement's qualifiers — `point in time`, `determination method` and so on. Without
+       * these, repeated statements of the same property are indistinguishable from each other.
+       */
+      qualifiers: z.array(qualifierSchema).optional(),
+      references: z.array(qualifierSchema).optional(),
     }),
   ),
+  /** Ids whose label came from a fallback language, keyed to the language that supplied it. */
+  label_fallbacks: z.record(z.string(), z.string()).optional(),
+  /** Ids with no label in the requested language or its fallbacks; their `value` is a bare id. */
+  labels_missing: z.array(z.string()).optional(),
   sitelinks: z.array(z.object({ wiki: z.string(), title: z.string(), url: z.string().optional() })).optional(),
+  sitelinks_total: z.number().optional(),
+  sitelinks_next_offset: z.number().nullable().optional(),
+  /** Counts statements only — matching `limit`/`offset`. Sitelinks have their own total. */
   total_count: z.number(),
   has_more: z.boolean(),
   next_offset: z.number().nullable(),
@@ -59,34 +110,6 @@ export const getEntityOutputShape = {
 
 const inputSchema = z.object(getEntityInputShape);
 
-/** Render a Wikibase REST statement value as a string, resolving entity references to labels where known. */
-function renderValue(statement: RestStatement, labels: Record<string, string>): { value: string; entityId?: string } {
-  const content = statement.value?.content;
-  if (statement.value?.type === "novalue") return { value: "(no value)" };
-  if (statement.value?.type === "somevalue") return { value: "(unknown value)" };
-  if (typeof content === "string") {
-    // Gate on the declared data type, not the string shape: an `external-id` or `string` value that
-    // happens to read "Q42" (catalogue codes do) would otherwise be rendered as an entity label and
-    // handed a `value_entity_id` the caller is told they can fetch.
-    const dataType = statement.property?.data_type;
-    const isEntityRef = dataType === undefined || dataType === "wikibase-item" || dataType === "wikibase-property";
-    if (isEntityRef && /^[QP]\d+$/.test(content)) return { value: labels[content] ?? content, entityId: content };
-    return { value: content };
-  }
-  if (content && typeof content === "object") {
-    const record = content as Record<string, unknown>;
-    // Time, quantity, and globe-coordinate values are objects; surface the field a reader wants
-    // rather than a JSON blob, falling back to a compact serialisation for anything unrecognised.
-    if (typeof record["time"] === "string") return { value: record["time"] };
-    if (typeof record["amount"] === "string") return { value: record["amount"] };
-    if (typeof record["text"] === "string") return { value: record["text"] };
-    if (typeof record["latitude"] === "number" && typeof record["longitude"] === "number") {
-      return { value: `${record["latitude"]}, ${record["longitude"]}` };
-    }
-    return { value: JSON.stringify(content) };
-  }
-  return { value: content === undefined || content === null ? "" : String(content) };
-}
 
 export async function getEntityHandler(rawInput: unknown, env: Env): Promise<ToolTextResult> {
   const input = inputSchema.parse(rawInput);
@@ -116,27 +139,77 @@ export async function getEntityHandler(rawInput: unknown, env: Env): Promise<Too
     // Q-ids, so dropping everything past the 50-id batch cap would quietly break it on exactly the
     // dense entities where it matters most. Chunks run serially — the Action API's unauthenticated
     // concurrency limit is 1.
-    const referenced = collectReferencedIds(page.items.map((row) => row.statement));
-    const propertyIds = [...new Set(page.items.map((row) => row.propertyId))];
+    const referenced = page.items.flatMap((row) => collectValueIds(row.statement));
+    const propertyIds = [
+      ...new Set([
+        ...page.items.map((row) => row.propertyId),
+        // Qualifier properties need labels too, or `P585` is returned with no gloss.
+        ...page.items.flatMap((row) => (row.statement.qualifiers ?? []).flatMap((q) => (q.property?.id === undefined ? [] : [q.property.id]))),
+        ...(input.include_references
+          ? page.items.flatMap((row) =>
+              (row.statement.references ?? []).flatMap((reference) =>
+                (reference.parts ?? []).flatMap((part) => (part.property?.id === undefined ? [] : [part.property.id])),
+              ),
+            )
+          : []),
+      ]),
+    ];
     const idsToLabel = [...new Set([...propertyIds, ...referenced])];
-    const batches: Array<() => Promise<Record<string, string>>> = [];
+    const batches: Array<() => Promise<LabelResult>> = [];
     for (let start = 0; start < idsToLabel.length; start += LABEL_BATCH_LIMIT) {
       const chunk = idsToLabel.slice(start, start + LABEL_BATCH_LIMIT);
       batches.push(() => fetchLabels(env, chunk, input.language));
     }
-    const labels = Object.assign({}, ...(await serially(batches))) as Record<string, string>;
+    const results = await serially(batches);
+    const labels: Record<string, string> = Object.assign({}, ...results.map((result) => result.labels));
+    const labelFallbacks: Record<string, string> = Object.assign({}, ...results.map((result) => result.fallbacks));
+
+    // Units are resolved from P5061 rather than their label: "268021 km²" beats "268021 square
+    // kilometre", and both beat the bare "+268021" this used to return.
+    const unitIds = [
+      ...new Set(page.items.flatMap((row) => collectUnitIds(row.statement))),
+    ];
+    const unitSymbols = unitIds.length > 0 ? await fetchUnitSymbols(env, unitIds, input.language) : {};
+
+    const renderSnak = (snak: RestSnak) => {
+      const rendered = renderValue(snak, labels, unitSymbols);
+      const propertyId = snak.property?.id;
+      return {
+        ...(propertyId !== undefined ? { property_id: propertyId } : {}),
+        ...(propertyId !== undefined && labels[propertyId] !== undefined ? { property_label: labels[propertyId] } : {}),
+        ...rendered,
+      };
+    };
 
     const statements = page.items.map(({ propertyId, statement }) => {
-      const rendered = renderValue(statement, labels);
+      const rendered = renderValue(statement, labels, unitSymbols);
+      const qualifiers = (statement.qualifiers ?? []).map(renderSnak);
+      const references = (statement.references ?? []).flatMap((reference) => (reference.parts ?? []).map(renderSnak));
       return {
         property_id: propertyId,
         ...(labels[propertyId] !== undefined ? { property_label: labels[propertyId] } : {}),
         value: rendered.value,
-        ...(rendered.entityId !== undefined ? { value_entity_id: rendered.entityId } : {}),
+        ...(rendered.entity_id !== undefined ? { value_entity_id: rendered.entity_id } : {}),
         ...(statement.property?.data_type !== undefined ? { value_type: statement.property.data_type } : {}),
         ...(statement.rank !== undefined ? { rank: statement.rank } : {}),
+        ...(rendered.precision !== undefined ? { precision: rendered.precision } : {}),
+        ...(rendered.precision_label !== undefined ? { precision_label: rendered.precision_label } : {}),
+        ...(rendered.calendar_model !== undefined ? { calendar_model: rendered.calendar_model } : {}),
+        ...(rendered.unit_id !== undefined ? { unit_id: rendered.unit_id } : {}),
+        ...(rendered.upper_bound !== undefined ? { upper_bound: rendered.upper_bound } : {}),
+        ...(rendered.lower_bound !== undefined ? { lower_bound: rendered.lower_bound } : {}),
+        ...(rendered.language !== undefined ? { language: rendered.language } : {}),
+        ...(rendered.globe !== undefined ? { globe: rendered.globe } : {}),
+        ...(qualifiers.length > 0 ? { qualifiers } : {}),
+        ...(input.include_references && references.length > 0 ? { references } : {}),
       };
     });
+
+    const allSitelinks = Object.entries(entity.sitelinks ?? {});
+    const sitelinkPage = input.include_sitelinks
+      ? allSitelinks.slice(input.sitelinks_offset, input.sitelinks_offset + input.sitelinks_limit)
+      : [];
+    const missingLabels = idsToLabel.filter((id) => labels[id] === undefined);
 
     return jsonResult({
       id: entity.id ?? entityId,
@@ -144,13 +217,18 @@ export async function getEntityHandler(rawInput: unknown, env: Env): Promise<Too
       ...(entity.descriptions?.[input.language] !== undefined ? { description: entity.descriptions[input.language] } : {}),
       aliases: entity.aliases?.[input.language] ?? [],
       statements,
+      ...(Object.keys(labelFallbacks).length > 0 ? { label_fallbacks: labelFallbacks } : {}),
+      ...(missingLabels.length > 0 ? { labels_missing: missingLabels } : {}),
       ...(input.include_sitelinks
         ? {
-            sitelinks: Object.entries(entity.sitelinks ?? {}).map(([wiki, link]) => ({
+            sitelinks: sitelinkPage.map(([wiki, link]) => ({
               wiki,
               title: link.title ?? "",
               ...(link.url !== undefined ? { url: link.url } : {}),
             })),
+            sitelinks_total: allSitelinks.length,
+            sitelinks_next_offset:
+              input.sitelinks_offset + sitelinkPage.length < allSitelinks.length ? input.sitelinks_offset + sitelinkPage.length : null,
           }
         : {}),
       total_count: page.total_count,

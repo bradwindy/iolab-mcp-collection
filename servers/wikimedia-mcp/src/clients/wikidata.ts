@@ -26,8 +26,12 @@ export type EntitySearchHit = {
 /**
  * Search Wikidata for an entity by name.
  *
- * This uses the Action API rather than the Wikibase REST API on purpose: REST v1 has **no search
- * route at all**, so `wbsearchentities` is the only way to get from a string to a Q-id.
+ * This uses the Action API rather than the Wikibase REST API on purpose. REST v1 has since grown
+ * `/v1/search/items` and `/v1/suggest/items` — the older comment here claiming it has no search at
+ * all is out of date — but neither offers `wbsearchentities`' `type` filter (items vs properties)
+ * nor its `search-continue` offset, both of which this tool exposes.
+ *
+ * Note `wbsearchentities` matches **prefixes** of labels and aliases, not free text.
  */
 export async function searchEntities(
   env: Env,
@@ -52,13 +56,23 @@ export async function searchEntities(
   };
 }
 
-export type RestStatement = {
-  id?: string;
-  rank?: string;
+/** A property/value pair: a statement, one of its qualifiers, or one part of a reference. */
+export type RestSnak = {
   property?: { id?: string; data_type?: string };
   value?: { type?: string; content?: unknown };
-  qualifiers?: unknown[];
-  references?: unknown[];
+};
+
+export type RestStatement = RestSnak & {
+  id?: string;
+  rank?: string;
+  /**
+   * An ordered array in REST v1 — the Action API's property-keyed map plus `qualifiers-order` is
+   * already flattened for us. This is where `point in time` (P585) lives, without which a page of
+   * `population` statements is 36 indistinguishable numbers.
+   */
+  qualifiers?: RestSnak[];
+  /** REST flattens the Action API's `snaks`/`snaks-order` into `parts`. */
+  references?: Array<{ hash?: string; parts?: RestSnak[] }>;
 };
 
 export type RestEntity = {
@@ -96,23 +110,81 @@ export async function fetchEntity(env: Env, entityId: string): Promise<RestEntit
  */
 export const LABEL_BATCH_LIMIT = 50;
 
-export async function fetchLabels(env: Env, ids: string[], language: string): Promise<Record<string, string>> {
-  if (ids.length === 0) return {};
+export type LabelResult = {
+  labels: Record<string, string>;
+  /** Ids whose label came from a fallback language rather than the one requested. */
+  fallbacks: Record<string, string>;
+};
+
+export async function fetchLabels(env: Env, ids: string[], language: string): Promise<LabelResult> {
+  if (ids.length === 0) return { labels: {}, fallbacks: {} };
+  if (ids.length > LABEL_BATCH_LIMIT) {
+    // Previously `ids.slice(0, LABEL_BATCH_LIMIT)`, which silently dropped the rest. Callers chunk;
+    // failing loudly keeps a future caller from losing labels without noticing.
+    throw new Error(`fetchLabels accepts at most ${LABEL_BATCH_LIMIT} ids per call, received ${ids.length}.`);
+  }
+
   const body = await actionApi<{
-    entities?: Record<string, { labels?: Record<string, { value?: string }> }>;
+    entities?: Record<string, { labels?: Record<string, { value?: string; language?: string; "for-language"?: string }> }>;
   }>(env, WIKIDATA_HOST, {
     action: "wbgetentities",
-    ids: ids.slice(0, LABEL_BATCH_LIMIT).join("|"),
+    ids: ids.join("|"),
     props: "labels",
-    languages: language,
+    // Both are needed. Without `languagefallback` a language with no label for an id returns `{}`,
+    // which is how a `language: "mi"` request degraded into a wall of bare Q-ids. With it, the entry
+    // reports the language that actually served it via `language`, and marks itself with
+    // `for-language`. Note the fallback target is not always English — Q3621064 falls back to `mul`,
+    // Wikidata's multilingual-label pseudo-language.
+    languages: language === "en" ? "en" : `${language}|en`,
+    languagefallback: 1,
   });
 
   const labels: Record<string, string> = {};
+  const fallbacks: Record<string, string> = {};
   for (const [id, entity] of Object.entries(body.entities ?? {})) {
-    const value = entity.labels?.[language]?.value;
-    if (value) labels[id] = value;
+    const entry = entity.labels?.[language] ?? entity.labels?.["en"];
+    const value = entry?.value;
+    if (!value) continue;
+    labels[id] = value;
+    const served = entry?.language;
+    if (served !== undefined && served !== language) fallbacks[id] = served;
   }
-  return labels;
+  return { labels, fallbacks };
+}
+
+/**
+ * Look up the "unit symbol" (P5061) for a batch of unit entities.
+ *
+ * A quantity carries its unit as an entity URI, and `+268021` with a bare Q-id is exactly as
+ * unusable as `+268021` alone. The label gives "square kilometre"; P5061 gives "km²", which is what
+ * belongs next to a number. One `wbgetentities` call covers every unit on the page.
+ */
+export async function fetchUnitSymbols(env: Env, ids: string[], language: string): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+  const body = await actionApi<{
+    entities?: Record<
+      string,
+      { claims?: Record<string, Array<{ mainsnak?: { datavalue?: { value?: { text?: string; language?: string } } } }>> }
+    >;
+  }>(env, WIKIDATA_HOST, {
+    action: "wbgetentities",
+    ids: ids.slice(0, LABEL_BATCH_LIMIT).join("|"),
+    props: "claims",
+  });
+
+  const symbols: Record<string, string> = {};
+  for (const [id, entity] of Object.entries(body.entities ?? {})) {
+    const claims = entity.claims?.["P5061"] ?? [];
+    const values = claims.flatMap((claim) => {
+      const value = claim.mainsnak?.datavalue?.value;
+      return value?.text === undefined ? [] : [{ text: value.text, language: value.language }];
+    });
+    // P5061 is multi-valued across languages; prefer the requested one, then English, then whatever
+    // exists — the symbol is usually script-independent anyway ("km²").
+    const chosen = values.find((value) => value.language === language) ?? values.find((value) => value.language === "en") ?? values[0];
+    if (chosen !== undefined) symbols[id] = chosen.text;
+  }
+  return symbols;
 }
 
 /**
@@ -128,12 +200,3 @@ export function entityUrl(entityId: string): string {
     : `https://www.wikidata.org/wiki/${entityId}`;
 }
 
-/** Wikidata entity ids referenced as a statement value, in the order they appear. */
-export function collectReferencedIds(statements: RestStatement[]): string[] {
-  const ids = new Set<string>();
-  for (const statement of statements) {
-    const content = statement.value?.content;
-    if (typeof content === "string" && /^[QP]\d+$/.test(content)) ids.add(content);
-  }
-  return [...ids];
-}
