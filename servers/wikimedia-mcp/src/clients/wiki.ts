@@ -1,3 +1,4 @@
+import { parsePageDocument, stripInlineHtml, type ParsedDocument } from "../html.js";
 import { foldDiacritics } from "../text.js";
 import { actionApi, readCursor, requireSinglePage, resolveTitle, type QueryPage, type TitleResolution } from "./actionApi.js";
 
@@ -208,30 +209,69 @@ export type TocSection = {
  */
 export async function fetchSectionOutline(env: Env, host: string, title: string): Promise<TocSection[]> {
   const body = await actionApi<{
-    parse?: {
-      tocdata?: { sections?: Array<{ index?: string; tocLevel?: number; hLevel?: number; number?: string; line?: string; anchor?: string }> };
-    };
+    parse?: { tocdata?: { sections?: RawTocSection[] } };
   }>(env, host, { action: "parse", page: title, prop: "tocdata", redirects: 1 });
 
-  return (body.parse?.tocdata?.sections ?? []).map((section) => ({
+  return mapTocData(body.parse?.tocdata?.sections);
+}
+
+type RawTocSection = {
+  index?: string;
+  tocLevel?: number;
+  hLevel?: number;
+  number?: string;
+  line?: string;
+  anchor?: string;
+  fromTitle?: string | false;
+  codepointOffset?: number | null;
+};
+
+function mapTocData(sections: RawTocSection[] | undefined): TocSection[] {
+  return (sections ?? []).map((section) => ({
     index: section.index ?? "",
     level: section.hLevel ?? section.tocLevel ?? 1,
     number: section.number ?? "",
-    title: section.line ?? "",
+    // `line` is the rendered heading HTML, not text — the API's own example returns "Foo &amp; Bar"
+    // against an anchor of "Foo_&_Bar".
+    title: stripInlineHtml(section.line ?? ""),
     anchor: section.anchor ?? "",
   }));
 }
 
-/** Fetch one section of a page as rendered HTML, ready for htmlToPlainText. */
-export async function fetchSectionHtml(env: Env, host: string, title: string, section: string): Promise<{ html: string; title: string }> {
-  const body = await actionApi<{ parse?: { title?: string; text?: string } }>(env, host, {
+
+/**
+ * Fetch and parse a whole page in one request: every section's plain text, its exact length, and
+ * the article's citations.
+ *
+ * `mobileformat` runs the output through MobileFormatter, which pre-decodes numeric character
+ * references. Measured on `Taupō Volcano`: `&#160;` 141 -> 0, `&#8202;` 68 -> 0, `&#91;` 86 -> 0,
+ * leaving only the structural `&amp;`/`&lt;`/`&gt;`/`&quot;` that `decodeEntities` handles. **Never
+ * send `mobileformat: 0`** — MediaWiki booleans are true whenever the parameter is present at all,
+ * so `0` would enable it while reading as if it disabled it.
+ *
+ * `disablelimitreport` drops the NewPP HTML comment block, which is pure noise over the wire.
+ */
+export async function fetchPageDocument(env: Env, host: string, title: string): Promise<ParsedDocument & { title: string }> {
+  const body = await actionApi<{
+    parse?: {
+      title?: string;
+      text?: string;
+      tocdata?: { sections?: RawTocSection[] };
+    };
+  }>(env, host, {
     action: "parse",
     page: title,
-    section,
-    prop: "text",
+    prop: "text|tocdata",
     redirects: 1,
+    mobileformat: 1,
+    disableeditsection: 1,
+    disabletoc: 1,
+    disablelimitreport: 1,
   });
-  return { html: body.parse?.text ?? "", title: body.parse?.title ?? title };
+
+  const outline = mapTocData(body.parse?.tocdata?.sections);
+  const document = await parsePageDocument(body.parse?.text ?? "", outline);
+  return { ...document, title: body.parse?.title ?? title };
 }
 
 /** Fetch the mainspace links on a page — used to list a disambiguation page's options. */
