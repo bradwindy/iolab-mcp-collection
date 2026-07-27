@@ -31,9 +31,12 @@ describe("wikimedia_get_page_metadata", () => {
     expect(result.isError).toBeUndefined();
     expect(result.structuredContent?.pages).toEqual([
       {
+        index: 0,
+        requested_title: "Kiwi (bird)",
         title: "Kiwi (bird)",
         pageid: 17362,
         exists: true,
+        maintenance: { flags: [], is_stub: false },
         description: "Order of birds",
         description_source: "local",
         url: "https://en.wikipedia.org/wiki/Kiwi_(bird)",
@@ -124,5 +127,105 @@ describe("wikimedia_get_page_metadata", () => {
 
     expect(result.isError).toBe(true);
     expect(mock).not.toHaveBeenCalled();
+  });
+
+  it("sends palimit=max, which is per batch rather than per page", async () => {
+    // Verified live: at the default of 10 — counted across every page in the batch, not per page —
+    // three titles returned assessments for one and silently nothing for the other two.
+    const mock = stubFetchRoutes([{ match: anyUrl, body: { batchcomplete: true, query: { pages: [kiwiPage] } } }]);
+
+    await getPageMetadataHandler({ titles: ["Kiwi (bird)"] }, fakeEnv());
+
+    const url = calledUrls(mock)[0] as URL;
+    expect(url.searchParams.get("palimit")).toBe("max");
+    expect(url.searchParams.get("prop")).toContain("pageassessments");
+    expect(url.searchParams.get("clshow")).toBe("hidden");
+  });
+
+  it("returns rows in the order asked for, with an index and the requested title", async () => {
+    // MediaWiki does not answer in submission order, and each row carries only the resolved title —
+    // so a caller reading pages[0] could previously get the answer to titles[1].
+    stubFetchRoutes([
+      {
+        match: anyUrl,
+        body: {
+          batchcomplete: true,
+          query: {
+            normalized: [{ from: "kiwi bird", to: "Kiwi bird" }],
+            redirects: [{ from: "Kiwi bird", to: "Kiwi (bird)" }],
+            pages: [
+              { pageid: 1, ns: 0, title: "Kākāpō" },
+              { ...kiwiPage },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const result = await getPageMetadataHandler({ titles: ["kiwi bird", "Kākāpō"] }, fakeEnv());
+
+    const pages = result.structuredContent?.pages as Array<Record<string, unknown>>;
+    expect(pages.map((page) => page["requested_title"])).toEqual(["kiwi bird", "Kākāpō"]);
+    expect(pages.map((page) => page["index"])).toEqual([0, 1]);
+    // Followed through both hops: normalisation and then the redirect.
+    expect(pages[0]?.["title"]).toBe("Kiwi (bird)");
+    expect(pages[1]?.["title"]).toBe("Kākāpō");
+  });
+
+  it("summarises assessments and maintenance categories into quality signals", async () => {
+    stubFetchRoutes([
+      {
+        match: anyUrl,
+        body: {
+          batchcomplete: true,
+          query: {
+            pages: [
+              {
+                ...kiwiPage,
+                // Live shape: an object keyed by WikiProject name. WP:PIQA's pseudo-project is the
+                // one that carries a single grade for the whole article.
+                pageassessments: {
+                  Birds: { class: "B", importance: "High" },
+                  "New Zealand": { class: "C", importance: "Mid" },
+                  "Project-independent assessment": { class: "C", importance: "" },
+                },
+                categories: [
+                  { title: "Category:All articles with unsourced statements", hidden: true },
+                  { title: "Category:Articles with unsourced statements from June 2026", hidden: true },
+                  { title: "Category:Articles with unsourced statements from July 2026", hidden: true },
+                  // A hidden `All ` category that is NOT a maintenance issue — 38k articles carry it,
+                  // which is why the allow-list is explicit rather than a prefix match.
+                  { title: "Category:All Wikipedia articles written in New Zealand English", hidden: true },
+                  { title: "Category:Birds of New Zealand", hidden: false },
+                ],
+                protection: [{ type: "edit", level: "extendedconfirmed", expiry: "infinity" }],
+                watchers: 110,
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const result = await getPageMetadataHandler({ titles: ["Kiwi (bird)"] }, fakeEnv());
+
+    const page = (result.structuredContent?.pages as Array<Record<string, unknown>>)[0];
+    expect(page?.["assessment_class"]).toBe("C");
+    expect(page?.["maintenance"]).toEqual({
+      flags: ["unsourced_statements"],
+      is_stub: false,
+      oldest_tag_month: "2026-06",
+    });
+    expect(page?.["protection"]).toEqual([{ type: "edit", level: "extendedconfirmed", expiry: "infinity" }]);
+    expect(page?.["watchers"]).toBe(110);
+  });
+
+  it("omits watchers entirely rather than reporting a suppressed count as zero", async () => {
+    // MediaWiki hides the count below 30 watchers so an unwatched page cannot be identified.
+    stubFetchRoutes([{ match: anyUrl, body: { batchcomplete: true, query: { pages: [kiwiPage] } } }]);
+
+    const result = await getPageMetadataHandler({ titles: ["Kiwi (bird)"] }, fakeEnv());
+
+    expect((result.structuredContent?.pages as Array<Record<string, unknown>>)[0]?.["watchers"]).toBeUndefined();
   });
 });

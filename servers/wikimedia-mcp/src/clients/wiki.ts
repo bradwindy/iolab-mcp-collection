@@ -298,6 +298,12 @@ export type PageMetadata = QueryPage & {
   original?: { source: string; width: number; height: number };
   coordinates?: Array<{ lat: number; lon: number; primary?: boolean; globe?: string }>;
   langlinks?: Array<{ lang: string; url?: string; langname?: string; autonym?: string; title: string }>;
+  pageassessments?: Record<string, { class?: string; importance?: string }>;
+  categories?: Array<{ title: string; hidden?: boolean }>;
+  protection?: Array<{ type: string; level: string; expiry: string }>;
+  talkid?: number;
+  /** Absent below MediaWiki's 30-watcher privacy floor. Absent is "fewer than 30", never "zero". */
+  watchers?: number;
 };
 
 export async function fetchPageMetadata(
@@ -313,13 +319,20 @@ export async function fetchPageMetadata(
     };
   }>(env, host, {
     action: "query",
-    prop: "info|description|pageimages|coordinates|pageprops|langlinks",
-    inprop: "url",
+    prop: "info|description|pageimages|coordinates|pageprops|langlinks|pageassessments|categories",
+    inprop: "url|protection|talkid|watchers",
     ppprop: "disambiguation|wikibase_item",
     piprop: "thumbnail|original",
     pithumbsize: params.thumbnailWidth,
     lllimit: 500,
     llprop: "url|langname|autonym",
+    // `palimit` defaults to 10 **across all pages in the batch**, not per page. Verified live: three
+    // titles at the default silently returned zero assessments for two of them, with no warning.
+    palimit: "max",
+    // `clshow=!hidden` is not used here for the same reason getPageCategories avoids it (see
+    // CATEGORY_FETCH_LIMIT); the hidden ones are exactly what the maintenance signals need anyway.
+    clshow: "hidden",
+    cllimit: "max",
     titles: params.titles.join("|"),
     redirects: 1,
   });
