@@ -41,6 +41,9 @@ const MAINTENANCE_CATEGORIES: Record<string, string> = {
 
 const STUB_CATEGORY = "All stub articles";
 
+/** Each umbrella category minus its `All ` prefix — the stem its dated siblings are named after. */
+const MAINTENANCE_STEMS = new Set(Object.keys(MAINTENANCE_CATEGORIES).map((name) => name.replace(/^All /, "").toLowerCase()));
+
 /** `Articles with unsourced statements from June 2026` and its many siblings. */
 const DATED_CATEGORY = /\bfrom ([A-Z][a-z]+ \d{4})$/;
 
@@ -74,9 +77,22 @@ export function summariseMaintenance(categories: CategoryRow[]): Maintenance {
   const flags = [...new Set(hidden.flatMap((name) => (MAINTENANCE_CATEGORIES[name] !== undefined ? [MAINTENANCE_CATEGORIES[name] as string] : [])))];
   flags.sort();
 
+  // Only dated categories belonging to a maintenance family count. Plenty of dated hidden
+  // categories are formatting conventions rather than problems — `Use New Zealand English from
+  // April 2013` and `Use dmy dates from March 2024` are both on `Lake Taupō`, which has no
+  // maintenance issues at all, and taking the earliest of everything reported it as tagged since
+  // 2013.
+  //
+  // The umbrella and its dated siblings share a stem: `All articles with unsourced statements`
+  // pairs with `Articles with unsourced statements from September 2013`. Matching on that is exact.
+  // A dated category whose umbrella is worded differently (`Articles with disputed statements from
+  // July 2010` under `All accuracy disputes`) is skipped rather than guessed at — the flag still
+  // fires, only the date is withheld.
   const months = hidden.flatMap((name) => {
     const match = DATED_CATEGORY.exec(name);
     if (match === null) return [];
+    const stem = name.slice(0, match.index).trim().toLowerCase();
+    if (!MAINTENANCE_STEMS.has(stem)) return [];
     const month = toIsoMonth(match[1] as string);
     return month === undefined ? [] : [month];
   });
