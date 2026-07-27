@@ -544,6 +544,7 @@ describe("path routing", () => {
     ["nz-markets", "nz_markets_"],
     ["nz-stats", "nz_stats_"],
     ["nz-transport", "nz_transport_"],
+    ["wikimedia", "wikimedia_"],
   ];
 
   it.each(REGISTERED_SERVERS)("routes /%s/mcp and its tools/list returns only that server's tools", async (slug, toolPrefix) => {

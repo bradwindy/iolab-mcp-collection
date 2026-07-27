@@ -2,13 +2,22 @@ import { describe, expect, it } from "vitest";
 import { findServer, SERVERS } from "../src/manifest.js";
 
 describe("manifest", () => {
-  it("has 8 servers with unique slugs and unique path prefixes", () => {
+  it("has 9 servers with unique slugs and unique path prefixes", () => {
     const slugs = SERVERS.map((server) => server.slug);
     const pathPrefixes = SERVERS.map((server) => server.pathPrefix);
 
-    expect(SERVERS).toHaveLength(8);
+    expect(SERVERS).toHaveLength(9);
     expect(new Set(slugs).size).toBe(slugs.length);
     expect(new Set(pathPrefixes).size).toBe(pathPrefixes.length);
+  });
+
+  it("registers wikimedia-mcp with the path prefix and credential name its server reads", () => {
+    // The count and uniqueness checks above would be satisfied by any ninth entry. A slug or
+    // key-name mismatch here writes a credential row the server can never read back, which
+    // docs/ADDING_A_SERVER.md §7 records as having happened once already.
+    const wikimedia = findServer("wikimedia-mcp");
+    expect(wikimedia?.pathPrefix).toBe("wikimedia");
+    expect(wikimedia?.credentialKeys.map((key) => key.envName)).toEqual(["WIKIMEDIA_OAUTH_TOKEN"]);
   });
 
   it("gives every credential key a label and an https signup URL", () => {

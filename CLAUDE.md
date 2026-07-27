@@ -31,8 +31,8 @@ pnpm workspace monorepo (`packages/*`, `apps/*`, `servers/*`). Root scripts run 
 
 Work on one package with `pnpm --filter @iolab/<name> <script>` (package names: `nz-govt-mcp`,
 `nz-culture-mcp`, `nz-stats-mcp`, `nz-geo-mcp`, `nz-environment-mcp`, `nz-transport-mcp`,
-`nz-markets-mcp`, `gateway`, `portal`, `credentials`, `mcp-kit`), or `cd` into `servers/<name>`,
-`apps/gateway`, `apps/portal`, or `packages/<name>` and run directly.
+`nz-markets-mcp`, `ia-mcp`, `wikimedia-mcp`, `gateway`, `portal`, `credentials`, `mcp-kit`), or `cd`
+into `servers/<name>`, `apps/gateway`, `apps/portal`, or `packages/<name>` and run directly.
 
 Run one test file: `cd servers/<name> && pnpm exec vitest run test/<file>.test.ts`. Filter by test name
 with `-t "<name>"`. OAuth/bearer-auth/path-routing tests live once, consolidated, in

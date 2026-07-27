@@ -10,6 +10,7 @@ import {
   NzMarketsMcp,
   NzStatsMcp,
   NzTransportMcp,
+  WikimediaMcp,
 } from "./servers.js";
 
 export {
@@ -21,6 +22,7 @@ export {
   NzMarketsMcp,
   NzStatsMcp,
   NzTransportMcp,
+  WikimediaMcp,
 };
 
 export default buildMultiServerOAuthWorker<Env>(SERVERS, portal);

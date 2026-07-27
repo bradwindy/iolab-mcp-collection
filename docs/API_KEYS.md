@@ -5,8 +5,11 @@ account-gated APIs collapse into 9 credentials (NIWA's tides/UV/CO2 share one ke
 Authority needs two), entered through the portal (`https://<your-portal-domain>/servers/<slug>`), never
 committed to the repo, and stored AES-256-GCM encrypted in the shared D1 database.
 
-Until you set a given key, the tools that need it return a clear error telling you exactly which key
-is missing and where to set it — everything else works immediately after deploy.
+Two further servers — `ia-mcp` and `wikimedia-mcp` — wrap non-NZ APIs and accept **optional**
+credentials that no tool requires; see "Optional credentials" at the end.
+
+Until you set a given required key, the tools that need it return a clear error telling you exactly
+which key is missing and where to set it — everything else works immediately after deploy.
 
 ## No key required (14 APIs, work immediately)
 
@@ -90,9 +93,40 @@ One key covers all three NIWA APIs this server wraps.
    dispatch tool — the product is not named "dispatch"). Both require manual EA admin approval.
 3. Enter both in the portal at `/admin/servers/nz-markets-mcp`.
 
+## Optional credentials (nothing needs these)
+
+Both entries below are wired through the same portal and store as the keys above, but every tool on
+these servers works fully without them. Neither has been verified against a real credential — per
+[`ADDING_A_SERVER.md`](ADDING_A_SERVER.md) §2 no agent may sign up for or obtain a key, so both paths
+are written defensively against documented behaviour and stay unexercised until you enter one.
+
+### `IA_S3_ACCESS_KEY` / `IA_S3_SECRET_KEY` — archive.org (`ia-mcp`)
+
+**Optional, and not known to change anything.** archive.org's automated-access docs describe an IA-S3
+`Authorization: LOW <access>:<secret>` header for "higher rate limits", but live testing found no
+evidence read endpoints treat it differently, and IA's own documentation frames rate limiting around
+uploads rather than reads. Wired in anyway in case that assumption is wrong.
+
+1. Generate a pair at [archive.org/account/s3.php](https://archive.org/account/s3.php).
+2. Enter both in the portal at `/admin/servers/ia-mcp`.
+
+### `WIKIMEDIA_OAUTH_TOKEN` — Wikimedia OAuth 2.0 (`wikimedia-mcp`)
+
+**Optional, and almost certainly unnecessary.** Wikimedia's 2026 rate limits give an unauthenticated
+client sending a policy-compliant `User-Agent` **200 requests/minute** (against 10 for an
+"unidentified" one — which is why the compliant header is mandatory, not optional). Authenticating
+raises that to 200–2,000/minute and lifts the Action API's concurrency cap from 1 to 3. 200/minute is
+far beyond interactive use, so no tool requires it and none returns a missing-credential error.
+
+1. Register an **owner-only** consumer at
+   [Special:OAuthConsumerRegistration](https://meta.wikimedia.org/wiki/Special:OAuthConsumerRegistration/propose)
+   — owner-only is the simplest flow and is approved immediately. It is free.
+2. Enter the resulting access token in the portal at `/admin/servers/wikimedia-mcp` as
+   `WIKIMEDIA_OAUTH_TOKEN`.
+
 ## A note on scope
 
-This list covers exactly the APIs wrapped by this collection's 7 servers, not the full 24-API catalog
+This list covers exactly the APIs wrapped by this collection's 9 servers, not the full 24-API catalog
 that informed its clustering (see [api-catalog](https://github.com/bradwindy/api-catalog) for the
 complete inventory, including a few APIs that were deliberately left unwrapped as out of scope for a
 personal research toolkit).

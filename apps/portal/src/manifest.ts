@@ -135,6 +135,18 @@ export const SERVERS: readonly ServerManifestEntry[] = [
     pathPrefix: "nz-govt",
     credentialKeys: [],
   },
+  {
+    slug: "wikimedia-mcp",
+    pathPrefix: "wikimedia",
+    credentialKeys: [
+      {
+        envName: "WIKIMEDIA_OAUTH_TOKEN",
+        label:
+          "Wikimedia OAuth 2.0 access token (optional \u2014 every tool works fully without it; it only raises rate limits, see the server's README)",
+        signupUrl: "https://meta.wikimedia.org/wiki/Special:OAuthConsumerRegistration/propose",
+      },
+    ],
+  },
 ];
 
 /** Look up one server's manifest entry by slug. Returns undefined for an unknown slug. */
