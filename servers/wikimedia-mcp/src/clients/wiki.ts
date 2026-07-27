@@ -358,20 +358,29 @@ export async function fetchBacklinks(
   env: Env,
   host: string,
   params: { title: string; type: BacklinkType; namespace?: number | undefined; limit: number; cursor?: string | undefined },
-): Promise<{ rows: LinkRow[]; next_cursor: string | null }> {
+): Promise<{ rows: LinkRow[]; next_cursor: string | null; targetExists: boolean }> {
   const module = BACKLINK_MODULES[params.type];
-  const body = await actionApi<{ query?: Record<string, LinkRow[]> }>(env, host, {
+  // `prop=info` on the same request answers "does the target exist" for free. Without it an empty
+  // list is indistinguishable from a typo'd or wrong-namespace title: these modules return HTTP 200
+  // with `[]` for a page that does not exist, and there is no error to map.
+  const body = await actionApi<{ query?: Record<string, LinkRow[]> & { pages?: QueryPage[] } }>(env, host, {
     action: "query",
     list: module.list,
+    prop: "info",
+    titles: params.title,
     [module.titleParam]: params.title,
     [module.limitParam]: params.limit,
     ...(params.namespace !== undefined ? { [module.nsParam]: params.namespace } : {}),
     ...(params.cursor ? { [module.cursorKey]: params.cursor } : {}),
   });
 
+  const page = body.query?.pages?.[0];
   return {
-    rows: body.query?.[module.list] ?? [],
+    rows: (body.query?.[module.list] as LinkRow[] | undefined) ?? [],
     next_cursor: readCursor(body, module.cursorKey),
+    // Absent `pages` means the check could not be made; assume the target is real rather than
+    // inventing a "does not exist" notice from a missing field.
+    targetExists: page === undefined || (page.missing !== true && page.invalid !== true),
   };
 }
 
@@ -420,10 +429,14 @@ export async function fetchCategoryMembers(
   env: Env,
   host: string,
   params: { category: string; type: string; namespace?: number | undefined; limit: number; cursor?: string | undefined },
-): Promise<{ rows: CategoryMember[]; next_cursor: string | null }> {
-  const body = await actionApi<{ query?: { categorymembers?: CategoryMember[] } }>(env, host, {
+): Promise<{ rows: CategoryMember[]; next_cursor: string | null; categoryExists: boolean }> {
+  const body = await actionApi<{ query?: { categorymembers?: CategoryMember[]; pages?: QueryPage[] } }>(env, host, {
     action: "query",
     list: "categorymembers",
+    // Same reason as fetchBacklinks: an empty member list and a misspelled category name are
+    // otherwise the same response.
+    prop: "info",
+    titles: params.category,
     cmtitle: params.category,
     cmtype: params.type,
     cmlimit: params.limit,
@@ -435,8 +448,10 @@ export async function fetchCategoryMembers(
     ...(params.cursor ? { cmcontinue: params.cursor } : {}),
   });
 
+  const page = body.query?.pages?.[0];
   return {
     rows: body.query?.categorymembers ?? [],
     next_cursor: readCursor(body, "cmcontinue"),
+    categoryExists: page === undefined || (page.missing !== true && page.invalid !== true),
   };
 }

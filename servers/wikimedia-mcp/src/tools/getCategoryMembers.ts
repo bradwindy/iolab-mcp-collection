@@ -33,6 +33,8 @@ export const getCategoryMembersOutputShape = {
   has_more: z.boolean(),
   /** Opaque continuation token — see wikimedia_get_backlinks for why this isn't an offset. */
   next_cursor: z.string().nullable(),
+  /** Set when the category page does not exist, which an empty `members` list cannot otherwise convey. */
+  notice: z.string(),
   attribution: attributionSchema,
 };
 
@@ -54,7 +56,7 @@ export async function getCategoryMembersHandler(rawInput: unknown, env: Env): Pr
   const category = trimmed.includes(":") ? trimmed : `Category:${trimmed}`;
 
   try {
-    const { rows, next_cursor } = await fetchCategoryMembers(env, host, {
+    const { rows, next_cursor, categoryExists } = await fetchCategoryMembers(env, host, {
       category,
       type: input.type,
       namespace: input.namespace,
@@ -75,6 +77,10 @@ export async function getCategoryMembersHandler(rawInput: unknown, env: Env): Pr
       returned: rows.length,
       has_more: next_cursor !== null,
       next_cursor,
+      notice: categoryExists
+        ? ""
+        : `No category page '${category}' exists on ${host}, so this empty result means the name is wrong rather than that the category is empty. ` +
+          `Find it with wikimedia_search_pages using \`namespace: 14\`, which searches category pages.`,
       attribution: wikiAttribution(input.project, host),
     });
   } catch (error) {

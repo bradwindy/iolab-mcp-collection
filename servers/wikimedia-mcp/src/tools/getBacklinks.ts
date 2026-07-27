@@ -41,6 +41,8 @@ export const getBacklinksOutputShape = {
    * API that permits one concurrent request — so the cursor is passed through honestly instead.
    */
   next_cursor: z.string().nullable(),
+  /** Set when the target page does not exist, which an empty `links` list cannot otherwise convey. */
+  notice: z.string(),
   attribution: attributionSchema,
 };
 
@@ -51,7 +53,7 @@ export async function getBacklinksHandler(rawInput: unknown, env: Env): Promise<
   const { host } = wikiTarget(input.project, input.lang);
 
   try {
-    const { rows, next_cursor } = await fetchBacklinks(env, host, {
+    const { rows, next_cursor, targetExists } = await fetchBacklinks(env, host, {
       title: input.title,
       type: input.type,
       namespace: input.namespace,
@@ -71,6 +73,10 @@ export async function getBacklinksHandler(rawInput: unknown, env: Env): Promise<
       returned: rows.length,
       has_more: next_cursor !== null,
       next_cursor,
+      notice: targetExists
+        ? ""
+        : `No page titled '${input.title}' exists on ${host}, so this empty result means the title is wrong rather than that nothing links to it. ` +
+          `Check the namespace prefix — 'Template:' for transclusions, 'File:' for file usage — or find the title with wikimedia_search_pages.`,
       attribution: wikiAttribution(input.project, host),
     });
   } catch (error) {

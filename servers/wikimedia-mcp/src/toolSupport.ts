@@ -43,6 +43,10 @@ const PROJECT_LICENSES: Record<Project, string> = {
   wikivoyage: "CC BY-SA 4.0",
   wikinews: "CC BY 4.0",
   wikispecies: "CC BY-SA 4.0",
+  // Commons' own siteinfo reports CC BY-SA 4.0, which covers its wiki *text* (category and file
+  // description pages). Individual media files carry their own licence — wikimedia_get_media_info
+  // reports that per file, and it is the one that governs reuse of an image.
+  commons: "CC BY-SA 4.0",
 };
 
 /** The source/licence note attached to every wiki response. */
@@ -75,6 +79,7 @@ const PROJECT_LABELS: Record<Project, string> = {
   wikivoyage: "Wikivoyage",
   wikinews: "Wikinews",
   wikispecies: "Wikispecies",
+  commons: "Wikimedia Commons",
 };
 
 export function projectLabel(project: Project): string {
