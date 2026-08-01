@@ -27,6 +27,21 @@ export function jsonResult(data: Record<string, unknown>): ToolTextResult {
   };
 }
 
+/**
+ * Like `jsonResult`, but the human-facing half is pre-rendered text rather than a JSON dump.
+ *
+ * `structuredContent` still carries the machine-readable payload the tool's `outputSchema`
+ * declares, so code-execution harnesses are unaffected; only what a chat client displays changes.
+ * Used where a JSON blob reads far worse to a model than prose would — a Reddit comment thread, for
+ * instance, whose whole value is its nesting and ordering.
+ */
+export function textResult(text: string, data: Record<string, unknown>): ToolTextResult {
+  return {
+    content: [{ type: "text", text }],
+    structuredContent: data,
+  };
+}
+
 /** A one-line note to append when a result set was truncated, per best-practice guidance. */
 export function truncationNotice(shown: number, total: number, hint: string): string {
   if (shown >= total) return "";

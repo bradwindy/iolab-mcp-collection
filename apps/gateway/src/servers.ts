@@ -7,6 +7,7 @@ import { NzGovtMcp } from "@iolab/nz-govt-mcp";
 import { NzMarketsMcp } from "@iolab/nz-markets-mcp";
 import { NzStatsMcp } from "@iolab/nz-stats-mcp";
 import { NzTransportMcp } from "@iolab/nz-transport-mcp";
+import { RedditMcp } from "@iolab/reddit-mcp";
 import { WikimediaMcp } from "@iolab/wikimedia-mcp";
 
 // Re-exported so src/index.ts can name every Durable Object class as a top-level export — required
@@ -21,6 +22,7 @@ export {
   NzMarketsMcp,
   NzStatsMcp,
   NzTransportMcp,
+  RedditMcp,
   WikimediaMcp,
 };
 
@@ -39,5 +41,6 @@ export const SERVERS: readonly McpServerRegistration<Env>[] = [
   { slug: "nz-markets", agent: NzMarketsMcp, binding: "NZ_MARKETS_MCP" },
   { slug: "nz-stats", agent: NzStatsMcp, binding: "NZ_STATS_MCP" },
   { slug: "nz-transport", agent: NzTransportMcp, binding: "NZ_TRANSPORT_MCP" },
+  { slug: "reddit", agent: RedditMcp, binding: "REDDIT_MCP" },
   { slug: "wikimedia", agent: WikimediaMcp, binding: "WIKIMEDIA_MCP" },
 ];

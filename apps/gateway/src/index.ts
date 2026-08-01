@@ -10,6 +10,7 @@ import {
   NzMarketsMcp,
   NzStatsMcp,
   NzTransportMcp,
+  RedditMcp,
   WikimediaMcp,
 } from "./servers.js";
 
@@ -22,6 +23,7 @@ export {
   NzMarketsMcp,
   NzStatsMcp,
   NzTransportMcp,
+  RedditMcp,
   WikimediaMcp,
 };
 

@@ -21,6 +21,7 @@
     "@iolab/nz-markets-mcp": "workspace:*",
     "@iolab/nz-stats-mcp": "workspace:*",
     "@iolab/nz-transport-mcp": "workspace:*",
+    "@iolab/reddit-mcp": "workspace:*",
     "@iolab/wikimedia-mcp": "workspace:*",
     "@iolab/portal": "workspace:*",
     "agents": "^0.17.3",

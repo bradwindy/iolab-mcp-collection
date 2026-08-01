@@ -136,6 +136,29 @@ export const SERVERS: readonly ServerManifestEntry[] = [
     credentialKeys: [],
   },
   {
+    slug: "reddit-mcp",
+    pathPrefix: "reddit",
+    credentialKeys: [
+      {
+        envName: "REDDIT_CLIENT_ID",
+        label:
+          "Reddit app client ID (required — Reddit has no anonymous API path, and API access must be approved by Reddit first; see the server README)",
+        signupUrl: "https://old.reddit.com/prefs/apps",
+      },
+      {
+        envName: "REDDIT_CLIENT_SECRET",
+        label: "Reddit app client secret (required — create a 'script' type app; installed apps are issued no secret)",
+        signupUrl: "https://old.reddit.com/prefs/apps",
+      },
+      {
+        envName: "REDDIT_USERNAME",
+        label:
+          "Your Reddit username, without the u/ prefix (required — Reddit's API rules mandate a User-Agent naming the owning account, and throttle clients that omit it)",
+        signupUrl: "https://old.reddit.com/prefs/apps",
+      },
+    ],
+  },
+  {
     slug: "wikimedia-mcp",
     pathPrefix: "wikimedia",
     credentialKeys: [

@@ -178,7 +178,7 @@ claude mcp add --transport http nz-govt-mcp https://mcp.yourdomain.com/nz-govt/m
 ```
 
 Repeat per server (`nz-govt`, `nz-culture`, `nz-stats`, `nz-geo`, `nz-environment`, `nz-transport`,
-`nz-markets`), or use the **Connect** page at `https://mcp.yourdomain.com/admin/connect` (behind
+`nz-markets`, `ia`, `wikimedia`, `reddit`), or use the **Connect** page at `https://mcp.yourdomain.com/admin/connect` (behind
 Cloudflare Access), which renders the exact command for every server with the token already filled
 in.
 

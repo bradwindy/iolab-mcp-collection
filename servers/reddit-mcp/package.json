@@ -1,0 +1,27 @@
+{
+  "name": "@iolab/reddit-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Read-only MCP server for Reddit: search posts across Reddit or one subreddit, browse a subreddit's hot/new/top/rising listings, find subreddits, and read a post together with its comment thread rendered as threaded markdown. Deliberately scoped to retrieval — no user profiles, no voting, no posting. Requires a free Reddit script-app client ID and secret; Reddit blocks all unauthenticated API access.",
+  "exports": {
+    ".": "./src/agent.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@iolab/credentials": "workspace:*",
+    "@iolab/mcp-kit": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "agents": "^0.17.3",
+    "zod": "^4.1.10"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.110.0"
+  }
+}

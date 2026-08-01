@@ -26,6 +26,45 @@ export async function cached<T>(
   return value;
 }
 
+/**
+ * Workers KV rejects any key longer than 512 **bytes** — `get()` and `put()` both fail, so an
+ * over-long key breaks a tool before it reaches the upstream API rather than merely missing the
+ * cache. Any key built from caller-supplied text of unbounded length must go through `cacheKey`.
+ *
+ * Lives here rather than in a server because two servers now need it: wikimedia-mcp (50 page titles
+ * per call already overflow) and reddit-mcp (search queries are arbitrarily long).
+ */
+const MAX_KEY_BYTES = 512;
+
+/** Headroom under the limit, so a key that squeaks under today doesn't break on a longer input. */
+const SAFE_KEY_BYTES = 400;
+
+const keyEncoder = new TextEncoder();
+
+export function byteLength(value: string): number {
+  return keyEncoder.encode(value).length;
+}
+
+/**
+ * Build a cache key from a fixed prefix and a variable part, hashing the variable part when the
+ * whole key would otherwise risk KV's limit. The prefix is always left readable so keys stay
+ * greppable in practice.
+ */
+export async function cacheKey(prefix: string, variable: string): Promise<string> {
+  const plain = `${prefix}:${variable}`;
+  if (byteLength(plain) <= SAFE_KEY_BYTES) return plain;
+
+  const digest = await crypto.subtle.digest("SHA-256", keyEncoder.encode(variable));
+  const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const hashed = `${prefix}:sha256-${hex}`;
+  // A hashed key is prefix + 71 bytes; only an absurd prefix could still overflow, and silently
+  // returning an unusable key would resurrect exactly the bug this helper exists to prevent.
+  if (byteLength(hashed) > MAX_KEY_BYTES) {
+    throw new Error(`Cache key prefix '${prefix}' is too long to hash into a valid Workers KV key.`);
+  }
+  return hashed;
+}
+
 export const CACHE_TTL = {
   /** Reference data that changes rarely: area codes, dataset schemas, station lists. */
   METADATA: 60 * 60 * 24,

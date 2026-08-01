@@ -5,8 +5,10 @@ account-gated APIs collapse into 9 credentials (NIWA's tides/UV/CO2 share one ke
 Authority needs two), entered through the portal (`https://<your-portal-domain>/servers/<slug>`), never
 committed to the repo, and stored AES-256-GCM encrypted in the shared D1 database.
 
-Two further servers — `ia-mcp` and `wikimedia-mcp` — wrap non-NZ APIs and accept **optional**
-credentials that no tool requires; see "Optional credentials" at the end.
+Three further servers wrap non-NZ APIs. `ia-mcp` and `wikimedia-mcp` accept **optional**
+credentials that no tool requires; see "Optional credentials" at the end. `reddit-mcp` is the one
+exception in this collection: it **requires** credentials, because Reddit has no anonymous API path
+at all — see its section below.
 
 Until you set a given required key, the tools that need it return a clear error telling you exactly
 which key is missing and where to set it — everything else works immediately after deploy.
@@ -30,7 +32,7 @@ which key is missing and where to set it — everything else works immediately a
 | NZTA Driver Licence Holders Dataset API | `nz-transport-mcp` |
 | Rates API | `nz-markets-mcp` |
 
-## Keys you'll need to obtain (9 credentials)
+## Keys you'll need to obtain (12 credentials)
 
 ### `TE_PAPA_API_KEY` — Te Papa Collections API (`nz-culture-mcp`)
 
@@ -93,6 +95,56 @@ One key covers all three NIWA APIs this server wraps.
    dispatch tool — the product is not named "dispatch"). Both require manual EA admin approval.
 3. Enter both in the portal at `/admin/servers/nz-markets-mcp`.
 
+### `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` / `REDDIT_USERNAME` — Reddit Data API (`reddit-mcp`)
+
+**Required — no tool on this server works without them.** Reddit returns HTTP 403 to every
+unauthenticated request, including the old `.json` URLs (verified live: anonymous listing, comments
+and search endpoints all 403, and `oauth.reddit.com` 403s without a bearer token). Reddit's own API
+wiki states plainly that "clients must authenticate with OAuth2". This server uses the
+application-only `client_credentials` grant, which involves no user login and reads only public
+content.
+
+**Reddit must approve your access first.** This is not a self-service key like every other entry on
+this page. Reddit's
+[Responsible Builder Policy](https://support.reddithelp.com/hc/en-us/articles/42728983564564-Responsible-Builder-Policy)
+(updated 5 June 2026) states: *"Approval is required: You must request access and get explicit
+approval before accessing any Reddit data through our API, and you must agree to comply with all
+applicable terms."* Clicking **create app** without approval returns a link to that policy instead of
+credentials. Approval is free for non-commercial use; the turnaround is not documented.
+
+1. **Request access.** For a personal, non-commercial client whose use case the Developer Platform
+   ("Devvit") does not cover — Devvit is for apps that run inside Reddit, not external API clients —
+   file the developer request:
+   [support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164&tf_42139884615700=api_request_type_developer_clone](https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164&tf_42139884615700=api_request_type_developer_clone).
+   Describe the use case accurately: read-only, on-demand retrieval of specific posts and comment
+   threads for personal reference; no bulk collection, no retention beyond a short cache, and no
+   model training. That last point matters — the same policy prohibits using Reddit data "to train
+   machine learning or AI models" without written approval. Retrieving a thread to read it is not
+   training, but the clause is broadly worded.
+2. **Create the app.** Once approved, go to
+   [old.reddit.com/prefs/apps](https://old.reddit.com/prefs/apps) → **create another app**. Choose
+   the **script** type: an "installed app" is a public client and is issued no secret, which the
+   `client_credentials` grant requires. The redirect URI is unused by this grant but the form
+   requires one, so `http://localhost:8080` is fine.
+3. **Read off the two values.** The **client ID** is the unlabelled ~22-character string directly
+   under the app name and the words "personal use script" — it is easy to miss because it has no
+   caption. The **secret** is the field explicitly labelled `secret`.
+4. **Enter them in the portal** at `/admin/servers/reddit-mcp`, along with your Reddit username
+   (without the `u/` prefix) as `REDDIT_USERNAME`.
+5. **Optionally register an app profile** at
+   [developers.reddit.com/app-registration](https://developers.reddit.com/app-registration). This is
+   a separate step concerned with *labelling* — giving the app a profile so users can distinguish it
+   from a human account — and it presupposes an app that already exists.
+
+The username is not used to authenticate. Reddit's API rules require a `User-Agent` of the form
+`<platform>:<app id>:<version> (by /u/<username>)` and state that generic User-Agents are
+"drastically limited"; it is stored as a credential rather than committed because this repo treats
+operator identity as a secret, the same way it does `ACCESS_EMAIL` and `BASE_DOMAIN`.
+
+Rate limit: Reddit's API wiki documents **60 requests per minute** for OAuth2 clients, reported per
+response in `X-Ratelimit-Used` / `-Remaining` / `-Reset`. That is an app-wide budget, not per
+connection, which is why this server issues upstream calls serially and caches aggressively.
+
 ## Optional credentials (nothing needs these)
 
 Both entries below are wired through the same portal and store as the keys above, but every tool on
@@ -126,7 +178,7 @@ far beyond interactive use, so no tool requires it and none returns a missing-cr
 
 ## A note on scope
 
-This list covers exactly the APIs wrapped by this collection's 9 servers, not the full 24-API catalog
+This list covers exactly the APIs wrapped by this collection's 10 servers, not the full 24-API catalog
 that informed its clustering (see [api-catalog](https://github.com/bradwindy/api-catalog) for the
 complete inventory, including a few APIs that were deliberately left unwrapped as out of scope for a
 personal research toolkit).
