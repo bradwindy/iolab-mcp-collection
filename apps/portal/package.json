@@ -14,7 +14,7 @@
   "dependencies": {
     "@iolab/credentials": "workspace:*",
     "@iolab/mcp-kit": "workspace:*",
-    "hono": "^4.12.28"
+    "hono": "^4.12.34"
   },
   "devDependencies": {
     "jose": "^6.2.3",
