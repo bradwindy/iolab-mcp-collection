@@ -26,9 +26,10 @@ operator types in and a server needs the same key to decrypt it back out. Genera
 
 - `setCredential(db, server, keyName, plaintextValue, encryptionKey)` — encrypt and upsert.
 - `getCredential(db, server, keyName, encryptionKey)` — fetch and decrypt; `null` if unset. Throws
-  `CredentialDecryptionError` (actionable, caller-facing message) if the row exists but was encrypted
-  under a different `ENCRYPTION_KEY` — e.g. after a key rotation, or when a stale deployment carrying
-  an old key reads a re-saved value. A missing/malformed `ENCRYPTION_KEY` propagates `importKey`'s
+  `CredentialDecryptionError` (actionable, caller-facing message) if the row exists but fails AES-GCM
+  authentication — encrypted under a different `ENCRYPTION_KEY` (e.g. after a key rotation, or when a
+  stale deployment carrying an old key reads a re-saved value), or the stored ciphertext was
+  corrupted or tampered with. A missing/malformed `ENCRYPTION_KEY` propagates `importKey`'s
   own more precise error instead. Handlers for **required** credentials deliberately don't catch it —
   the MCP SDK surfaces the message as the tool-error text; helpers for **optional** credentials
   (ia-mcp, wikimedia-mcp) catch it and degrade to their anonymous path.

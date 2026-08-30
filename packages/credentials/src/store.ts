@@ -2,8 +2,10 @@ import { decryptValue, encryptValue } from "./crypto.js";
 
 /**
  * Thrown by getCredential when a stored credential exists but cannot be decrypted with this
- * worker's ENCRYPTION_KEY — in practice the value was (re-)encrypted under a different key, e.g.
- * after a key rotation, or by a deployment carrying a different ENCRYPTION_KEY secret. The message
+ * worker's ENCRYPTION_KEY — in practice the value was (re-)encrypted under a different key (e.g.
+ * after a key rotation, or by a deployment carrying a different ENCRYPTION_KEY secret), or the
+ * stored ciphertext was corrupted or tampered with (AES-GCM authentication fails the same way for
+ * both). The message
  * is written for the MCP caller: tool handlers don't catch this, so the MCP SDK surfaces it as the
  * tool-error text, replacing the raw WebCrypto OperationError that leaked internals and gave the
  * caller nothing to act on.
@@ -16,9 +18,9 @@ export class CredentialDecryptionError extends Error {
   ) {
     super(
       `The stored credential '${keyName}' for ${server} could not be decrypted with this worker's ` +
-        `ENCRYPTION_KEY — it was encrypted under a different key. Re-save the credential in the ` +
-        `portal, or restore the ENCRYPTION_KEY it was saved with. Retrying will not help until one ` +
-        `of those happens.`,
+        `ENCRYPTION_KEY — it was encrypted under a different key, or the stored value was corrupted ` +
+        `or tampered with. Re-save the credential in the portal, or restore the ENCRYPTION_KEY it ` +
+        `was saved with. Retrying will not help until one of those happens.`,
       options,
     );
     this.name = "CredentialDecryptionError";
