@@ -256,6 +256,18 @@ Common failures:
   `buildMultiServerOAuthWorker` checks the exact `MCP_SHARED_TOKEN` header, per registered path,
   before the OAuth provider ever runs. If it did break, confirm you didn't also rotate
   `MCP_SHARED_TOKEN`.
+- **Every tool call on one connector fails with a credential decryption error while the same server
+  works via another connection** — the failing connector is almost certainly pointing at a stale
+  deployment that shares the credentials D1 but carries a different `ENCRYPTION_KEY` secret. This
+  happened in production (August 2026): the pre-gateway per-server Workers
+  (`nz-stats-mcp`, `nz-culture-mcp`, …, `nz-mcp-portal` at `{slug}.mcp.<domain>`) were left deployed
+  after the collapse to one gateway, and a claude.ai connector created before the collapse kept
+  talking to its old hostname. Every tool call surfaced a raw AES-GCM `OperationError` (now a
+  `CredentialDecryptionError` with an actionable message — see `packages/credentials`). Fix: delete
+  the stale Workers (`wrangler delete --name <worker>`; the shared `MCP_CACHE` KV and credentials D1
+  are separate resources and survive), then remove and re-add the connector against
+  `https://mcp.<domain>/{slug}/mcp`. After any layout change, `wrangler deployments list --name
+  <old-worker>` is the quick way to check for zombies.
 - **"Forbidden: missing or invalid CSRF token" when clicking Approve** — the consent page's cookie
   (`__Host-OAUTH_CSRF`) is 10 minutes and single-flow; this fires if you took too long, opened the
   consent link in a second tab/browser, or the browser blocked the `__Host-` cookie (requires HTTPS

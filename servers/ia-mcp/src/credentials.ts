@@ -11,10 +11,18 @@ import { IA_S3_ACCESS_KEY, IA_S3_SECRET_KEY, SERVER_SLUG } from "./constants.js"
  * builder in clients/http.ts just omits the header entirely in that case.
  */
 export async function getOptionalIaS3Credentials(env: Env): Promise<{ access: string; secret: string } | null> {
-  const [access, secret] = await Promise.all([
-    getCredential(env.CREDENTIALS_DB, SERVER_SLUG, IA_S3_ACCESS_KEY, env.ENCRYPTION_KEY),
-    getCredential(env.CREDENTIALS_DB, SERVER_SLUG, IA_S3_SECRET_KEY, env.ENCRYPTION_KEY),
-  ]);
-  if (!access || !secret) return null;
-  return { access, secret };
+  try {
+    const [access, secret] = await Promise.all([
+      getCredential(env.CREDENTIALS_DB, SERVER_SLUG, IA_S3_ACCESS_KEY, env.ENCRYPTION_KEY),
+      getCredential(env.CREDENTIALS_DB, SERVER_SLUG, IA_S3_SECRET_KEY, env.ENCRYPTION_KEY),
+    ]);
+    if (!access || !secret) return null;
+    return { access, secret };
+  } catch (error) {
+    // Same reasoning as wikimedia-mcp's getOptionalWikimediaToken: this credential is optional, so
+    // a D1 failure, undecryptable row (CredentialDecryptionError), or malformed ENCRYPTION_KEY must
+    // degrade to the anonymous path every tool is designed around, not hard-fail all of them.
+    console.error("[ia-mcp] optional IA-S3 credential lookup failed; continuing anonymously", error);
+    return null;
+  }
 }

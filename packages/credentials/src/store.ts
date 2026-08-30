@@ -1,6 +1,31 @@
 import { decryptValue, encryptValue } from "./crypto.js";
 
 /**
+ * Thrown by getCredential when a stored credential exists but cannot be decrypted with this
+ * worker's ENCRYPTION_KEY — in practice the value was (re-)encrypted under a different key, e.g.
+ * after a key rotation, or by a deployment carrying a different ENCRYPTION_KEY secret. The message
+ * is written for the MCP caller: tool handlers don't catch this, so the MCP SDK surfaces it as the
+ * tool-error text, replacing the raw WebCrypto OperationError that leaked internals and gave the
+ * caller nothing to act on.
+ */
+export class CredentialDecryptionError extends Error {
+  constructor(
+    public readonly server: string,
+    public readonly keyName: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `The stored credential '${keyName}' for ${server} could not be decrypted with this worker's ` +
+        `ENCRYPTION_KEY — it was encrypted under a different key. Re-save the credential in the ` +
+        `portal, or restore the ENCRYPTION_KEY it was saved with. Retrying will not help until one ` +
+        `of those happens.`,
+      options,
+    );
+    this.name = "CredentialDecryptionError";
+  }
+}
+
+/**
  * Minimal structural subset of D1Database/D1PreparedStatement we depend on.
  * The real Cloudflare D1Database satisfies this; tests use an in-memory fake.
  */
@@ -41,7 +66,10 @@ export async function setCredential(
     .run();
 }
 
-/** Fetch and decrypt one credential value. Returns null if it has not been set. */
+/**
+ * Fetch and decrypt one credential value. Returns null if it has not been set; throws
+ * CredentialDecryptionError if it is set but was encrypted under a different ENCRYPTION_KEY.
+ */
 export async function getCredential(
   db: D1LikeDatabase,
   server: string,
@@ -53,7 +81,19 @@ export async function getCredential(
     .bind(server, keyName)
     .first<{ value: string }>();
   if (!row) return null;
-  return decryptValue(row.value, encryptionKey);
+  try {
+    return await decryptValue(row.value, encryptionKey);
+  } catch (err) {
+    console.error(`[credentials] decryption failed for ${server}/${keyName}:`, err instanceof Error ? err.message : err);
+    // Only an AES-GCM authentication failure (WebCrypto's OperationError) means "encrypted under a
+    // different key" — importKey's own "must decode to 32 bytes" error for a missing/malformed
+    // ENCRYPTION_KEY is more precise than this wrapper's advice (re-saving via the portal can't fix
+    // a broken key the portal shares), so let everything else propagate unchanged.
+    if (err instanceof Error && err.name === "OperationError") {
+      throw new CredentialDecryptionError(server, keyName, { cause: err });
+    }
+    throw err;
+  }
 }
 
 /** Remove a credential (e.g. a user clearing a key from the portal). */
