@@ -31,7 +31,7 @@
     "@cloudflare/workers-oauth-provider": "^0.8.1",
     "jose": "^6.2.3",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "wrangler": "^4.110.0"
   }
 }
