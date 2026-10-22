@@ -12,7 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@iolab/credentials": "workspace:*",
     "@iolab/mcp-kit": "workspace:*",
     "agents": "^0.17.3",

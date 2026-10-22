@@ -14,7 +14,7 @@
   "dependencies": {
     "@iolab/credentials": "workspace:*",
     "@iolab/mcp-kit": "workspace:*",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "agents": "^0.17.3",
     "zod": "^4.1.10"
   },
