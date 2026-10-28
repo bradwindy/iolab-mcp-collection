@@ -81,43 +81,52 @@ file in this repo (not even `wrangler.jsonc`), since a fork's domain/email are t
 - `ACCESS_EMAIL` (secret): your email — the one operator identity the gateway accepts, both for
   `/authorize` and for the portal's `/admin/*` routes.
 
-## 4. Create the Cloudflare Access application, scoped to `/authorize` only
+## 4. Create the Cloudflare Access application, scoped to `/authorize` and `/admin`
 
-**One** self-hosted Access application covers the whole gateway — `/authorize` is the only path
-actually gated by Cloudflare Access at the infrastructure level:
+**One** self-hosted Access application covers the whole gateway — `/authorize` and `/admin` are the
+only paths gated by Cloudflare Access at the infrastructure level:
 
 1. **Zero Trust → Access → Applications → Add an application → Self-hosted.**
-2. Application domain: your gateway's hostname **and path**, e.g. `mcp.yourdomain.com/authorize` —
-   not the bare hostname. Scoping to the path is what keeps `/{slug}/mcp`, `/token`, `/register`, and
-   the `.well-known` documents public, since those are called server-to-server by claude.ai and
-   Claude Code with no interactive login possible.
+2. Add three public hostname entries to the **same** application, each your gateway's hostname
+   **and a path** — not the bare hostname:
+   - `mcp.yourdomain.com/authorize`
+   - `mcp.yourdomain.com/admin`
+   - `mcp.yourdomain.com/admin/*`
+
+   Scoping to these paths is what keeps `/{slug}/mcp`, `/token`, `/register`, and the `.well-known`
+   documents public, since those are called server-to-server by claude.ai and Claude Code with no
+   interactive login possible. Keeping all three entries in one application means they share one
+   AUD tag (which `verifyAccessJwt` checks) and one sign-in. Without the `/admin` entries, visiting
+   `/admin` directly gives a bare 403 with no sign-in prompt, and the only way to get a session is to
+   open `/authorize` by hand (which then shows an "Invalid redirect URI" error, since a bare
+   `/authorize` has no OAuth client parameters).
 3. Add a policy: Action **Allow**, Include **Emails** → your email address (the same one you'll set
    as `ACCESS_EMAIL`).
 4. Save, then copy the application's **Audience (AUD) tag** (shown on the application's overview
    page) — this is `ACCESS_AUD` below.
 
 **This step is the one place a mistake breaks everything at once.** An Access application scoped to
-the whole hostname (instead of just `/authorize`) intercepts `/{slug}/mcp`, `/token`, and `/register`
+the whole hostname (instead of just `/authorize` and `/admin`) intercepts `/{slug}/mcp`, `/token`, and `/register`
 too — those must stay reachable without an interactive login.
 
 | Path | Must be |
 |---|---|
-| `/authorize` | Behind Access (interactive login only) — the only infrastructure-level gate |
+| `/authorize` | Behind Access (interactive login only) |
 | `/{slug}/mcp` (e.g. `/nz-govt/mcp`) | Public (bearer token **or** OAuth token checked in application code) |
 | `/token`, `/register` | Public (machine-to-machine) |
 | `/.well-known/oauth-authorization-server` | Public (RFC 8414 discovery) |
 | `/.well-known/oauth-protected-resource*` | Public (RFC 9728 discovery, per path) |
-| `/admin/*` (the portal's dashboard/Connect/credential forms) | **Authorized in code**, not by a separate Access application — see below |
+| `/admin`, `/admin/*` (the portal's dashboard/Connect/credential forms) | Behind the same Access application, **and** authorized again in code — see below |
 | `/` (public landing page) | Public, deliberately holds no server list, no credential status, no secrets |
 
 The portal used to be its own Worker on its own hostname, entirely covered by Access at the
-infrastructure level. On the shared gateway hostname that's no longer possible — the same hostname
-must also keep `/token`/`/register`/`/.well-known/*` public. So `/admin/*` is protected **in code**
-instead: `apps/portal/src/app.ts` runs `verifyAccessJwt` (the same check `/authorize` uses, from
-`@iolab/mcp-kit`) against every `/admin/*` request, checking for a valid Access session cookie
-(`CF_Authorization`, set domain-wide once you've completed the Access login at `/authorize` — the
-JWT's signature is what's actually verified, not just its presence). A routing mistake here is a 403
-from that check, not a credential leak.
+infrastructure level. On the shared gateway hostname the same hostname must also keep
+`/token`/`/register`/`/.well-known/*` public, so Access covers only the `/admin` paths, not the whole
+hostname. Access is what sends you to the sign-in page when you open `/admin` with no session. On top
+of that, `apps/portal/src/app.ts` runs `verifyAccessJwt` (the same check `/authorize` uses, from
+`@iolab/mcp-kit`) against every `/admin/*` request, checking the Access JWT's signature, audience
+and email, not just its presence. If the Access application's paths are ever misconfigured, that
+check turns the mistake into a 403, not a credential leak.
 
 ## 5. Set the gateway's secrets
 
@@ -227,9 +236,11 @@ curl -sI https://mcp.yourdomain.com/nz-govt/mcp -X POST | grep -i www-authentica
 # actually covering this path:
 curl -sI https://mcp.yourdomain.com/authorize | grep -i "^HTTP\|^location"
 
-# /admin (the portal dashboard) should also 403 with no Access session — verified in code, not by
-# a separate Access application:
-curl -sI https://mcp.yourdomain.com/admin
+# /admin and /admin/* (the portal) should also 302 to your team's Access login page. A 403 here
+# instead means the Access application is missing its /admin entries (the in-code check caught the
+# request, but you'll get no sign-in prompt in a browser):
+curl -sI https://mcp.yourdomain.com/admin | grep -i "^HTTP\|^location"
+curl -sI https://mcp.yourdomain.com/admin/connect | grep -i "^HTTP\|^location"
 
 # / (the public landing page) should 200 with no auth at all, and mention nothing operational:
 curl -s https://mcp.yourdomain.com/ | grep -c "iolab MCP fleet"
@@ -250,8 +261,11 @@ Common failures:
   connectors on this one shared authorization server). If you see this, it's a regression — file an
   issue, don't just re-authorize and move on.
 - **403 with a valid-looking Access login** — the JWT's `email` claim doesn't match your
-  `ACCESS_EMAIL` secret exactly, or `ACCESS_AUD`/`ACCESS_TEAM_DOMAIN` don't match the `/authorize`
-  Access application's own values.
+  `ACCESS_EMAIL` secret exactly, or `ACCESS_AUD`/`ACCESS_TEAM_DOMAIN` don't match the Access
+  application's own values. If `/admin` is in a separate Access application from `/authorize`, its
+  AUD tag differs and every `/admin` request 403s, so keep them in one application.
+- **Opening `/admin` gives a bare 403 with no sign-in prompt** — the Access application doesn't
+  cover `/admin` and `/admin/*`. Add both as public hostname entries on the same application (step 4).
 - **Claude Code stops working after adding a new server** — it shouldn't: the bearer bypass in
   `buildMultiServerOAuthWorker` checks the exact `MCP_SHARED_TOKEN` header, per registered path,
   before the OAuth provider ever runs. If it did break, confirm you didn't also rotate

@@ -18,14 +18,13 @@ the 7 MCP servers.
 
 ## Security model
 
-- **Auth is checked in application code, not delegated to Cloudflare Access at the edge.** This is a
-  deliberate change from when this app was its own Worker on its own hostname (entirely covered by an
-  Access application). The gateway's shared hostname must also serve `/token`, `/register`, and
-  `/.well-known/*` publicly for machine-to-machine OAuth calls, so Access there is scoped to
-  `/authorize` only — `app.ts` runs `verifyAccessJwt` (from `@iolab/mcp-kit/access`) as Hono
-  middleware on every `/admin/*` request instead, checking the same Access session `/authorize`
-  establishes (the `CF_Authorization` cookie is domain-wide once that login completes). A routing
-  mistake here is a 403 from this check, not a credential leak.
+- **Auth is checked at the edge by Cloudflare Access and again in application code.** The gateway's
+  shared hostname must also serve `/token`, `/register`, and `/.well-known/*` publicly for
+  machine-to-machine OAuth calls, so Access there is scoped to `/authorize`, `/admin` and `/admin/*`
+  only, all in one Access application (see `docs/SETUP.md` step 4). Access sends a signed-out browser
+  to the sign-in page. `app.ts` also runs `verifyAccessJwt` (from `@iolab/mcp-kit/access`) as Hono
+  middleware on every `/admin/*` request, so a mistake in the Access application's paths is a 403
+  from this check, not a credential leak.
 - **Credentials are write-only from the UI's perspective**: a previously-set value is never rendered back
   into a form. The dashboard and server pages only ever show whether a key is set and when it was last
   updated.

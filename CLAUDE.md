@@ -71,10 +71,10 @@ one per server. `/{slug}/mcp` accepts either the shared `MCP_SHARED_TOKEN` beare
 per-path bypass — this is what Claude Code uses, since it connects server-to-server and can't complete
 an interactive login) or an OAuth access token from the one shared authorization server (what
 claude.ai's custom-connector flow uses, now working identically for every registered server with no
-per-server opt-in). The OAuth provider's `/authorize` endpoint is the **one** path actually gated by
-Cloudflare Access for the whole gateway; everything else (`/{slug}/mcp`, `/token`, `/register`, the
-`.well-known` discovery documents, and — see above — `/admin/*` in application code instead) stays
-public for machine-to-machine calls; see `docs/SETUP.md`.
+per-server opt-in). The OAuth provider's `/authorize` endpoint and the portal's `/admin`, `/admin/*`
+are the only paths gated by Cloudflare Access (one Access application, one AUD), with `/admin/*` also
+re-checked in application code; everything else (`/{slug}/mcp`, `/token`, `/register`, the
+`.well-known` discovery documents) stays public for machine-to-machine calls; see `docs/SETUP.md`.
 
 **Collapsing to one authorization server removed the per-server OAuth-token isolation the old layout
 had "for free."** `/authorize` mitigates this by requiring an RFC 8707 `resource` parameter naming
