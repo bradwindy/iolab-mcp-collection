@@ -19,5 +19,13 @@ declare global {
      * keys stored in CREDENTIALS_DB, if set. Set via `wrangler secret put ENCRYPTION_KEY`.
      */
     ENCRYPTION_KEY: string;
+    /**
+     * Optional home proxy for web.archive.org (synology-docker repo, `wayback-proxy/`), e.g.
+     * `https://wayback.example.com`. Both this and WAYBACK_PROXY_KEY must be set to use it;
+     * otherwise Wayback is called directly. Set via `wrangler secret put WAYBACK_PROXY_URL`.
+     */
+    WAYBACK_PROXY_URL?: string;
+    /** Shared secret sent to that proxy as `X-Wayback-Key`. Set via `wrangler secret put WAYBACK_PROXY_KEY`. */
+    WAYBACK_PROXY_KEY?: string;
   }
 }
