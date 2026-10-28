@@ -51,9 +51,17 @@ optional exception and why it almost certainly doesn't matter.
 - **`__wb/sparkline` is dead** (404 on every parameter shape tried) — `ia_wayback_get_capture_timeline`
   is built entirely from CDX.
 - **CDX throttles hard** — confirmed live, `503` after ~15-20 requests in a few minutes. Every
-  client goes through `fetchWithBackoff` (retries on 429/5xx, honours `Retry-After`), and captures
+  client goes through `fetchWithBackoff` (retries 5xx, honours `Retry-After`), and captures
   are cached aggressively (`CACHE_TTL.METADATA`) since a capture at a specific timestamp is
-  immutable.
+  immutable. CDX lookups are cached too (`CACHE_TTL.SLOW_MOVING`).
+- **Wayback 429s are never retried** — Internet Archive staff have said CDX allows an average of
+  60 requests/minute, and that a client which keeps sending after a 429 for over a minute gets its
+  IP blocked for an hour. Our egress is a shared Cloudflare IP, so `waybackFetch` (in
+  `src/clients/wayback.ts`) records a server-wide cooldown in KV on the first 429 (from
+  `Retry-After`, else 5 minutes) and every Wayback call during it fails fast without being sent.
+  While that lasts, `ia_wayback_read_page` and `ia_wayback_find_nearest_capture` fall back to the
+  New Zealand Web Archive, then Arquivo.pt (`src/clients/otherArchives.ts`), and say so in
+  `source_archive`/`notice`. The other Wayback tools are CDX-only and just return the wait message.
 - **The `id_` capture URL 302s to the nearest actual capture, not necessarily the requested
   timestamp** — confirmed live: requesting `20200101000000` landed on `20191231234501`.
   `ia_wayback_read_page` and `ia_wayback_diff_captures` always report the actual redirected

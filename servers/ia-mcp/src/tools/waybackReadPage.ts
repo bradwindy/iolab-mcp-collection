@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { attribution, jsonResult, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
-import { archivedUrl, cdxTimestampToIso } from "../clients/wayback.js";
-import { fetchAndExtractPage, LATEST_SENTINEL } from "../pageFetch.js";
+import { attribution, jsonResult, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
+import { archivedUrl, cdxTimestampToIso, waybackError } from "../clients/wayback.js";
+import { fetchAndExtractPageWithFallback, LATEST_SENTINEL } from "../pageFetch.js";
 
 export const waybackReadPageInputShape = {
   url: z.string().min(1).describe("The URL to read an archived capture of."),
@@ -29,6 +29,8 @@ export const waybackReadPageOutputShape = {
   char_offset: z.number(),
   next_char_offset: z.number().nullable(),
   total_chars: z.number(),
+  source_archive: z.string(),
+  notice: z.string(),
   attribution: z.object({ source: z.string(), url: z.string().optional() }),
 };
 
@@ -39,7 +41,7 @@ export async function waybackReadPageHandler(rawInput: unknown, env: Env): Promi
   const requestedTimestamp = input.timestamp ?? LATEST_SENTINEL;
 
   try {
-    const page = await fetchAndExtractPage(env, input.url, requestedTimestamp);
+    const page = await fetchAndExtractPageWithFallback(env, input.url, requestedTimestamp);
 
     const full =
       input.format === "raw_html"
@@ -58,16 +60,20 @@ export async function waybackReadPageHandler(rawInput: unknown, env: Env): Promi
       requested_timestamp: input.timestamp ?? null,
       actual_timestamp: page.actualTimestamp,
       actual_iso_date: cdxTimestampToIso(page.actualTimestamp),
-      archived_url: archivedUrl(page.actualTimestamp, input.url),
+      archived_url: page.source.archivedUrl ?? archivedUrl(page.actualTimestamp, input.url),
       format: input.format,
       content: slice,
       char_offset: input.char_offset,
       next_char_offset: nextOffset,
       total_chars: full.length,
-      attribution: attribution("Internet Archive Wayback Machine", { url: "https://web.archive.org/" }),
+      source_archive: page.source.name,
+      notice: page.source.archivedUrl
+        ? `The Wayback Machine is rate-limiting this server, so this capture came from ${page.source.name} instead. Its nearest capture may be further from the requested date than Wayback's would be.`
+        : "",
+      attribution: attribution(page.source.name, { url: page.source.url }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
+    if (error instanceof UpstreamHttpError) return waybackError(error);
     throw error;
   }
 }

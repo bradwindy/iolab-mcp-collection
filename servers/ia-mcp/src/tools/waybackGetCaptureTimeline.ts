@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { attribution, jsonResult, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
-import { cdxTimestampToIso, queryCdx } from "../clients/wayback.js";
+import { attribution, jsonResult, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
+import { cdxTimestampToIso, queryCdx, waybackError } from "../clients/wayback.js";
 
 // CDX has no cheap way to report "how many captures exist" up front — this caps how many rows a
 // single timeline call will pull. High enough for the vast majority of sites' Wayback history;
@@ -94,7 +94,7 @@ export async function waybackGetCaptureTimelineHandler(rawInput: unknown, env: E
       attribution: attribution("Internet Archive Wayback Machine", { url: "https://web.archive.org/" }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
+    if (error instanceof UpstreamHttpError) return waybackError(error);
     throw error;
   }
 }

@@ -31,6 +31,18 @@ describe("upstreamError", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain("GeoNet returned HTTP 503 Service Unavailable.");
   });
+
+  it("tells the agent to wait, not retry, on a 429, using Retry-After when present", () => {
+    const withHeader = upstreamError(
+      "Wayback Machine",
+      new Response(null, { status: 429, statusText: "Too Many Requests", headers: { "retry-after": "120" } }),
+    );
+    expect(withHeader.content[0]?.text).toContain("Wait about 120 seconds");
+
+    const withoutHeader = upstreamError("Wayback Machine", new Response(null, { status: 429, statusText: "Too Many Requests" }));
+    expect(withoutHeader.content[0]?.text).toContain("Wait a few minutes");
+    expect(withoutHeader.content[0]?.text).not.toContain("retry, or narrow");
+  });
 });
 
 describe("missingCredentialError", () => {
