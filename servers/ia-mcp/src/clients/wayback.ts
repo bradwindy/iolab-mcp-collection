@@ -1,8 +1,67 @@
-import { UpstreamHttpError } from "@iolab/mcp-kit";
+import { CACHE_TTL, cached, rateLimitHint, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
 import { iaFetch } from "./http.js";
 
 const CDX_URL = "https://web.archive.org/cdx/search/cdx";
 export const SOURCE = "Wayback Machine";
+
+const COOLDOWN_KEY = "ia:wayback:cooldown-until";
+/** Used when a 429 carries no usable Retry-After. Workers KV's 60s TTL floor is the lower bound. */
+const DEFAULT_COOLDOWN_SECONDS = 300;
+const MAX_COOLDOWN_SECONDS = 3600;
+
+function retryAfterSeconds(response: Response): number {
+  const seconds = Number(response.headers.get("retry-after"));
+  const value = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : DEFAULT_COOLDOWN_SECONDS;
+  return Math.min(Math.max(value, 60), MAX_COOLDOWN_SECONDS);
+}
+
+/**
+ * Every web.archive.org request goes through here, never `iaFetch` directly. Internet Archive
+ * staff have stated the CDX API allows an average of 60 requests/minute, and that a client which
+ * keeps sending requests after a 429 for over a minute gets its IP blocked for an hour (doubling
+ * on repeat). Our egress is a shared Cloudflare IP, so the old behaviour — retrying every 429
+ * three times, then every agent retrying the tool on top — was the worst possible response. So:
+ *
+ * - 429 is never retried here (5xx and network errors still are, for the CDX 503s seen live).
+ * - The first 429 records a server-wide cooldown in KV, and every Wayback call during it fails
+ *   fast with a synthetic 429 instead of touching upstream at all.
+ */
+export async function waybackFetch(env: Env, url: string | URL, init: RequestInit = {}): Promise<Response> {
+  const until = Number(await env.MCP_CACHE.get(COOLDOWN_KEY));
+  const remainingSeconds = Math.ceil((until - Date.now()) / 1000);
+  if (Number.isFinite(until) && remainingSeconds > 0) {
+    throw new UpstreamHttpError(
+      SOURCE,
+      new Response(null, {
+        status: 429,
+        statusText: "Too Many Requests (cooling down, request not sent)",
+        headers: { "retry-after": String(remainingSeconds) },
+      }),
+    );
+  }
+
+  const response = await iaFetch(env, url, init, {
+    retryOn: (res) => !res || res.status >= 500,
+  });
+  if (response.status === 429) {
+    const seconds = retryAfterSeconds(response);
+    await env.MCP_CACHE.put(COOLDOWN_KEY, String(Date.now() + seconds * 1000), { expirationTtl: seconds });
+  }
+  return response;
+}
+
+/**
+ * `upstreamError` for Wayback failures: a 429 also points the agent at the two tools that can
+ * still answer from other web archives (see clients/otherArchives.ts) while Wayback cools down.
+ */
+export function waybackError(error: UpstreamHttpError): ToolTextResult {
+  if (error.response.status !== 429) return upstreamError(error.source, error.response);
+  return upstreamError(
+    error.source,
+    error.response,
+    `${rateLimitHint(error.response)} Meanwhile ia_wayback_read_page and ia_wayback_find_nearest_capture can still answer from other web archives.`,
+  );
+}
 
 export type CdxCollapse = "none" | "hour" | "day" | "month" | "year" | "digest" | "urlkey";
 
@@ -79,13 +138,16 @@ export async function queryCdxRaw(
   if (collapse) requestUrl.searchParams.set("collapse", collapse);
   requestUrl.searchParams.set("limit", String(params.rawLimit));
 
-  const response = await iaFetch(env, requestUrl);
-  if (!response.ok) throw new UpstreamHttpError(SOURCE, response);
+  // Cached because agents re-run the same lookup constantly (and find_nearest_capture/diff_captures
+  // fan out several per call) — every repeat that skips upstream is quota left for a new query.
+  // SLOW_MOVING, not METADATA: new captures do land, but half an hour stale is harmless here.
+  const raw = await cached(env.MCP_CACHE, `ia:cdx:${requestUrl.toString()}`, CACHE_TTL.SLOW_MOVING, async () => {
+    const response = await waybackFetch(env, requestUrl);
+    if (!response.ok) throw new UpstreamHttpError(SOURCE, response);
+    const body = (await response.text()).trim();
+    return body ? (JSON.parse(body) as string[][]) : [];
+  });
 
-  const body = (await response.text()).trim();
-  if (!body) return [];
-
-  const raw = JSON.parse(body) as string[][];
   const dataRows = raw.slice(1); // first row is the header
   return dataRows.map((row) => ({
     urlkey: row[0] ?? "",
@@ -155,7 +217,7 @@ export type ArchivedPage = {
  */
 export async function fetchArchivedPage(env: Env, url: string, timestamp: string): Promise<ArchivedPage> {
   const requestUrl = `https://web.archive.org/web/${timestamp}id_/${url}`;
-  const response = await iaFetch(env, requestUrl, { redirect: "follow" });
+  const response = await waybackFetch(env, requestUrl, { redirect: "follow" });
   if (!response.ok) throw new UpstreamHttpError(SOURCE, response);
 
   const finalUrl = response.url;

@@ -5,10 +5,9 @@ import {
   limitParam,
   offsetParam,
   UpstreamHttpError,
-  upstreamError,
   type ToolTextResult,
 } from "@iolab/mcp-kit";
-import { cdxTimestampToIso, queryCdx } from "../clients/wayback.js";
+import { cdxTimestampToIso, queryCdx, waybackError } from "../clients/wayback.js";
 
 export const waybackListSiteUrlsInputShape = {
   url: z.string().min(1).describe("A URL prefix or host to discover archived URLs under, e.g. 'example.com/blog/' or 'example.com'."),
@@ -109,7 +108,7 @@ export async function waybackListSiteUrlsHandler(rawInput: unknown, env: Env): P
       attribution: attribution("Internet Archive Wayback Machine", { url: "https://web.archive.org/" }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
+    if (error instanceof UpstreamHttpError) return waybackError(error);
     throw error;
   }
 }

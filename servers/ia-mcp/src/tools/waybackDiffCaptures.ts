@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { attribution, jsonResult, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
-import { queryCdx } from "../clients/wayback.js";
+import { attribution, jsonResult, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
+import { queryCdx, waybackError } from "../clients/wayback.js";
 import { fetchAndExtractPage } from "../pageFetch.js";
 
 export const waybackDiffCapturesInputShape = {
@@ -51,10 +51,10 @@ export async function waybackDiffCapturesHandler(rawInput: unknown, env: Env): P
   const input = inputSchema.parse(rawInput);
 
   try {
-    const [digestA, digestB] = await Promise.all([
-      getCaptureDigest(env, input.url, input.timestamp_a),
-      getCaptureDigest(env, input.url, input.timestamp_b),
-    ]);
+    // Sequential, not Promise.all: bursts of parallel requests are what trips Wayback's rate
+    // limit (see waybackFetch), and a 429 on the first call now stops the second being sent.
+    const digestA = await getCaptureDigest(env, input.url, input.timestamp_a);
+    const digestB = await getCaptureDigest(env, input.url, input.timestamp_b);
 
     if (digestA && digestB && digestA === digestB) {
       return jsonResult({
@@ -70,10 +70,8 @@ export async function waybackDiffCapturesHandler(rawInput: unknown, env: Env): P
       });
     }
 
-    const [pageA, pageB] = await Promise.all([
-      fetchAndExtractPage(env, input.url, input.timestamp_a),
-      fetchAndExtractPage(env, input.url, input.timestamp_b),
-    ]);
+    const pageA = await fetchAndExtractPage(env, input.url, input.timestamp_a);
+    const pageB = await fetchAndExtractPage(env, input.url, input.timestamp_b);
 
     const { diff, charsAdded, charsRemoved } = lineDiff(pageA.text, pageB.text);
     const truncated = diff.length > input.max_chars;
@@ -90,7 +88,7 @@ export async function waybackDiffCapturesHandler(rawInput: unknown, env: Env): P
       attribution: attribution("Internet Archive Wayback Machine", { url: "https://web.archive.org/" }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
+    if (error instanceof UpstreamHttpError) return waybackError(error);
     throw error;
   }
 }

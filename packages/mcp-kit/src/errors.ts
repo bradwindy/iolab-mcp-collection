@@ -29,16 +29,31 @@ export function toolError(message: string, hint?: string): ToolTextResult {
   };
 }
 
+/**
+ * The agent-facing hint for an HTTP 429. Deliberately says "wait", not "retry": some upstreams
+ * (the Wayback Machine, per Internet Archive staff) escalate to an hour-long IP block when 429s
+ * keep being ignored, so the generic "retry" advice actively makes a 429 worse.
+ */
+export function rateLimitHint(response: Response): string {
+  const seconds = Number(response.headers.get("retry-after"));
+  const wait = Number.isFinite(seconds) && seconds > 0 ? `about ${Math.ceil(seconds)} seconds` : "a few minutes";
+  return `The upstream is rate-limiting this server. Wait ${wait} before calling it again; retrying straight away can extend the block.`;
+}
+
 /** Standard actionable error for an upstream HTTP failure. */
 export function upstreamError(source: string, response: Response, hint?: string): ToolTextResult {
   console.error(
     `[upstream-error] ${source} returned HTTP ${response.status} ${response.statusText}`,
     `url=${response.url}`,
+    // Logged so a 429 is diagnosable after the fact: a short throttle and an hours-long block
+    // look identical to the caller, and only these headers tell them apart.
+    `retry-after=${response.headers.get("retry-after") ?? "none"}`,
   );
-  return toolError(
-    `${source} returned HTTP ${response.status} ${response.statusText}.`,
-    hint ?? "This may be transient; retry, or narrow the request if the upstream is rate-limiting.",
-  );
+  const defaultHint =
+    response.status === 429
+      ? rateLimitHint(response)
+      : "This may be transient; retry, or narrow the request if the upstream is rate-limiting.";
+  return toolError(`${source} returned HTTP ${response.status} ${response.statusText}.`, hint ?? defaultHint);
 }
 
 /** Standard actionable error when an upstream credential has not been configured yet. */
