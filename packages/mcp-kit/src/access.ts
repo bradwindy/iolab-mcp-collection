@@ -14,7 +14,7 @@ import type { JWTVerifyGetKey } from "jose";
 export interface AccessJwtEnv {
   /** The operator's Cloudflare Zero Trust team domain, e.g. `myteam.cloudflareaccess.com`. */
   ACCESS_TEAM_DOMAIN: string;
-  /** Audience (AUD) tag of the single Access application scoped to `/authorize`. */
+  /** Audience (AUD) tag of the single Access application scoped to `/authorize` and `/admin`. */
   ACCESS_AUD: string;
   /** The single operator email allowed to complete the OAuth login. */
   ACCESS_EMAIL: string;

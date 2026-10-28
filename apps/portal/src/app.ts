@@ -24,11 +24,11 @@ app.use("*", async (c, next) => {
 // The gateway's single shared hostname can no longer be entirely covered by one Cloudflare
 // Access application the way this portal's own hostname used to be — /token, /register, and
 // /.well-known/* on that same hostname must stay public for machine-to-machine OAuth calls, so
-// Access is only configured to gate /authorize (see docs/SETUP.md). Everything under /admin — the
+// Access is configured to gate only /authorize, /admin and /admin/* (see docs/SETUP.md). Access is
+// what redirects a signed-out browser to the sign-in page. Everything under /admin — the
 // credential-management UI, including the page that renders MCP_SHARED_TOKEN in plaintext — is
-// therefore authorized here in code instead, against the same Access session (the `CF_Authorization`
-// cookie is domain-wide once the operator has completed the Access login at /authorize once).
-// A scoping mistake in the gateway's routing is then a 403 from this check, not a credential leak.
+// also authorized here in code, against the same Access application's JWT, so a scoping mistake
+// in the Access application's paths is a 403 from this check, not a credential leak.
 app.use("/admin/*", async (c, next) => {
   const identity = await verifyAccessJwt(c.req.raw, c.env);
   if (!identity) {
