@@ -8,21 +8,18 @@ export type OtherArchive = {
 };
 
 /**
- * Fallbacks for when the Wayback Machine is rate-limiting us. Both run Memento-compliant
+ * Fallbacks for when the Wayback Machine is rate-limiting us. Each must run Memento-compliant
  * Wayback-style replay, so `${base}${timestamp}id_/${url}` redirects to the capture closest to
- * `timestamp` and serves its raw HTML, the same shape `fetchArchivedPage` relies on. Tried in
- * order: the NZ Web Archive first (this collection's focus), then Arquivo.pt for global coverage.
- * Neither has IA's quota problems, but both hold far fewer captures, so a miss is normal.
+ * `timestamp` and serves its raw HTML, the same shape `fetchArchivedPage` relies on. Arquivo.pt
+ * does (confirmed live from the deployed gateway). It holds far fewer captures than Wayback, so a
+ * miss is normal.
+ *
+ * The NZ Web Archive (ndhadeliver.natlib.govt.nz) was tried and removed: confirmed live, its
+ * `/webarchive/<ts>id_/<url>` answers HTTP 200 at the requested URL with no redirect, serving a
+ * JavaScript app shell rather than the archived page, so there is no raw HTML or real capture
+ * timestamp to read from a Worker.
  */
 export const OTHER_ARCHIVES: readonly OtherArchive[] = [
-  {
-    name: "New Zealand Web Archive (National Library of New Zealand)",
-    homepage: "https://natlib.govt.nz/collections/a-z/new-zealand-web-archive",
-    // Not `/webarchive/wayback/` — that older prefix still appears in links on govt.nz sites,
-    // but the deployed fallback never got a capture through it. `/webarchive/` is the prefix
-    // GLAM Workbench's Memento notebook uses as the NLNZ TimeGate.
-    base: "https://ndhadeliver.natlib.govt.nz/webarchive/",
-  },
   {
     name: "Arquivo.pt",
     homepage: "https://arquivo.pt/",
