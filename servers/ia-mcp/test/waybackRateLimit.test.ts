@@ -114,4 +114,45 @@ describe("Wayback rate limiting", () => {
       days_from_target: 5,
     });
   });
+
+  it("routes Wayback through the home proxy when configured, following redirects with the key", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input.toString());
+      expect(url.host).toBe("wayback.example.com");
+      expect(new Headers(init?.headers).get("X-Wayback-Key")).toBe("sekrit");
+      expect(init?.redirect).toBe("manual");
+      if (url.pathname === "/web/20150101id_/https://example.org/") {
+        return Promise.resolve(new Response(null, { status: 302, headers: { location: "/web/20141231120000id_/https://example.org/" } }));
+      }
+      return Promise.resolve(new Response("<html><body><h1>Via home</h1></body></html>", { status: 200, headers: { "content-type": "text/html" } }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const env = { ...fakeEnv(), WAYBACK_PROXY_URL: "https://wayback.example.com", WAYBACK_PROXY_KEY: "sekrit" } as Env;
+
+    const result = await waybackReadPageHandler({ url: "https://example.org/", timestamp: "20150101" }, env);
+
+    expect(result.isError).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.structuredContent?.source_archive).toBe("Internet Archive Wayback Machine");
+    expect(result.structuredContent?.actual_timestamp).toBe("20141231120000");
+    expect(result.structuredContent?.content).toContain("Via home");
+  });
+
+  it("puts the proxy's own 429 into the same cooldown", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("rate limited by wayback-proxy", {
+        status: 429,
+        statusText: "Too Many Requests",
+        headers: { "x-wayback-proxy": "rate-limited", "retry-after": "5" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const env = { ...fakeEnv(), WAYBACK_PROXY_URL: "https://wayback.example.com", WAYBACK_PROXY_KEY: "sekrit" } as Env;
+
+    await waybackSearchCapturesHandler({ url: "example.org" }, env);
+    const second = await waybackSearchCapturesHandler({ url: "other.example.org" }, env);
+
+    expect(second.content[0]?.text).toContain("cooling down, request not sent");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

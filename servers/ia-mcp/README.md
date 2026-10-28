@@ -62,6 +62,12 @@ optional exception and why it almost certainly doesn't matter.
   While that lasts, `ia_wayback_read_page` and `ia_wayback_find_nearest_capture` fall back to
   Arquivo.pt (`src/clients/otherArchives.ts`), and say so in
   `source_archive`/`notice`. The other Wayback tools are CDX-only and just return the wait message.
+- **Optional home proxy for Wayback** — Wayback rate-limits Cloudflare's shared egress IPs (every
+  call from the deployed gateway got a 429, even single requests). With the gateway secrets
+  `WAYBACK_PROXY_URL` and `WAYBACK_PROXY_KEY` set, `waybackFetch` sends web.archive.org requests
+  through a small nginx proxy on the operator's NAS instead (private `bradwindy/synology-docker`
+  repo, `wayback-proxy/`), reached over a Cloudflare Tunnel and authenticated by an
+  `X-Wayback-Key` header. Redirects are followed by hand through the proxy. Unset, calls go direct.
 - **The `id_` capture URL 302s to the nearest actual capture, not necessarily the requested
   timestamp** — confirmed live: requesting `20200101000000` landed on `20191231234501`.
   `ia_wayback_read_page` and `ia_wayback_diff_captures` always report the actual redirected

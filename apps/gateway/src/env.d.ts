@@ -26,6 +26,14 @@ declare global {
      * "example.com" for a gateway at mcp.example.com. Set via `wrangler secret put BASE_DOMAIN`.
      */
     BASE_DOMAIN: string;
+    /**
+     * Optional home proxy that ia-mcp sends web.archive.org requests through, because Wayback
+     * rate-limits Cloudflare's shared egress IPs. Unset means direct. Needs WAYBACK_PROXY_KEY too.
+     * Set via `wrangler secret put WAYBACK_PROXY_URL`.
+     */
+    WAYBACK_PROXY_URL?: string;
+    /** Shared secret for that proxy (`X-Wayback-Key`). Set via `wrangler secret put WAYBACK_PROXY_KEY`. */
+    WAYBACK_PROXY_KEY?: string;
     /** Injected by @cloudflare/workers-oauth-provider; see `buildMultiServerOAuthWorker` in @iolab/mcp-kit. */
     OAUTH_PROVIDER: OAuthHelpers;
     /**

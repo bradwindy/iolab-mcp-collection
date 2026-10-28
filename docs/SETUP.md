@@ -158,6 +158,7 @@ This is the **entire** secrets table now — one Worker, set once, not once per 
 | `ACCESS_AUD` | Verify the Access JWT's audience |
 | `ACCESS_EMAIL` | The one operator email `/authorize` and `/admin/*` accept |
 | `DISABLE_RESOURCE_ENFORCEMENT` | Leave unset — see §7 below |
+| `WAYBACK_PROXY_URL` / `WAYBACK_PROXY_KEY` | Optional. Route ia-mcp's Wayback Machine calls through a home proxy, since Wayback rate-limits Cloudflare IPs. Leave unset to call Wayback directly. See `servers/ia-mcp/README.md` |
 
 ### If a custom domain's certificate gets stuck on "pending validation"
 

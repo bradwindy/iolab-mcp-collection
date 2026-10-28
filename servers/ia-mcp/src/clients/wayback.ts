@@ -1,5 +1,14 @@
-import { CACHE_TTL, cached, rateLimitHint, UpstreamHttpError, upstreamError, type ToolTextResult } from "@iolab/mcp-kit";
-import { iaFetch } from "./http.js";
+import {
+  CACHE_TTL,
+  cached,
+  fetchWithBackoff,
+  rateLimitHint,
+  UpstreamHttpError,
+  upstreamError,
+  type RetryOptions,
+  type ToolTextResult,
+} from "@iolab/mcp-kit";
+import { iaFetch, USER_AGENT } from "./http.js";
 
 const CDX_URL = "https://web.archive.org/cdx/search/cdx";
 export const SOURCE = "Wayback Machine";
@@ -8,6 +17,9 @@ const COOLDOWN_KEY = "ia:wayback:cooldown-until";
 /** Used when a 429 carries no usable Retry-After. Workers KV's 60s TTL floor is the lower bound. */
 const DEFAULT_COOLDOWN_SECONDS = 300;
 const MAX_COOLDOWN_SECONDS = 3600;
+const MAX_PROXY_REDIRECTS = 5;
+/** 429 is never retried — see `waybackFetch`. */
+const RETRY_5XX_ONLY: RetryOptions = { retryOn: (res) => !res || res.status >= 500 };
 
 function retryAfterSeconds(response: Response): number {
   const seconds = Number(response.headers.get("retry-after"));
@@ -25,6 +37,9 @@ function retryAfterSeconds(response: Response): number {
  * - 429 is never retried here (5xx and network errors still are, for the CDX 503s seen live).
  * - The first 429 records a server-wide cooldown in KV, and every Wayback call during it fails
  *   fast with a synthetic 429 instead of touching upstream at all.
+ *
+ * When `WAYBACK_PROXY_URL` and `WAYBACK_PROXY_KEY` are both set, requests go through the home
+ * proxy instead (see `viaProxy`), so they leave from a non-Cloudflare IP. Unset, they go direct.
  */
 export async function waybackFetch(env: Env, url: string | URL, init: RequestInit = {}): Promise<Response> {
   const until = Number(await env.MCP_CACHE.get(COOLDOWN_KEY));
@@ -40,14 +55,51 @@ export async function waybackFetch(env: Env, url: string | URL, init: RequestIni
     );
   }
 
-  const response = await iaFetch(env, url, init, {
-    retryOn: (res) => !res || res.status >= 500,
-  });
+  const response =
+    env.WAYBACK_PROXY_URL && env.WAYBACK_PROXY_KEY
+      ? await viaProxy(env.WAYBACK_PROXY_URL, env.WAYBACK_PROXY_KEY, new URL(url), init)
+      : await iaFetch(env, url, init, RETRY_5XX_ONLY);
   if (response.status === 429) {
     const seconds = retryAfterSeconds(response);
     await env.MCP_CACHE.put(COOLDOWN_KEY, String(Date.now() + seconds * 1000), { expirationTtl: seconds });
   }
   return response;
+}
+
+/**
+ * Fetches a web.archive.org URL through the home proxy (synology-docker repo, `wayback-proxy/`):
+ * same path and query, on the proxy's host, with the `X-Wayback-Key` header. The proxy rewrites
+ * Wayback's redirect `Location`s to relative paths, so redirects are followed here by hand,
+ * re-sending the key on each hop. The returned Response's `url` is the web.archive.org
+ * equivalent of the final hop, so callers that read the capture timestamp from it (see
+ * `fetchArchivedPage`) work unchanged. The optional archive.org S3 keys are not sent this way.
+ *
+ * The proxy's own 429s (`X-Wayback-Proxy: rate-limited`) land in the same cooldown as Wayback's.
+ */
+async function viaProxy(proxyUrl: string, key: string, url: URL, init: RequestInit): Promise<Response> {
+  const proxy = new URL(proxyUrl);
+  let target = new URL(url.pathname + url.search, proxy);
+  const follow = init.redirect !== "manual";
+
+  for (let hop = 0; ; hop++) {
+    const headers = new Headers(init.headers);
+    headers.set("User-Agent", USER_AGENT);
+    headers.set("X-Wayback-Key", key);
+    const response = await fetchWithBackoff(target, { ...init, headers, redirect: "manual" }, RETRY_5XX_ONLY);
+
+    const location = response.headers.get("location");
+    if (follow && location && response.status >= 300 && response.status < 400 && hop < MAX_PROXY_REDIRECTS) {
+      await response.body?.cancel();
+      const next = new URL(location, target);
+      // Belt and braces: should the proxy ever pass an absolute Wayback Location through,
+      // keep the next hop on the proxy rather than going direct.
+      target = next.host === "web.archive.org" ? new URL(next.pathname + next.search, proxy) : next;
+      continue;
+    }
+
+    Object.defineProperty(response, "url", { value: `https://web.archive.org${target.pathname}${target.search}` });
+    return response;
+  }
 }
 
 /**
