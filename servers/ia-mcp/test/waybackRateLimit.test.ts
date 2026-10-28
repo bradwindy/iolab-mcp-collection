@@ -64,7 +64,7 @@ describe("Wayback rate limiting", () => {
       if (isWayback(input)) return Promise.resolve(tooManyRequests());
       return Promise.resolve(
         pageResponse(
-          "https://ndhadeliver.natlib.govt.nz/webarchive/wayback/20150301000000id_/https://example.org/",
+          "https://ndhadeliver.natlib.govt.nz/webarchive/20150301000000id_/https://example.org/",
           "<html><body><h1>From NZ</h1></body></html>",
         ),
       );
@@ -77,7 +77,7 @@ describe("Wayback rate limiting", () => {
     expect(result.structuredContent?.source_archive).toContain("New Zealand Web Archive");
     expect(result.structuredContent?.actual_timestamp).toBe("20150301000000");
     expect(result.structuredContent?.archived_url).toBe(
-      "https://ndhadeliver.natlib.govt.nz/webarchive/wayback/20150301000000/https://example.org/",
+      "https://ndhadeliver.natlib.govt.nz/webarchive/20150301000000/https://example.org/",
     );
     expect(result.structuredContent?.notice).toContain("rate-limiting");
     expect(result.structuredContent?.content).toContain("From NZ");

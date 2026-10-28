@@ -18,7 +18,10 @@ export const OTHER_ARCHIVES: readonly OtherArchive[] = [
   {
     name: "New Zealand Web Archive (National Library of New Zealand)",
     homepage: "https://natlib.govt.nz/collections/a-z/new-zealand-web-archive",
-    base: "https://ndhadeliver.natlib.govt.nz/webarchive/wayback/",
+    // Not `/webarchive/wayback/` — that older prefix still appears in links on govt.nz sites,
+    // but the deployed fallback never got a capture through it. `/webarchive/` is the prefix
+    // GLAM Workbench's Memento notebook uses as the NLNZ TimeGate.
+    base: "https://ndhadeliver.natlib.govt.nz/webarchive/",
   },
   {
     name: "Arquivo.pt",
@@ -58,6 +61,8 @@ export async function findInOtherArchives(
       });
       const match = /\/(\d{14})(?:id_)?\//.exec(response.url);
       if (!response.ok || !match?.[1]) {
+        // Logged so a fallback that never answers is diagnosable from Workers Logs.
+        console.error(`[ia-mcp] fallback archive ${archive.name} had no capture: HTTP ${response.status} url=${response.url}`);
         await response.body?.cancel();
         continue;
       }
