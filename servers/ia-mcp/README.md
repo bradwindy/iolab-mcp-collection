@@ -59,8 +59,8 @@ optional exception and why it almost certainly doesn't matter.
   IP blocked for an hour. Our egress is a shared Cloudflare IP, so `waybackFetch` (in
   `src/clients/wayback.ts`) records a server-wide cooldown in KV on the first 429 (from
   `Retry-After`, else 5 minutes) and every Wayback call during it fails fast without being sent.
-  While that lasts, `ia_wayback_read_page` and `ia_wayback_find_nearest_capture` fall back to the
-  New Zealand Web Archive, then Arquivo.pt (`src/clients/otherArchives.ts`), and say so in
+  While that lasts, `ia_wayback_read_page` and `ia_wayback_find_nearest_capture` fall back to
+  Arquivo.pt (`src/clients/otherArchives.ts`), and say so in
   `source_archive`/`notice`. The other Wayback tools are CDX-only and just return the wait message.
 - **The `id_` capture URL 302s to the nearest actual capture, not necessarily the requested
   timestamp** — confirmed live: requesting `20200101000000` landed on `20191231234501`.

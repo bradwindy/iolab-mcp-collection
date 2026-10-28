@@ -64,8 +64,8 @@ describe("Wayback rate limiting", () => {
       if (isWayback(input)) return Promise.resolve(tooManyRequests());
       return Promise.resolve(
         pageResponse(
-          "https://ndhadeliver.natlib.govt.nz/webarchive/20150301000000id_/https://example.org/",
-          "<html><body><h1>From NZ</h1></body></html>",
+          "https://arquivo.pt/wayback/20150301000000id_/https://example.org/",
+          "<html><body><h1>From Arquivo</h1></body></html>",
         ),
       );
     });
@@ -74,13 +74,13 @@ describe("Wayback rate limiting", () => {
     const result = await waybackReadPageHandler({ url: "https://example.org/", timestamp: "20150101" }, fakeEnv());
 
     expect(result.isError).toBeUndefined();
-    expect(result.structuredContent?.source_archive).toContain("New Zealand Web Archive");
+    expect(result.structuredContent?.source_archive).toBe("Arquivo.pt");
     expect(result.structuredContent?.actual_timestamp).toBe("20150301000000");
     expect(result.structuredContent?.archived_url).toBe(
-      "https://ndhadeliver.natlib.govt.nz/webarchive/20150301000000/https://example.org/",
+      "https://arquivo.pt/wayback/20150301000000/https://example.org/",
     );
     expect(result.structuredContent?.notice).toContain("rate-limiting");
-    expect(result.structuredContent?.content).toContain("From NZ");
+    expect(result.structuredContent?.content).toContain("From Arquivo");
   });
 
   it("read_page keeps the original Wayback error when no other archive has the page", async () => {
@@ -98,9 +98,6 @@ describe("Wayback rate limiting", () => {
   it("find_nearest_capture falls back to another archive's closest capture on a 429", async () => {
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
       if (isWayback(input)) return Promise.resolve(tooManyRequests());
-      if (input.toString().startsWith("https://ndhadeliver.natlib.govt.nz/")) {
-        return Promise.resolve(new Response("not found", { status: 404 }));
-      }
       return Promise.resolve(pageResponse("https://arquivo.pt/wayback/20150620000000id_/https://example.org/", "<html></html>"));
     });
     vi.stubGlobal("fetch", fetchMock);
