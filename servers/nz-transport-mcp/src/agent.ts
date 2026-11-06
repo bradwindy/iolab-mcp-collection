@@ -54,8 +54,9 @@ export class NzTransportMcp extends McpAgent<Env, Record<string, never>, OAuthPr
       "nz_transport_get_realtime_alerts",
       {
         description:
-          "Get current Auckland Transport GTFS-realtime service alerts (disruptions, detours, cancellations), " +
-          "optionally filtered to one route. Requires an Auckland Transport subscription key.",
+          "Get Auckland Transport GTFS-realtime service alerts (disruptions, detours, cancellations) that are active " +
+          "right now, optionally filtered to one route. Expired and not-yet-started alerts are left out unless " +
+          "include_inactive=true. Requires an Auckland Transport subscription key.",
         inputSchema: getRealtimeAlertsInputShape,
         outputSchema: getRealtimeAlertsOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "Get Realtime Service Alerts" },

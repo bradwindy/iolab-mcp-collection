@@ -107,19 +107,43 @@ describe("nz_transport_get_realtime_alerts", () => {
     expect(result.content[0]?.text).toContain("Auckland Transport returned HTTP 503");
   });
 
-  it("hides alerts whose active periods have all ended, unless include_expired is set", async () => {
-    const expired = sampleAlert("old", "70-202");
-    (expired.alert as { active_period: unknown }).active_period = [{ start: 1749000000, end: 1749500000 }];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(async () => feedResponse([sampleAlert("a1", "70-202"), expired])),
-    );
+  it("returns only alerts active at the feed timestamp, unless include_inactive is set", async () => {
+    // Feed timestamp is 1750000000.
+    const withPeriod = (id: string, activePeriod: unknown) => {
+      const alert = sampleAlert(id, "70-202");
+      (alert.alert as { active_period: unknown }).active_period = activePeriod;
+      return alert;
+    };
+    const entities = [
+      sampleAlert("current", "70-202"),
+      withPeriod("expired", { start: 1749000000, end: 1749500000 }),
+      withPeriod("future", { start: 1750500000, end: 1750600000 }),
+      withPeriod("open-start", { end: 1750100000 }),
+      withPeriod("open-end", { start: 1749000000, end: 0 }),
+      withPeriod("no-period", []),
+      withPeriod("second-period-active", [
+        { start: 1749000000, end: 1749500000 },
+        { start: 1749900000, end: 1750100000 },
+      ]),
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => feedResponse(entities)));
     const env = await makeTestEnv({ atSubscriptionKey: "secret-key" });
 
-    const current = await getRealtimeAlertsHandler({}, env);
-    expect((current.structuredContent?.items as Array<{ id: string }>).map((item) => item.id)).toEqual(["a1"]);
+    const active = await getRealtimeAlertsHandler({}, env);
+    const items = active.structuredContent?.items as Array<{ id: string; active_from: string | null }>;
+    expect(items.map((item) => item.id)).toEqual([
+      "current",
+      "open-start",
+      "open-end",
+      "no-period",
+      "second-period-active",
+    ]);
+    // The period shown is the one covering now, not the first (ended) one.
+    expect(items.find((item) => item.id === "second-period-active")?.active_from).toBe(
+      new Date(1749900000 * 1000).toISOString(),
+    );
 
-    const all = await getRealtimeAlertsHandler({ include_expired: true }, env);
-    expect(all.structuredContent?.total_count).toBe(2);
+    const all = await getRealtimeAlertsHandler({ include_inactive: true }, env);
+    expect(all.structuredContent?.total_count).toBe(entities.length);
   });
 });

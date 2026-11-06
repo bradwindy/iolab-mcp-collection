@@ -11,7 +11,7 @@ APIs, deployed as Cloudflare Workers. Every tool is read-only, paginated, and ci
 
 | Tool | Upstream | Key required | Description |
 |---|---|---|---|
-| `nz_transport_get_realtime_alerts` | Auckland Transport | Yes | Current GTFS-realtime service alerts (disruptions, detours, cancellations), optionally filtered by route. |
+| `nz_transport_get_realtime_alerts` | Auckland Transport | Yes | GTFS-realtime service alerts (disruptions, detours, cancellations) active right now, optionally filtered by route. `include_inactive=true` also returns expired and future alerts. |
 | `nz_transport_get_vehicle_positions` | Auckland Transport | Yes | Live vehicle positions (location, bearing, speed), optionally filtered by route. |
 | `nz_transport_get_trip_updates` | Auckland Transport | Yes | Live predicted arrival/departure delays per stop for in-progress trips, optionally filtered by route. |
 | `nz_transport_search_gtfs_stops` | Auckland Transport | Yes | Search the static GTFS stop directory by name. |
