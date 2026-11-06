@@ -33,20 +33,38 @@ function sampleEvent(id: number, regionName: string, status = "Active") {
 describe("nz_transport_search_highway_incidents", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("hides resolved events by default and includes them on request", async () => {
+  it("returns only events active now by default and everything on request", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-10T12:00:00+12:00"));
+    const withDates = (id: number, status: string, startDate?: string, endDate?: string) => ({
+      ...sampleEvent(id, "Otago", status),
+      startDate,
+      endDate,
+    });
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation(async () =>
-        eventsEnvelope([sampleEvent(1, "Otago"), sampleEvent(2, "Otago", "Resolved"), sampleEvent(3, "Otago", "Scheduled")]),
+        eventsEnvelope([
+          sampleEvent(1, "Otago"), // started, no end date
+          sampleEvent(2, "Otago", "Resolved"),
+          withDates(3, "Scheduled", "2026-07-20T09:00:00+12:00", "2026-07-21T09:00:00+12:00"), // future
+          withDates(4, "Active", "2026-07-01T09:00:00+12:00", "2026-07-05T09:00:00+12:00"), // ended
+          withDates(5, "Scheduled", "2026-07-09T21:00:00+12:00", "2026-07-11T05:00:00+12:00"), // in progress
+          withDates(6, "Active"), // no dates at all
+        ]),
       ),
     );
     const env = await makeTestEnv();
 
-    const current = await searchHighwayIncidentsHandler({}, env);
-    expect((current.structuredContent?.items as Array<{ id: number }>).map((item) => item.id)).toEqual([1, 3]);
+    try {
+      const current = await searchHighwayIncidentsHandler({}, env);
+      expect((current.structuredContent?.items as Array<{ id: number }>).map((item) => item.id)).toEqual([1, 5, 6]);
 
-    const all = await searchHighwayIncidentsHandler({ include_resolved: true }, env);
-    expect(all.structuredContent?.total_count).toBe(3);
+      const all = await searchHighwayIncidentsHandler({ include_resolved: true }, env);
+      expect(all.structuredContent?.total_count).toBe(6);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("accepts a single event sent as a bare object instead of a list", async () => {

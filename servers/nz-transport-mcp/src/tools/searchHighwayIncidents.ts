@@ -33,7 +33,8 @@ export const searchHighwayIncidentsInputShape = {
     .boolean()
     .default(false)
     .describe(
-      "Include events NZTA has already marked 'Resolved'. Default false: only current ('Active') and upcoming ('Scheduled') events.",
+      "Include events that are not active right now: marked 'Resolved', already ended (endDate passed), or not yet " +
+        "started (startDate in the future). Default false: only events in progress now (a missing date counts as open).",
     ),
   limit: limitParam(MAX_LIMIT, 20),
   offset: offsetParam,
@@ -51,8 +52,18 @@ export const searchHighwayIncidentsOutputShape = {
 
 const inputSchema = z.object(searchHighwayIncidentsInputShape);
 
-function isResolved(event: NztaRoadEvent): boolean {
-  return (event.status ?? "").trim().toLowerCase() === "resolved";
+function dateMs(value: string | undefined): number | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** Not marked 'Resolved', and startDate <= now <= endDate, where a missing or unparseable date is an open bound. */
+export function isActiveEvent(event: NztaRoadEvent, nowMs: number): boolean {
+  if ((event.status ?? "").trim().toLowerCase() === "resolved") return false;
+  const start = dateMs(event.startDate);
+  const end = dateMs(event.endDate);
+  return (start === null || start <= nowMs) && (end === null || nowMs <= end);
 }
 
 function toConcise(event: NztaRoadEvent) {
@@ -104,9 +115,10 @@ export async function searchHighwayIncidentsHandler(rawInput: unknown, env: Env)
     const cacheKey = `nzta:events:${regionId ?? "all"}`;
     const events = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.NEAR_REALTIME, () => getRoadEvents(regionId));
 
-    // The feed keeps recently resolved events alongside live ones (status Active / Scheduled /
-    // Resolved), so a plain listing reads as more disruption than there is.
-    const filtered = input.include_resolved ? events : events.filter((event) => !isResolved(event));
+    // The feed keeps recently resolved and upcoming events alongside live ones (status Active /
+    // Scheduled / Resolved), so a plain listing reads as more disruption than there is.
+    const nowMs = Date.now();
+    const filtered = input.include_resolved ? events : events.filter((event) => isActiveEvent(event, nowMs));
     const page = paginate(filtered, { limit: input.limit, offset: input.offset }, { maxLimit: MAX_LIMIT });
     const items = page.items.map((event) => selectFormat(input.response_format, toConcise(event), toDetailed(event)));
 
