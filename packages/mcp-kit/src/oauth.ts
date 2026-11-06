@@ -156,20 +156,11 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(
     .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}" />`)
     .join("\n      ");
 
-  // Chrome and Safari (unlike Firefox) re-check `form-action` against each hop of a redirect chain
-  // that results from a form submission, not just the submission's own same-origin URL — so a POST
-  // to /authorize that succeeds and 302s to the client's (cross-origin) redirect_uri gets silently
-  // blocked by a bare `form-action 'self'`, with no visible error on the page. oauthReqInfo.redirectUri
-  // is already validated by parseAuthRequest against the registered client's redirect_uris above, so
-  // it's safe to allowlist. (Confirmed against Chromium issue 40923007 / content-security-policy.com.)
-  let redirectOrigin: string | null = null;
-  try {
-    redirectOrigin = new URL(oauthReqInfo.redirectUri).origin;
-  } catch {
-    // Shouldn't happen — parseAuthRequest already validated this as an absolute URI — but fail
-    // closed to 'self' only rather than throwing and losing the whole consent page over it.
-  }
-  const formActionSources = ["'self'", ...(redirectOrigin ? [redirectOrigin] : [])].join(" ");
+  // form-action stays 'self' only. Chrome and Safari re-check form-action against every hop of the
+  // redirect chain a form submission starts, including hops the client's own callback adds (e.g.
+  // Cursor's https://www.cursor.com/... callback redirecting on to another host). So POST /authorize
+  // never redirects cross-origin itself: it answers 200 with a small page that navigates onward
+  // (see renderRedirectPage), which ends the form navigation inside 'self'.
 
   const csrfToken = crypto.randomUUID();
   const nonce = crypto.randomUUID();
@@ -222,8 +213,8 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(
       // 'script-src nonce-...' (not 'none'): the inline script above only logs client-side
       // diagnostics and shows submit feedback — nothing it does touches untrusted data (clientName/
       // clientId/redirectUri are rendered as escaped text elsewhere, never interpolated into script).
-      // 'form-action' includes the validated redirect_uri's origin, not just 'self' — see above.
-      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action ${formActionSources}; frame-ancestors 'none'; base-uri 'none'`,
+      // 'form-action' is 'self' only: the POST answers same-origin (see renderRedirectPage).
+      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
     },
   });
 }
@@ -333,11 +324,49 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
     `to=${redirectDestination.origin}${redirectDestination.pathname}`,
   );
 
-  return new Response(null, {
-    status: 302,
+  return renderRedirectPage(redirectTo, ref);
+}
+
+/**
+ * The response to a successful `POST /authorize`: a 200 page that sends the browser on to the
+ * client's redirect_uri, instead of a 302. A 302 keeps the browser inside the form submission's
+ * navigation, where Chrome and Safari check `form-action` against every later redirect hop too. A
+ * client callback that itself redirects to another host (Cursor's www.cursor.com callback did this)
+ * then gets blocked silently and the consent page sits on "Submitting…" for ever, even though the
+ * grant was created. Navigating from a fresh page is not a form submission, so form-action no longer
+ * applies. Three ways on, so one always works: a nonce script (handles custom-scheme redirect_uris
+ * like cursor:// that some browsers refuse via meta refresh), a meta refresh (no-JS), and a link.
+ */
+function renderRedirectPage(redirectTo: string, ref: string): Response {
+  const nonce = crypto.randomUUID();
+  const target = escapeHtml(redirectTo);
+  const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="0;url=${target}" />
+    <title>Authorized</title>
+  </head>
+  <body>
+    <h1>Authorized</h1>
+    <p>Returning you to the app. If nothing happens, <a id="continue" href="${target}">continue here</a>.</p>
+    <p><small>Reference: <code>${escapeHtml(ref)}</code></small></p>
+    <script nonce="${nonce}">
+      window.location.replace(document.getElementById("continue").href);
+    </script>
+  </body>
+</html>`;
+  return new Response(html, {
+    status: 200,
     headers: {
-      Location: redirectTo,
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
       "Set-Cookie": `${CSRF_COOKIE_NAME}=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0`,
+      "X-Frame-Options": "DENY",
+      // The target URL carries a live authorization code, so keep this page's URL (and anything
+      // else) out of the Referer the client receives, and out of any cache.
+      "Referrer-Policy": "no-referrer",
+      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'`,
     },
   });
 }

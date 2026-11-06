@@ -46,6 +46,15 @@ async function base64UrlSha256(input: string): Promise<string> {
     .replace(/=+$/, "");
 }
 
+/** Reads the client redirect URL (code + state) from POST /authorize's 200 hand-off page. */
+async function extractRedirectUrl(response: Response): Promise<URL> {
+  expect(response.status).toBe(200);
+  const html = await response.text();
+  const href = /<a id="continue" href="([^"]+)"/.exec(html)?.[1];
+  if (!href) throw new Error("hand-off page missing continue link");
+  return new URL(href.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+}
+
 function extractCsrfToken(response: Response): string {
   const setCookie = response.headers.get("set-cookie") ?? "";
   const match = /__Host-OAUTH_CSRF=([^;]+)/.exec(setCookie);
@@ -116,8 +125,7 @@ async function authorizeAndGetToken(
       redirect: "manual",
     }),
   );
-  expect(authorizeResponse.status).toBe(302);
-  const redirectUrl = new URL(authorizeResponse.headers.get("location") as string);
+  const redirectUrl = await extractRedirectUrl(authorizeResponse);
   const code = redirectUrl.searchParams.get("code");
   expect(code).toBeTruthy();
 
@@ -254,8 +262,7 @@ describe("OAuth (buildMultiServerOAuthWorker)", () => {
     expect(visibleRefMatch?.[1]).toBeTruthy();
     expect(html).toContain(`<input type="hidden" name="flow_ref" value="${visibleRefMatch?.[1]}" />`);
 
-    const formAction = /form-action ([^;]+);/.exec(csp)?.[1] ?? "";
-    expect(formAction.split(" ")).toEqual(expect.arrayContaining(["'self'", "https://client.example.com"]));
+    expect(/form-action ([^;]+);/.exec(csp)?.[1]).toBe("'self'");
   });
 
   it("includes a diagnostic reference on the consent page (visible text, hidden field, and CSP nonce script)", async () => {
@@ -292,19 +299,18 @@ describe("OAuth (buildMultiServerOAuthWorker)", () => {
     expect(html).toContain("[oauth-consent] page loaded");
   });
 
-  it("allows the client's redirect_uri origin in the consent page's form-action CSP (regression: Chrome/Safari block a cross-origin redirect from a form submission unless its target is explicitly allowlisted, even though the submission itself is same-origin)", async () => {
+  it("answers an approved POST /authorize with a same-origin hand-off page, not a cross-origin 302 (regression: Chrome/Safari check form-action against every redirect hop after a form submit, so a client callback that redirects again, like Cursor's, hung the consent page on 'Submitting…')", async () => {
     const client = await registerClient({});
     const [redirectUri] = client.redirect_uris;
     if (!redirectUri) throw new Error("registration response missing redirect_uris");
-    const redirectOrigin = new URL(redirectUri).origin;
 
     const accessJwt = await signAccessJwt();
     const authorizeUrl = new URL(`${ORIGIN}/authorize`);
     authorizeUrl.searchParams.set("response_type", "code");
     authorizeUrl.searchParams.set("client_id", client.client_id);
     authorizeUrl.searchParams.set("redirect_uri", redirectUri);
-    authorizeUrl.searchParams.set("state", "form-action-state");
-    authorizeUrl.searchParams.set("code_challenge", await base64UrlSha256("form-action-test-verifier-1234567890"));
+    authorizeUrl.searchParams.set("state", "hand-off-state");
+    authorizeUrl.searchParams.set("code_challenge", await base64UrlSha256("hand-off-test-verifier-1234567890"));
     authorizeUrl.searchParams.set("code_challenge_method", "S256");
     authorizeUrl.searchParams.set("resource", resourceFor("nz-govt"));
 
@@ -312,9 +318,39 @@ describe("OAuth (buildMultiServerOAuthWorker)", () => {
       new Request(authorizeUrl, { headers: { "Cf-Access-Jwt-Assertion": accessJwt } }),
     );
     expect(consentResponse.status).toBe(200);
-    const csp = consentResponse.headers.get("content-security-policy") ?? "";
-    const formAction = /form-action ([^;]+);/.exec(csp)?.[1] ?? "";
-    expect(formAction.split(" ")).toEqual(expect.arrayContaining(["'self'", redirectOrigin]));
+    const consentCsp = consentResponse.headers.get("content-security-policy") ?? "";
+    expect(/form-action ([^;]+);/.exec(consentCsp)?.[1]).toBe("'self'");
+
+    const csrfToken = extractCsrfToken(consentResponse);
+    const approveBody = new URLSearchParams(authorizeUrl.searchParams);
+    approveBody.set("csrf_token", csrfToken);
+    const approveResponse = await exports.default.fetch(
+      new Request(`${ORIGIN}/authorize`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "Cf-Access-Jwt-Assertion": accessJwt,
+          Cookie: `__Host-OAUTH_CSRF=${csrfToken}`,
+        },
+        body: approveBody,
+        redirect: "manual",
+      }),
+    );
+    expect(approveResponse.headers.get("location")).toBeNull();
+    expect(approveResponse.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(approveResponse.headers.get("cache-control")).toBe("no-store");
+    expect(approveResponse.headers.get("set-cookie")).toContain("Max-Age=0");
+    const handOffCsp = approveResponse.headers.get("content-security-policy") ?? "";
+    const nonce = /script-src 'nonce-([0-9a-f-]+)'/.exec(handOffCsp)?.[1];
+    expect(nonce).toBeTruthy();
+
+    const html = await approveResponse.clone().text();
+    expect(html).toContain('<meta http-equiv="refresh" content="0;url=');
+    expect(html).toContain(`<script nonce="${nonce}">`);
+    const redirectUrl = await extractRedirectUrl(approveResponse);
+    expect(`${redirectUrl.origin}${redirectUrl.pathname}`).toBe(redirectUri);
+    expect(redirectUrl.searchParams.get("code")).toBeTruthy();
+    expect(redirectUrl.searchParams.get("state")).toBe("hand-off-state");
   });
 
   it("doesn't let a crafted csrf_token query param shadow the real one on the consent page", async () => {
@@ -498,7 +534,7 @@ describe("OAuth (buildMultiServerOAuthWorker)", () => {
         redirect: "manual",
       }),
     );
-    const code = new URL(authorizeResponse.headers.get("location") as string).searchParams.get("code");
+    const code = (await extractRedirectUrl(authorizeResponse)).searchParams.get("code");
 
     const wrongVerifierResponse = await exports.default.fetch(
       new Request(`${ORIGIN}/token`, {

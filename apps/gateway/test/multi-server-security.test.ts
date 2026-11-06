@@ -29,6 +29,15 @@ async function base64UrlSha256(input: string): Promise<string> {
     .replace(/=+$/, "");
 }
 
+/** Reads the client redirect URL (code + state) from POST /authorize's 200 hand-off page. */
+async function extractRedirectUrl(response: Response): Promise<URL> {
+  expect(response.status).toBe(200);
+  const html = await response.text();
+  const href = /<a id="continue" href="([^"]+)"/.exec(html)?.[1];
+  if (!href) throw new Error("hand-off page missing continue link");
+  return new URL(href.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+}
+
 function extractCsrfToken(response: Response): string {
   const setCookie = response.headers.get("set-cookie") ?? "";
   const match = /__Host-OAUTH_CSRF=([^;]+)/.exec(setCookie);
@@ -136,7 +145,7 @@ describe("multi-server OAuth security", () => {
         redirect: "manual",
       }),
     );
-    const code = new URL(authorizeResponse.headers.get("location") as string).searchParams.get("code");
+    const code = (await extractRedirectUrl(authorizeResponse)).searchParams.get("code");
 
     const tokenResponse = await exports.default.fetch(
       new Request(`${ORIGIN}/token`, {
