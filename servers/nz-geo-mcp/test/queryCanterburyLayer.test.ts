@@ -58,6 +58,34 @@ describe("nz_geo_query_canterbury_layer", () => {
     expect(result.structuredContent?.notice).toContain("Showing 1 of 42");
   });
 
+  it("only reports upstream capping when the page came back shorter than the requested limit", async () => {
+    const run = async (returned: number, limit: number) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+          const url = new URL(String(input));
+          if (url.searchParams.get("returnCountOnly") === "true") return jsonResponse({ count: 5000 });
+          return jsonResponse({
+            features: Array.from({ length: returned }, (_, i) => ({ attributes: { OBJECTID: i } })),
+            exceededTransferLimit: true,
+          });
+        }),
+      );
+      return queryCanterburyLayerHandler({
+        service_path: "Public/Groundwater",
+        service_type: "FeatureServer",
+        layer_id: 0,
+        limit,
+      });
+    };
+
+    const full = await run(3, 3);
+    expect(full.structuredContent?.notice).not.toContain("capped");
+
+    const short = await run(2, 3);
+    expect(short.structuredContent?.notice).toContain("capped this single request below the requested `limit`");
+  });
+
   it("surfaces an ArcGIS-level query error (HTTP 200 with an error body) as an actionable tool error", async () => {
     vi.stubGlobal(
       "fetch",

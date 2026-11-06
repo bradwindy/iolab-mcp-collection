@@ -112,3 +112,13 @@ describe("nz_markets_get_mortgage_rates", () => {
     expect(result.content[0]?.text).toContain("Check the institution spelling");
   });
 });
+
+describe("stalenessNotice", () => {
+  it("stays quiet within six hours and warns past that", async () => {
+    const { stalenessNotice } = await import("../src/clients/ratesApi.js");
+    const now = Date.parse("2026-11-06T09:00:00Z");
+    expect(stalenessNotice("2026-11-06T05:00:00Z", now)).toBe("");
+    expect(stalenessNotice("2026-11-04T17:00:00Z", now)).toContain("40 hours ago");
+    expect(stalenessNotice("not a date", now)).toBe("");
+  });
+});

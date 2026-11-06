@@ -20,8 +20,8 @@ const bboxParam = z
   .describe("Bounding box [west, south, east, north] in decimal degrees to restrict the search area.");
 
 export const searchQuakeHistoryInputShape = {
-  start_time: z.string().min(4).describe("ISO 8601 start of the search window, e.g. '2026-01-01' or '2026-01-01T00:00:00'."),
-  end_time: z.string().min(4).describe("ISO 8601 end of the search window."),
+  start_time: z.string().min(4).describe("ISO 8601 start of the search window in UTC, e.g. '2026-01-01' or '2026-01-01T00:00:00'."),
+  end_time: z.string().min(4).describe("ISO 8601 end of the search window in UTC."),
   min_magnitude: z.number().min(-2).max(10).optional().describe("Only events at or above this magnitude."),
   max_magnitude: z.number().min(-2).max(10).optional().describe("Only events at or below this magnitude."),
   min_depth_km: z.number().min(0).max(1000).optional().describe("Only events at or deeper than this depth in km."),

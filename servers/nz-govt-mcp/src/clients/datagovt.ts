@@ -138,6 +138,11 @@ export async function ckanCacheKey(action: string, params: Record<string, string
   return `nz-govt:datagovt:${action}:${await sha256Hex(`${action}?${sortedParams}`)}`;
 }
 
+function htmlTitle(text: string): string | null {
+  const match = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text);
+  return match?.[1]?.trim().slice(0, 200) ?? null;
+}
+
 async function callAction<T>(action: string, query: Record<string, string>): Promise<T> {
   const url = new URL(`${BASE_URL}/${action}`);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
@@ -168,13 +173,20 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
   }
 
   let body: CkanResponse<T>;
+  const text = await response.text();
   try {
-    body = (await response.json()) as CkanResponse<T>;
+    body = JSON.parse(text) as CkanResponse<T>;
   } catch (error) {
+    // Log enough of the non-JSON page (content type, <title>, opening text) to tell a maintenance
+    // page from a bot challenge or a moved endpoint, without dumping the whole document.
     console.error(
       `[datagovt] ${action} response was not valid JSON:`,
       error instanceof Error ? error.message : String(error),
       `path=${url.pathname}`,
+      `status=${response.status}`,
+      `content-type=${response.headers.get("content-type") ?? "none"}`,
+      `title=${JSON.stringify(htmlTitle(text))}`,
+      `head=${JSON.stringify(text.slice(0, 300))}`,
     );
     throw new UpstreamFetchError(SOURCE, action, error);
   }

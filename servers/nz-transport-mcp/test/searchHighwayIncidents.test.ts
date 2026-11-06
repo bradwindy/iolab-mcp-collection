@@ -7,14 +7,14 @@ function eventsEnvelope(events: unknown[] | "") {
   return new Response(JSON.stringify({ response }), { status: 200, headers: { "content-type": "application/json" } });
 }
 
-function sampleEvent(id: number, regionName: string) {
+function sampleEvent(id: number, regionName: string, status = "Active") {
   return {
     id,
     eventType: "Road Hazard",
     eventDescription: "Flooding",
     eventComments: "Take care.",
     impact: "Caution",
-    status: "Active",
+    status,
     planned: false,
     startDate: "2026-07-07T11:51:00+12:00",
     eventCreated: "2026-07-07T11:53:42.940+12:00",
@@ -32,6 +32,38 @@ function sampleEvent(id: number, regionName: string) {
 
 describe("nz_transport_search_highway_incidents", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it("hides resolved events by default and includes them on request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () =>
+        eventsEnvelope([sampleEvent(1, "Otago"), sampleEvent(2, "Otago", "Resolved"), sampleEvent(3, "Otago", "Scheduled")]),
+      ),
+    );
+    const env = await makeTestEnv();
+
+    const current = await searchHighwayIncidentsHandler({}, env);
+    expect((current.structuredContent?.items as Array<{ id: number }>).map((item) => item.id)).toEqual([1, 3]);
+
+    const all = await searchHighwayIncidentsHandler({ include_resolved: true }, env);
+    expect(all.structuredContent?.total_count).toBe(3);
+  });
+
+  it("accepts a single event sent as a bare object instead of a list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ response: { roadevent: sampleEvent(7, "Otago") } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    const env = await makeTestEnv();
+
+    const result = await searchHighwayIncidentsHandler({}, env);
+    expect(result.structuredContent?.total_count).toBe(1);
+  });
 
   it("rejects an unknown region before making any request", async () => {
     const fetchMock = vi.fn();

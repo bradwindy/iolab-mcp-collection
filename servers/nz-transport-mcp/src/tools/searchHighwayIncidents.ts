@@ -29,6 +29,12 @@ export const searchHighwayIncidentsInputShape = {
     .describe(
       `Filter to one NZTA traffic region, by name or numeric id. Valid regions: ${NZTA_REGIONS_DESCRIPTION}.`,
     ),
+  include_resolved: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Include events NZTA has already marked 'Resolved'. Default false: only current ('Active') and upcoming ('Scheduled') events.",
+    ),
   limit: limitParam(MAX_LIMIT, 20),
   offset: offsetParam,
   response_format: responseFormatParam,
@@ -44,6 +50,10 @@ export const searchHighwayIncidentsOutputShape = {
 };
 
 const inputSchema = z.object(searchHighwayIncidentsInputShape);
+
+function isResolved(event: NztaRoadEvent): boolean {
+  return (event.status ?? "").trim().toLowerCase() === "resolved";
+}
 
 function toConcise(event: NztaRoadEvent) {
   return {
@@ -94,7 +104,10 @@ export async function searchHighwayIncidentsHandler(rawInput: unknown, env: Env)
     const cacheKey = `nzta:events:${regionId ?? "all"}`;
     const events = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.NEAR_REALTIME, () => getRoadEvents(regionId));
 
-    const page = paginate(events, { limit: input.limit, offset: input.offset }, { maxLimit: MAX_LIMIT });
+    // The feed keeps recently resolved events alongside live ones (status Active / Scheduled /
+    // Resolved), so a plain listing reads as more disruption than there is.
+    const filtered = input.include_resolved ? events : events.filter((event) => !isResolved(event));
+    const page = paginate(filtered, { limit: input.limit, offset: input.offset }, { maxLimit: MAX_LIMIT });
     const items = page.items.map((event) => selectFormat(input.response_format, toConcise(event), toDetailed(event)));
 
     return jsonResult({

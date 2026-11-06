@@ -27,7 +27,7 @@ describe("nz_env_search_quake_history", () => {
     expect(result.structuredContent?.items).toEqual([
       {
         event_id: "2026p428526",
-        time: "2026-06-08T13:19:05",
+        time: "2026-06-08T13:19:05Z",
         magnitude: 4.9,
         magnitude_type: "MLv",
         depth_km: 5,

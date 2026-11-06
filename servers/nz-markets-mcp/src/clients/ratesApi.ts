@@ -114,4 +114,21 @@ export async function getConsumerLoanRates(params: {
   return getJson<RatesEnvelope<LoanInstitution | CreditCardIssuer>>(path, {});
 }
 
+/** Rates API says it refreshes hourly. Past this, the data is old enough that a caller should be told. */
+const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * A warning when the Rates API's own `lastUpdated` is well behind the hourly refresh it advertises.
+ * Smoke tests have seen it 38-57 hours old. This server does not cache these responses, so any
+ * lag is upstream's, and the caller should hear about it rather than trust "current" rates.
+ */
+export function stalenessNotice(lastUpdated: string, now: number = Date.now()): string {
+  const updated = Date.parse(lastUpdated);
+  if (!Number.isFinite(updated)) return "";
+  const ageMs = now - updated;
+  if (ageMs <= STALE_AFTER_MS) return "";
+  const hours = Math.round(ageMs / (60 * 60 * 1000));
+  return `These rates were last refreshed upstream ${hours} hours ago (${lastUpdated}), not within the hour. Lenders may have changed them since.`;
+}
+
 export { SOURCE as RATES_API_SOURCE };
