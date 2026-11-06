@@ -52,7 +52,9 @@ export function upstreamError(source: string, response: Response, hint?: string)
   const defaultHint =
     response.status === 429
       ? rateLimitHint(response)
-      : "This may be transient; retry, or narrow the request if the upstream is rate-limiting.";
+      : response.status === 401 || response.status === 403
+        ? "The upstream rejected the API key. Retrying won't help: check the key is valid and that its account has access to this specific API or product."
+        : "This may be transient; retry, or narrow the request if the upstream is rate-limiting.";
   return toolError(`${source} returned HTTP ${response.status} ${response.statusText}.`, hint ?? defaultHint);
 }
 

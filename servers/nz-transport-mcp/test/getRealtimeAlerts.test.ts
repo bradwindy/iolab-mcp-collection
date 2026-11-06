@@ -106,4 +106,20 @@ describe("nz_transport_get_realtime_alerts", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain("Auckland Transport returned HTTP 503");
   });
+
+  it("hides alerts whose active periods have all ended, unless include_expired is set", async () => {
+    const expired = sampleAlert("old", "70-202");
+    (expired.alert as { active_period: unknown }).active_period = [{ start: 1749000000, end: 1749500000 }];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => feedResponse([sampleAlert("a1", "70-202"), expired])),
+    );
+    const env = await makeTestEnv({ atSubscriptionKey: "secret-key" });
+
+    const current = await getRealtimeAlertsHandler({}, env);
+    expect((current.structuredContent?.items as Array<{ id: string }>).map((item) => item.id)).toEqual(["a1"]);
+
+    const all = await getRealtimeAlertsHandler({ include_expired: true }, env);
+    expect(all.structuredContent?.total_count).toBe(2);
+  });
 });

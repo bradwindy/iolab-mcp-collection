@@ -52,7 +52,15 @@ export async function getCo2LatestHandler(rawInput: unknown, env: Env): Promise<
       }),
     });
   } catch (error) {
-    if (error instanceof UpstreamHttpError) return upstreamError(error.source, error.response);
+    if (error instanceof UpstreamHttpError) {
+      // NIWA keys are per app, and each API (UV, tides, CO2) is a separate product on that app. A
+      // key that works for UV and tides but gets 401 here lacks the CO2 product.
+      const hint =
+        error.response.status === 401 || error.response.status === 403
+          ? "NIWA rejected the key for the CO2 API. If UV and tide forecasts work, the key's NIWA developer app is missing the CO2 product: add it at https://developer.niwa.co.nz, then retry."
+          : undefined;
+      return upstreamError(error.source, error.response, hint);
+    }
     throw error;
   }
 }
