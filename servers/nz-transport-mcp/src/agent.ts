@@ -122,8 +122,9 @@ export class NzTransportMcp extends McpAgent<Env, Record<string, never>, OAuthPr
       "nz_transport_search_highway_incidents",
       {
         description:
-          "Search current state highway incidents (crashes, roadworks, closures, hazards) from Waka Kotahi " +
-          "NZTA's national Traffic and Travel feed, optionally filtered to one region. No API key required.",
+          "Search state highway incidents (crashes, roadworks, closures, hazards) that are active right now, from " +
+          "Waka Kotahi NZTA's national Traffic and Travel feed, optionally filtered to one region. Resolved, ended " +
+          "and not-yet-started events are left out unless include_resolved=true. No API key required.",
         inputSchema: searchHighwayIncidentsInputShape,
         outputSchema: searchHighwayIncidentsOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "Search Highway Incidents" },

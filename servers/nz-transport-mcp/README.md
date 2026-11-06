@@ -16,7 +16,7 @@ APIs, deployed as Cloudflare Workers. Every tool is read-only, paginated, and ci
 | `nz_transport_get_trip_updates` | Auckland Transport | Yes | Live predicted arrival/departure delays per stop for in-progress trips, optionally filtered by route. |
 | `nz_transport_search_gtfs_stops` | Auckland Transport | Yes | Search the static GTFS stop directory by name. |
 | `nz_transport_search_gtfs_routes` | Auckland Transport | Yes | Search the static GTFS route directory by short or long name. |
-| `nz_transport_search_highway_incidents` | Waka Kotahi NZTA | No | Search current state highway incidents (crashes, roadworks, closures, hazards), optionally by region. |
+| `nz_transport_search_highway_incidents` | Waka Kotahi NZTA | No | Search state highway incidents (crashes, roadworks, closures, hazards) active right now, optionally by region. `include_resolved=true` also returns resolved, ended and upcoming events. |
 | `nz_transport_get_highway_cameras` | Waka Kotahi NZTA | No | National state highway traffic camera directory (location, status, still-image URL), optionally by region. |
 | `nz_transport_get_traffic_counts` | Waka Kotahi NZTA | No | Daily state highway traffic volumes from telemetry count sites, filterable by site, region, and date range. |
 | `nz_transport_search_vehicle_fleet` | Waka Kotahi NZTA | No | Search the monthly Motor Vehicle Register snapshot by make, fuel type, or owner's territorial authority. |
