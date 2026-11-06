@@ -42,3 +42,22 @@ describe("handleDatagovtError", () => {
     expect(result.content[0]?.text).toContain("503");
   });
 });
+
+describe("actionUrl", () => {
+  it("goes direct when the home proxy isn't configured", async () => {
+    const { actionUrl } = await import("../src/clients/datagovt.js");
+    const { url, headers } = actionUrl({}, "package_search");
+    expect(url.toString()).toBe("https://catalogue.data.govt.nz/api/3/action/package_search");
+    expect(headers["X-Wayback-Key"]).toBeUndefined();
+  });
+
+  it("goes through the proxy's /__datagovt prefix with the key when it is", async () => {
+    const { actionUrl } = await import("../src/clients/datagovt.js");
+    const { url, headers } = actionUrl(
+      { WAYBACK_PROXY_URL: "https://proxy.example.test", WAYBACK_PROXY_KEY: "k" },
+      "datastore_search",
+    );
+    expect(url.toString()).toBe("https://proxy.example.test/__datagovt/api/3/action/datastore_search");
+    expect(headers["X-Wayback-Key"]).toBe("k");
+  });
+});

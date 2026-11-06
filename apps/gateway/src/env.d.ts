@@ -28,7 +28,9 @@ declare global {
     BASE_DOMAIN: string;
     /**
      * Optional home proxy that ia-mcp sends web.archive.org requests through, because Wayback
-     * rate-limits Cloudflare's shared egress IPs. Unset means direct. Needs WAYBACK_PROXY_KEY too.
+     * rate-limits Cloudflare's shared egress IPs. nz-govt-mcp also sends data.govt.nz CKAN calls
+     * through it (under `/__datagovt/`), because data.govt.nz bot-blocks Cloudflare egress.
+     * Unset means direct. Needs WAYBACK_PROXY_KEY too.
      * Set via `wrangler secret put WAYBACK_PROXY_URL`.
      */
     WAYBACK_PROXY_URL?: string;
