@@ -73,7 +73,7 @@ export async function searchDatasetsHandler(rawInput: unknown, env: Env): Promis
       start: String(input.offset),
     });
     const { results, count } = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.SLOW_MOVING, () =>
-      searchDatasetsClient({
+      searchDatasetsClient(env, {
         query: input.query,
         rows: input.limit,
         start: input.offset,

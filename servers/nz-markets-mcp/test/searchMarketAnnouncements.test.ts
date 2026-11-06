@@ -126,3 +126,16 @@ describe("nz_markets_search_market_announcements", () => {
     expect(result.content[0]?.text).toContain("NZXplorer API returned HTTP 429");
   });
 });
+
+describe("announcement field normalisation", () => {
+  it("finds ticker and url under other names, nested objects, or any http link", async () => {
+    const { toConcise } = await import("../src/tools/searchMarketAnnouncements.js");
+    expect(
+      toConcise({ id: 3, company: { ticker: "SPK", name: "Spark" }, title: "Result", document: "https://example.test/3.pdf" }),
+    ).toMatchObject({ ticker: "SPK", url: "https://example.test/3.pdf" });
+    expect(toConcise({ symbol: "MEL", announcement_url: "https://example.test/4" })).toMatchObject({
+      ticker: "MEL",
+      url: "https://example.test/4",
+    });
+  });
+});

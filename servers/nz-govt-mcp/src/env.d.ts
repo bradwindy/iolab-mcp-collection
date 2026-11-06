@@ -9,5 +9,12 @@ declare global {
   interface Env {
     /** TTL cache for slow-changing data.govt.nz CKAN responses. See CACHE_TTL in @iolab/mcp-kit. */
     MCP_CACHE: CacheNamespace;
+    /**
+     * Optional home proxy (shared with ia-mcp's Wayback calls). When both are set, data.govt.nz
+     * CKAN calls go to `${WAYBACK_PROXY_URL}/__datagovt/...` with the key as `X-Wayback-Key`,
+     * because data.govt.nz bot-blocks Cloudflare egress. Unset means direct.
+     */
+    WAYBACK_PROXY_URL?: string;
+    WAYBACK_PROXY_KEY?: string;
   }
 }

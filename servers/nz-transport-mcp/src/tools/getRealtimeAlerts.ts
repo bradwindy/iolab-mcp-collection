@@ -34,6 +34,10 @@ export const getRealtimeAlertsInputShape = {
     .max(20)
     .optional()
     .describe("Filter to alerts affecting this GTFS route_id (find ids with nz_transport_search_gtfs_routes)."),
+  include_expired: z
+    .boolean()
+    .default(false)
+    .describe("Include alerts whose every active period has already ended. Default false: AT's feed keeps some expired alerts."),
   limit: limitParam(MAX_LIMIT, 20),
   offset: offsetParam,
   response_format: responseFormatParam,
@@ -65,6 +69,19 @@ function affectedRoutes(entity: AlertFeedEntity): string[] {
 
 function firstTranslation(translated: GtfsRtTranslatedString | undefined): string | null {
   return toArray(translated?.translation)[0]?.text ?? null;
+}
+
+/**
+ * True when the alert has at least one active period and all of them ended before `nowSeconds`.
+ * An alert with no active_period is active indefinitely (GTFS-RT spec), so it is never expired.
+ */
+export function isExpiredAlert(entity: AlertFeedEntity, nowSeconds: number): boolean {
+  const periods = toArray(entity.alert?.active_period);
+  if (periods.length === 0) return false;
+  return periods.every((period) => {
+    const end = Number(period.end);
+    return period.end !== undefined && Number.isFinite(end) && end > 0 && end < nowSeconds;
+  });
 }
 
 function toConcise(entity: AlertFeedEntity) {
@@ -102,9 +119,13 @@ export async function getRealtimeAlertsHandler(rawInput: unknown, env: Env): Pro
       getServiceAlerts(subscriptionKey),
     );
     const allEntities = feed.entity ?? [];
+    // The feed's own header timestamp (falling back to now), so expiry matches the snapshot served.
+    const headerSeconds = Number(feed.header?.timestamp);
+    const nowSeconds = Number.isFinite(headerSeconds) && headerSeconds > 0 ? headerSeconds : Date.now() / 1000;
+    const current = input.include_expired ? allEntities : allEntities.filter((e) => !isExpiredAlert(e, nowSeconds));
     const filtered = input.route
-      ? allEntities.filter((e) => toArray(e.alert?.informed_entity).some((ie) => ie.route_id === input.route))
-      : allEntities;
+      ? current.filter((e) => toArray(e.alert?.informed_entity).some((ie) => ie.route_id === input.route))
+      : current;
 
     const page = paginate(filtered, { limit: input.limit, offset: input.offset }, { maxLimit: MAX_LIMIT });
     const items = page.items.map((entity) => selectFormat(input.response_format, toConcise(entity), toDetailed(entity)));

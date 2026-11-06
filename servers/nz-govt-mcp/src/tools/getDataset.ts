@@ -37,7 +37,7 @@ export async function getDatasetHandler(rawInput: unknown, env: Env): Promise<To
 
   try {
     const cacheKey = await ckanCacheKey("package_show", { id: input.id_or_slug });
-    const pkg = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.METADATA, () => getDatasetClient(input.id_or_slug));
+    const pkg = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.METADATA, () => getDatasetClient(env, input.id_or_slug));
 
     return jsonResult({
       id: pkg.name,

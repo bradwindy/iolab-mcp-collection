@@ -35,7 +35,7 @@ describe("nz_transport_get_vehicle_positions", () => {
     expect(result.content[0]?.text).toContain("AT_SUBSCRIPTION_KEY");
   });
 
-  it("returns concise vehicle summaries, converting speed from m/s to km/h", async () => {
+  it("returns concise vehicle summaries, passing AT's speed through as km/h", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(feedResponse([sampleVehicle("1", "70-202")])));
     const env = await makeTestEnv({ atSubscriptionKey: "secret-key" });
 
@@ -49,7 +49,7 @@ describe("nz_transport_get_vehicle_positions", () => {
         latitude: -36.85,
         longitude: 174.76,
         bearing: 90,
-        speed_kmh: 36,
+        speed_kmh: 10,
         last_updated: new Date(1750000000 * 1000).toISOString(),
       },
     ]);

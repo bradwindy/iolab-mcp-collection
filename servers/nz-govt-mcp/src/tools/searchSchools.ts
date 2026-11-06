@@ -128,7 +128,7 @@ export async function searchSchoolsHandler(rawInput: unknown, env: Env): Promise
       offset: String(input.offset),
     });
     const { records, total } = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.SLOW_MOVING, () =>
-      datastoreSearch(datastoreParams),
+      datastoreSearch(env, datastoreParams),
     );
 
     const page = describePage({ returned: records.length, total_count: total, offset: input.offset });

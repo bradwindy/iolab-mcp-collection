@@ -21,6 +21,8 @@ import { AT_SUBSCRIPTION_KEY_NAME, SERVER_SLUG } from "../constants.js";
 
 const MAX_LIMIT = 200;
 const MAX_STOP_UPDATES_DETAILED = 20;
+/** A trip update this much older than the feed itself is no longer live. */
+const STALE_AFTER_SECONDS = 30 * 60;
 
 export const getTripUpdatesInputShape = {
   route: z
@@ -29,6 +31,12 @@ export const getTripUpdatesInputShape = {
     .max(20)
     .optional()
     .describe("Filter to trips on this GTFS route_id (find ids with nz_transport_search_gtfs_routes)."),
+  include_stale: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Include trip updates last refreshed more than 30 minutes before the feed's own timestamp. Default false: AT's feed keeps some trips long after they stopped reporting.",
+    ),
   limit: limitParam(MAX_LIMIT, 50),
   offset: offsetParam,
   response_format: responseFormatParam,
@@ -49,6 +57,18 @@ function epochToIso(value: number | string | undefined): string | null {
   if (value === undefined) return null;
   const seconds = typeof value === "string" ? Number(value) : value;
   return Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : null;
+}
+
+function toSeconds(value: number | string | undefined): number | null {
+  if (value === undefined) return null;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}
+
+/** Stale = has a timestamp more than STALE_AFTER_SECONDS behind `feedSeconds`. No timestamp is kept. */
+export function isStaleTripUpdate(entity: TripUpdateFeedEntity, feedSeconds: number): boolean {
+  const updated = toSeconds(entity.trip_update?.timestamp);
+  return updated !== null && feedSeconds - updated > STALE_AFTER_SECONDS;
 }
 
 function toConcise(entity: TripUpdateFeedEntity) {
@@ -104,7 +124,12 @@ export async function getTripUpdatesHandler(rawInput: unknown, env: Env): Promis
       fetchTripUpdates(subscriptionKey),
     );
     const allEntities = feed.entity ?? [];
-    const filtered = input.route ? allEntities.filter((e) => e.trip_update?.trip?.route_id === input.route) : allEntities;
+    // Measured against the feed's own header timestamp, else its newest trip update, so a feed
+    // served from cache doesn't make every trip look stale.
+    const newestUpdate = Math.max(0, ...allEntities.map((e) => toSeconds(e.trip_update?.timestamp) ?? 0));
+    const feedSeconds = toSeconds(feed.header?.timestamp) ?? (newestUpdate || Date.now() / 1000);
+    const current = input.include_stale ? allEntities : allEntities.filter((e) => !isStaleTripUpdate(e, feedSeconds));
+    const filtered = input.route ? current.filter((e) => e.trip_update?.trip?.route_id === input.route) : current;
 
     const page = paginate(filtered, { limit: input.limit, offset: input.offset }, { maxLimit: MAX_LIMIT });
     const items = page.items.map((entity) => selectFormat(input.response_format, toConcise(entity), toDetailed(entity)));

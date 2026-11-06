@@ -35,7 +35,7 @@ export async function queryOpenDataSqlHandler(rawInput: unknown, env: Env): Prom
 
   try {
     const cacheKey = await ckanCacheKey("datastore_search_sql", { sql: input.sql });
-    const { records } = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.SLOW_MOVING, () => datastoreSearchSql(input.sql));
+    const { records } = await cached(env.MCP_CACHE, cacheKey, CACHE_TTL.SLOW_MOVING, () => datastoreSearchSql(env, input.sql));
     const truncated = records.length > MAX_ROWS_RETURNED;
     const rows = truncated ? records.slice(0, MAX_ROWS_RETURNED) : records;
 

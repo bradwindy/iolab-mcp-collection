@@ -59,7 +59,9 @@ function toConcise(entity: VehicleFeedEntity) {
     latitude: v?.position?.latitude ?? null,
     longitude: v?.position?.longitude ?? null,
     bearing: v?.position?.bearing ?? null,
-    speed_kmh: typeof v?.position?.speed === "number" ? Math.round(v.position.speed * 3.6 * 10) / 10 : null,
+    // GTFS-RT defines speed in m/s, but AT's values are already km/h: converting gave NX1 buses on
+    // the Northern Busway 165-270 km/h, which is exactly 3.6x a realistic 46-75 km/h. So pass it through.
+    speed_kmh: typeof v?.position?.speed === "number" ? Math.round(v.position.speed * 10) / 10 : null,
     last_updated: epochToIso(v?.timestamp),
   };
 }

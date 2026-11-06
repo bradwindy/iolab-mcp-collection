@@ -1,6 +1,16 @@
 import { fetchWithBackoff, toolError, upstreamError, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
 
 const BASE_URL = "https://catalogue.data.govt.nz/api/3/action";
+/** Path prefix on the home proxy that forwards to catalogue.data.govt.nz (synology-docker `wayback-proxy/`). */
+const PROXY_PREFIX = "/__datagovt";
+
+/**
+ * The env fields this client reads. data.govt.nz sits behind Imperva bot protection, which answers
+ * Cloudflare Worker egress with an HTTP 200 "Pardon Our Interruption" HTML challenge (seen in
+ * Workers Logs, 2026-11-06) while a home IP gets normal JSON. When the home proxy is configured,
+ * every CKAN call goes through it instead, the same way Wayback calls do (see ia-mcp's wayback.ts).
+ */
+export type DatagovtEnv = { WAYBACK_PROXY_URL?: string; WAYBACK_PROXY_KEY?: string };
 const SOURCE = "data.govt.nz";
 const USER_AGENT = "nz-mcp-collection/nz-govt-mcp (+https://github.com/bradwindy/nz-mcp-collection)";
 
@@ -143,8 +153,19 @@ function htmlTitle(text: string): string | null {
   return match?.[1]?.trim().slice(0, 200) ?? null;
 }
 
-async function callAction<T>(action: string, query: Record<string, string>): Promise<T> {
-  const url = new URL(`${BASE_URL}/${action}`);
+/** The CKAN action URL, on the home proxy when it's configured, otherwise direct. */
+export function actionUrl(env: DatagovtEnv, action: string): { url: URL; headers: Record<string, string> } {
+  const headers: Record<string, string> = { "User-Agent": USER_AGENT };
+  if (env.WAYBACK_PROXY_URL && env.WAYBACK_PROXY_KEY) {
+    const direct = new URL(`${BASE_URL}/${action}`);
+    headers["X-Wayback-Key"] = env.WAYBACK_PROXY_KEY;
+    return { url: new URL(`${PROXY_PREFIX}${direct.pathname}`, env.WAYBACK_PROXY_URL), headers };
+  }
+  return { url: new URL(`${BASE_URL}/${action}`), headers };
+}
+
+async function callAction<T>(env: DatagovtEnv, action: string, query: Record<string, string>): Promise<T> {
+  const { url, headers } = actionUrl(env, action);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
 
   // Path only, never the full URL: query params can carry a caller's raw `sql`/`filters` value
@@ -153,7 +174,7 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
 
   let response: Response;
   try {
-    response = await fetchWithBackoff(url, { headers: { "User-Agent": USER_AGENT } }, { retryOn: shouldRetryCkanResponse });
+    response = await fetchWithBackoff(url, { headers }, { retryOn: shouldRetryCkanResponse });
   } catch (error) {
     console.error(
       `[datagovt] ${action} fetch failed:`,
@@ -201,12 +222,12 @@ async function callAction<T>(action: string, query: Record<string, string>): Pro
   return body.result;
 }
 
-export async function searchDatasets(params: {
+export async function searchDatasets(env: DatagovtEnv, params: {
   query: string;
   rows: number;
   start: number;
 }): Promise<{ count: number; results: CkanPackage[] }> {
-  return callAction("package_search", {
+  return callAction(env, "package_search", {
     q: params.query,
     rows: String(params.rows),
     start: String(params.start),
@@ -218,13 +239,13 @@ export async function searchDatasets(params: {
   });
 }
 
-export async function getDataset(idOrSlug: string): Promise<CkanPackage> {
-  return callAction("package_show", { id: idOrSlug });
+export async function getDataset(env: DatagovtEnv, idOrSlug: string): Promise<CkanPackage> {
+  return callAction(env, "package_show", { id: idOrSlug });
 }
 
 export type DatastoreRecord = Record<string, string | number | boolean | null>;
 
-export async function datastoreSearch(params: {
+export async function datastoreSearch(env: DatagovtEnv, params: {
   resourceId: string;
   query?: string;
   filters?: Record<string, string>;
@@ -256,7 +277,7 @@ export async function datastoreSearch(params: {
   if (params.query) query.q = params.query;
   if (params.filters) query.filters = JSON.stringify(params.filters);
 
-  const result = await callAction<{ total: number; records: DatastoreRecord[] }>("datastore_search", query);
+  const result = await callAction<{ total: number; records: DatastoreRecord[] }>(env, "datastore_search", query);
   return result;
 }
 
@@ -271,12 +292,12 @@ const SELECT_ONLY = /^\s*select\b/i;
  * trying to parse whether it's "just" a trailing one. A single SELECT statement
  * never needs one here.
  */
-export async function datastoreSearchSql(sql: string): Promise<{ records: DatastoreRecord[] }> {
+export async function datastoreSearchSql(env: DatagovtEnv, sql: string): Promise<{ records: DatastoreRecord[] }> {
   if (!SELECT_ONLY.test(sql)) {
     throw new SqlValidationError("Only SELECT statements are permitted.");
   }
   if (sql.includes(";")) {
     throw new SqlValidationError("Only a single SELECT statement is permitted — remove the ';'.");
   }
-  return callAction<{ records: DatastoreRecord[] }>("datastore_search_sql", { sql });
+  return callAction<{ records: DatastoreRecord[] }>(env, "datastore_search_sql", { sql });
 }

@@ -102,4 +102,30 @@ describe("nz_transport_get_trip_updates", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain("Auckland Transport returned HTTP 500");
   });
+
+  it("drops trip updates more than 30 minutes behind the feed timestamp, unless include_stale is set", async () => {
+    const fresh = sampleTripUpdate("1", "NX1");
+    const stale = sampleTripUpdate("2", "NX1");
+    stale.trip_update.timestamp = 1750000000 - 31 * 60;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({
+              status: "OK",
+              response: { header: { gtfs_realtime_version: "2.0", timestamp: 1750000000 }, entity: [fresh, stale] },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      ),
+    );
+    const env = await makeTestEnv({ atSubscriptionKey: "secret-key" });
+
+    const current = await getTripUpdatesHandler({}, env);
+    expect((current.structuredContent?.items as Array<{ trip_id: string }>).map((item) => item.trip_id)).toEqual(["trip-1"]);
+
+    const all = await getTripUpdatesHandler({ include_stale: true }, env);
+    expect(all.structuredContent?.total_count).toBe(2);
+  });
 });
