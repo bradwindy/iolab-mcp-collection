@@ -16,6 +16,7 @@ import {
   getMortgageRates as getMortgageRatesClient,
   type MortgageInstitution,
   type MortgageRate,
+  stalenessNotice,
 } from "../clients/ratesApi.js";
 
 export const getMortgageRatesInputShape = {
@@ -122,12 +123,13 @@ export async function getMortgageRatesHandler(rawInput: unknown): Promise<ToolTe
       has_more: page.has_more,
       next_offset: page.next_offset,
       data_last_updated: envelope.lastUpdated,
-      notice: truncationNotice(
-        input.offset + page.items.length,
-        page.total_count,
-        "Narrow with `institution` or `term_in_months`, or page with `offset`.",
-      ),
-      attribution: attribution("Rates API (rates sourced hourly from interest.co.nz)", {
+      notice: [
+        stalenessNotice(envelope.lastUpdated),
+        truncationNotice(input.offset + page.items.length, page.total_count, "Narrow with `institution` or `term_in_months`, or page with `offset`."),
+      ]
+        .filter(Boolean)
+        .join(" "),
+      attribution: attribution("Rates API (rates scraped from interest.co.nz)", {
         url: "https://ratesapi.nz/",
       }),
     });

@@ -37,8 +37,8 @@ export class NzMarketsMcp extends McpAgent<Env, Record<string, never>, OAuthProp
       "nz_markets_get_mortgage_rates",
       {
         description:
-          "List current NZ mortgage rates by institution and term, sourced hourly from interest.co.nz via the " +
-          "Rates API. No API key required.",
+          "List current NZ mortgage rates by institution and term, scraped from interest.co.nz by the " +
+          "Rates API. Check `data_last_updated`: upstream can lag by a day or more. No API key required.",
         inputSchema: getMortgageRatesInputShape,
         outputSchema: getMortgageRatesOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "Get Mortgage Rates" },
@@ -50,8 +50,8 @@ export class NzMarketsMcp extends McpAgent<Env, Record<string, never>, OAuthProp
       "nz_markets_get_consumer_loan_rates",
       {
         description:
-          "List current NZ personal loan, car loan, or credit card rates by institution, sourced hourly from " +
-          "interest.co.nz via the Rates API. No API key required.",
+          "List current NZ personal loan, car loan, or credit card rates by institution, scraped from " +
+          "interest.co.nz by the Rates API. Check `data_last_updated`: upstream can lag by a day or more. No API key required.",
         inputSchema: getConsumerLoanRatesInputShape,
         outputSchema: getConsumerLoanRatesOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "Get Consumer Loan Rates" },

@@ -4,7 +4,11 @@ import {
   CACHE_TTL,
   cached,
   jsonResult,
+  limitParam,
+  offsetParam,
+  paginate,
   toolError,
+  truncationNotice,
   UpstreamHttpError,
   upstreamError,
   type ToolTextResult,
@@ -12,6 +16,8 @@ import {
 import { getQuakeHistory, type QuakeHistoryEntry } from "../clients/geonet.js";
 
 const PUBLIC_ID_PATTERN = /^\d{4}p\d+$/i;
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 200;
 
 export const getQuakeRevisionHistoryInputShape = {
   public_id: z
@@ -20,12 +26,18 @@ export const getQuakeRevisionHistoryInputShape = {
     .describe(
       "The quake's GeoNet public ID, e.g. '2013p407387' — from nz_env_search_quakes or nz_env_search_quake_history.",
     ),
+  limit: limitParam(MAX_LIMIT, DEFAULT_LIMIT),
+  offset: offsetParam,
 };
 
 export const getQuakeRevisionHistoryOutputShape = {
   public_id: z.string(),
   revisions: z.array(z.record(z.string(), z.unknown())),
+  /** Total revisions GeoNet holds for this quake, across every page. */
   revision_count: z.number(),
+  total_count: z.number(),
+  has_more: z.boolean(),
+  next_offset: z.number().nullable(),
   notice: z.string(),
   attribution: z.object({ source: z.string(), url: z.string().optional() }),
 };
@@ -60,11 +72,19 @@ export async function getQuakeRevisionHistoryHandler(rawInput: unknown, env: Env
       );
     }
 
+    const page = paginate(history, { limit: input.limit, offset: input.offset }, { defaultLimit: DEFAULT_LIMIT, maxLimit: MAX_LIMIT });
+    const pageNotice = truncationNotice(input.offset + page.items.length, page.total_count, "Page with `offset`.");
+
     return jsonResult({
       public_id: input.public_id,
-      revisions: history.map(toRevision),
+      revisions: page.items.map(toRevision),
       revision_count: history.length,
-      notice: "Revisions are ordered as returned by GeoNet (typically most recent first).",
+      total_count: page.total_count,
+      has_more: page.has_more,
+      next_offset: page.next_offset,
+      notice: ["Revisions are ordered as returned by GeoNet (typically most recent first).", pageNotice]
+        .filter(Boolean)
+        .join(" "),
       attribution: attribution("GeoNet (GNS Science)", {
         license: "CC BY 3.0 NZ",
         url: "https://www.geonet.org.nz/data/policy",

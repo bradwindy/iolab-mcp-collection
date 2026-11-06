@@ -109,7 +109,10 @@ export async function queryCanterburyLayerHandler(rawInput: unknown): Promise<To
       "Narrow with `where`, or page with `limit`/`offset`.",
     );
     if (baseNotice) noticeParts.push(baseNotice);
-    if (result.exceededTransferLimit) {
+    // ArcGIS sets `exceededTransferLimit` whenever more rows exist past this page, including when
+    // it returned exactly the requested `limit`. Only a short page means the server's own
+    // maxRecordCount actually cut the request below `limit`.
+    if (result.exceededTransferLimit && result.features.length < input.limit) {
       noticeParts.push("The upstream server capped this single request below the requested `limit`; page with `offset` to see more.");
     }
 

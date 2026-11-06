@@ -1,15 +1,21 @@
-import { CACHE_TTL, cached, type CacheNamespace } from "@iolab/mcp-kit";
-import { queryArcgisFeatures } from "./arcgisFeatureServer.js";
+import { CACHE_TTL, cached, fetchWithBackoff, type CacheNamespace } from "@iolab/mcp-kit";
+import { ArcgisQueryError, queryArcgisFeatures } from "./arcgisFeatureServer.js";
 
 // The catalog's documented service name (Driver_licence_holders_dataset) is stale; the live service
 // directory lists it as Driver_Licence_Holders instead. Confirmed live:
 // curl 'https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/rest/services/Driver_Licence_Holders/FeatureServer/0/query?where=1%3D1&outFields=*&f=json&resultRecordCount=3'
-const BASE_URL = "https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/rest/services/Driver_Licence_Holders/FeatureServer/0";
+//
+// The data then moved again (confirmed live 2026-11-06): the service now has no layer 0 (`layers: []`,
+// so `/0/query` answers HTTP 200 `{"error":{"code":400,"message":"Invalid URL"}}`) and holds one
+// date-stamped table instead, `{"id": 6, "name": "DriverLicenseHolders20260720"}`, with the same
+// fields. Both the id and name look tied to each data refresh, so the id is read from the service
+// descriptor rather than hard-coded.
+const SERVICE_URL = "https://services.arcgis.com/CXBb7LAjgIIdcsPt/arcgis/rest/services/Driver_Licence_Holders/FeatureServer";
 export const SOURCE = "NZTA Driver Licence Holders Dataset";
 
-/** This layer's own maxRecordCount, confirmed via `.../FeatureServer/0?f=json`. */
+/** The table's own maxRecordCount, confirmed via `.../FeatureServer/<id>?f=json`. */
 const PAGE_SIZE = 2000;
-/** Safety cap so a misbehaving upstream can't loop forever; ~10.6k rows today needs 6 pages. */
+/** Safety cap so a misbehaving upstream can't loop forever; ~11.3k rows today needs 6 pages. */
 const MAX_PAGES = 50;
 
 const CACHE_KEY = "nzta:driver-licence-holders:all-rows";
@@ -25,7 +31,26 @@ export type LicenceHolderRow = {
   financialYear: string;
 };
 
+type ServiceEntry = { id: number; name?: string };
+type ServiceDescriptor = { layers?: ServiceEntry[]; tables?: ServiceEntry[]; error?: { message: string } };
+
+/** The FeatureServer sub-path (layer or table id) that holds the licence-holder rows today. */
+async function resolveDataUrl(): Promise<string> {
+  const url = new URL(SERVICE_URL);
+  url.searchParams.set("f", "json");
+  const response = await fetchWithBackoff(url);
+  if (!response.ok) throw new ArcgisQueryError(SOURCE, `HTTP ${response.status} ${response.statusText}`);
+  const descriptor = (await response.json()) as ServiceDescriptor;
+  if (descriptor.error) throw new ArcgisQueryError(SOURCE, descriptor.error.message);
+
+  const entries = [...(descriptor.tables ?? []), ...(descriptor.layers ?? [])];
+  const entry = entries.find((candidate) => /licen[cs]e/i.test(candidate.name ?? "")) ?? entries[0];
+  if (!entry) throw new ArcgisQueryError(SOURCE, "the service lists no layers or tables");
+  return `${SERVICE_URL}/${entry.id}`;
+}
+
 async function fetchAllRows(): Promise<LicenceHolderRow[]> {
+  const BASE_URL = await resolveDataUrl();
   const rows: LicenceHolderRow[] = [];
   let offset = 0;
   for (let page = 0; page < MAX_PAGES; page++) {

@@ -108,6 +108,17 @@ export type IntensityResult = {
   count_mmi: Record<string, number>;
 };
 
+/** Count of points per whole MMI level, keyed like GeoNet's own `count_mmi` ("3", "4", ...). */
+export function mmiHistogram(points: Array<{ mmi: number }>): Record<string, number> {
+  const histogram: Record<string, number> = {};
+  for (const point of points) {
+    if (!Number.isFinite(point.mmi)) continue;
+    const level = String(Math.round(point.mmi));
+    histogram[level] = (histogram[level] ?? 0) + 1;
+  }
+  return histogram;
+}
+
 /**
  * Shaking intensity: `measured` (instrument readings) or `reported` (felt reports).
  * Without a `publicId`, results cover the last 60 minutes. With one, results cover a
@@ -123,9 +134,13 @@ export async function getShakingIntensity(params: {
     ...(params.aggregation ? { aggregation: params.aggregation } : {}),
     ...(params.publicId ? { publicID: params.publicId } : {}),
   });
+  const points = data.features.map(toPoint);
+  // GeoNet only sends a top-level `count_mmi` for type=reported. For type=measured it is absent,
+  // which left the summary histogram empty next to hundreds of points. Build it from the points.
+  const upstreamHistogram = data.count_mmi ?? {};
   return {
-    points: data.features.map(toPoint),
-    count: data.count ?? data.features.length,
-    count_mmi: data.count_mmi ?? {},
+    points,
+    count: data.count ?? points.length,
+    count_mmi: Object.keys(upstreamHistogram).length > 0 ? upstreamHistogram : mmiHistogram(points),
   };
 }

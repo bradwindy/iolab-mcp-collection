@@ -97,7 +97,7 @@ export class InternetArchiveMcp extends McpAgent<Env, Record<string, never>, OAu
       "ia_wayback_list_site_urls",
       {
         description:
-          "Discover which URLs under a site or path prefix the Wayback Machine has ever captured, with each URL's most recent capture date and status.",
+          "Discover which URLs under a site or path prefix the Wayback Machine has ever captured, with each URL's FIRST (earliest) capture date and status in the range. Use ia_wayback_get_capture_timeline or ia_wayback_find_nearest_capture for a URL's latest capture.",
         inputSchema: waybackListSiteUrlsInputShape,
         outputSchema: waybackListSiteUrlsOutputShape,
         annotations: { ...READ_ONLY_OPEN_WORLD_ANNOTATIONS, title: "List Site URLs" },

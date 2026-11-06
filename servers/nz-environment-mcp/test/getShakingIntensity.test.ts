@@ -47,6 +47,23 @@ describe("nz_env_get_shaking_intensity", () => {
     expect(points[0]?.count).toBeUndefined();
   });
 
+  it("builds the summary histogram from the points when GeoNet sends an empty count_mmi", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        intensityResponse([intensityFeature({ mmi: 2 }), intensityFeature({ mmi: 3 }), intensityFeature({ mmi: 3 })], {
+          count: 3,
+          count_mmi: {},
+        }),
+      ),
+    );
+    const env = await createFakeEnv();
+
+    const result = await getShakingIntensityHandler({ type: "measured", limit: 1 }, env);
+
+    expect(result.structuredContent?.summary).toEqual({ count: 3, count_by_mmi: { "2": 1, "3": 2 } });
+  });
+
   it("includes per-point counts in detailed format", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(intensityResponse([intensityFeature()])));
     const env = await createFakeEnv();

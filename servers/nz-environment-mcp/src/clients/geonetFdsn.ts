@@ -21,6 +21,16 @@ function splitPipeRows(text: string): string[][] {
   return lines.map((line) => line.split("|").map((cell) => cell.trim()));
 }
 
+/**
+ * FDSN event times are always UTC (FDSN web service spec) but GeoNet's text format writes them
+ * with no zone, e.g. `2026-06-08T13:19:05`, which a reader can mistake for NZ local time. Add the
+ * `Z` so the value is unambiguous ISO 8601.
+ */
+export function asUtc(time: string): string {
+  if (!time || /(Z|[+-]\d{2}:?\d{2})$/i.test(time)) return time;
+  return `${time}Z`;
+}
+
 export type FdsnQuakeRecord = {
   eventId: string;
   time: string;
@@ -82,7 +92,7 @@ export async function searchQuakeHistory(params: {
   const rows = splitPipeRows(await response.text());
   return rows.map((c) => ({
     eventId: c[0] ?? "",
-    time: c[1] ?? "",
+    time: asUtc(c[1] ?? ""),
     latitude: Number(c[2]),
     longitude: Number(c[3]),
     depthKm: Number(c[4]),

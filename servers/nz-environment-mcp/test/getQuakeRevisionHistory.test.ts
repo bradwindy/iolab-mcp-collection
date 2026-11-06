@@ -39,6 +39,26 @@ describe("nz_env_get_quake_revision_history", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("pages through long revision histories with limit/offset", async () => {
+    const features = Array.from({ length: 5 }, (_, i) =>
+      revisionFeature({ modificationTime: `2026-07-07T20:4${i}:00.000Z`, magnitude: 5 + i / 10 }),
+    );
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => historyResponse(features)));
+    const env = await createFakeEnv();
+
+    const first = await getQuakeRevisionHistoryHandler({ public_id: "2026p507720", limit: 2 }, env);
+    expect((first.structuredContent?.revisions as unknown[]).length).toBe(2);
+    expect(first.structuredContent?.revision_count).toBe(5);
+    expect(first.structuredContent?.has_more).toBe(true);
+    expect(first.structuredContent?.next_offset).toBe(2);
+    expect(first.structuredContent?.notice).toContain("Showing 2 of 5");
+
+    const last = await getQuakeRevisionHistoryHandler({ public_id: "2026p507720", limit: 2, offset: 4 }, env);
+    expect((last.structuredContent?.revisions as unknown[]).length).toBe(1);
+    expect(last.structuredContent?.has_more).toBe(false);
+    expect(last.structuredContent?.next_offset).toBeNull();
+  });
+
   it("returns revision history ordered as GeoNet returns it", async () => {
     vi.stubGlobal(
       "fetch",

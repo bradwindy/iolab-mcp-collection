@@ -32,6 +32,20 @@ const ROWS = [
   },
 ];
 
+const SERVICE_DESCRIPTOR = { layers: [], tables: [{ id: 6, name: "DriverLicenseHolders20260720" }] };
+
+/** Answers the service descriptor request, then `rows` for every query against the resolved table. */
+function arcgisFetch(rows: () => Response = arcgisRowsResponse) {
+  return vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/FeatureServer")) {
+      return new Response(JSON.stringify(SERVICE_DESCRIPTOR), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    expect(url.pathname).toMatch(/\/FeatureServer\/6\/query$/);
+    return rows();
+  });
+}
+
 function arcgisRowsResponse() {
   // Fewer rows than the layer's page size (2000), so the client's fetch-all loop stops after one call.
   return new Response(JSON.stringify({ features: ROWS.map((attributes) => ({ attributes })) }), {
@@ -44,7 +58,7 @@ describe("nz_transport_get_licence_holder_stats", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("returns all rows, unfiltered, in the confirmed field shape", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(arcgisRowsResponse()));
+    vi.stubGlobal("fetch", arcgisFetch());
     const env = await makeTestEnv();
 
     const result = await getLicenceHolderStatsHandler({}, env);
@@ -61,7 +75,7 @@ describe("nz_transport_get_licence_holder_stats", () => {
   });
 
   it("filters by region case-insensitively", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(arcgisRowsResponse()));
+    vi.stubGlobal("fetch", arcgisFetch());
     const env = await makeTestEnv();
 
     const result = await getLicenceHolderStatsHandler({ region: "auckland" }, env);
@@ -70,7 +84,7 @@ describe("nz_transport_get_licence_holder_stats", () => {
   });
 
   it("filters by licence_class, age_group, and financial_year", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(arcgisRowsResponse()));
+    vi.stubGlobal("fetch", arcgisFetch());
     const env = await makeTestEnv();
 
     const result = await getLicenceHolderStatsHandler(
@@ -84,18 +98,19 @@ describe("nz_transport_get_licence_holder_stats", () => {
   });
 
   it("caches the full dataset across repeated calls", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(arcgisRowsResponse());
+    const fetchMock = arcgisFetch();
     vi.stubGlobal("fetch", fetchMock);
     const env = await makeTestEnv();
 
     await getLicenceHolderStatsHandler({}, env);
     await getLicenceHolderStatsHandler({ region: "otago" }, env);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // One service-descriptor lookup plus one page of rows, then everything comes from the cache.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("reports pagination truncation via the notice field", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(arcgisRowsResponse()));
+    vi.stubGlobal("fetch", arcgisFetch());
     const env = await makeTestEnv();
 
     const result = await getLicenceHolderStatsHandler({ limit: 1 }, env);
@@ -106,11 +121,12 @@ describe("nz_transport_get_licence_holder_stats", () => {
   it("returns an actionable error when ArcGIS reports a query error", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ error: { code: 400, message: "Invalid query parameters." } }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      arcgisFetch(
+        () =>
+          new Response(JSON.stringify({ error: { code: 400, message: "Invalid query parameters." } }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
     const env = await makeTestEnv();

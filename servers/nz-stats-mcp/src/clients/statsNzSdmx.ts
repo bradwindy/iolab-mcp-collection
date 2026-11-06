@@ -129,7 +129,8 @@ export async function fetchSdmxData(params: {
     if (truncated) {
       throw new Error(
         `SDMX-JSON response exceeded ${MAX_JSON_BODY_BYTES.toLocaleString()} bytes before EOF — the ` +
-          `query is too unconstrained for this dataflow. Narrow the dimension key (avoid 'all' on ` +
+          `query is too unconstrained for this dataflow. \`limit\`/\`offset\` only page the parsed result, ` +
+          `they don't shrink what Stats NZ sends. Narrow the dimension key (avoid 'all' on ` +
           `large dataflows), or use start_period/end_period, or try format='csv' to inspect a smaller ` +
           `payload first.`,
       );

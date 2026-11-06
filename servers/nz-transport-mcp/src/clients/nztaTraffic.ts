@@ -69,8 +69,16 @@ export type NztaCamera = {
   journey?: NztaJourneyRef;
 };
 
-/** The API returns `"response": ""` (an empty string, not an object) instead of an empty list when there are no matches. */
-type NztaEnvelope<K extends string, T> = { response: ({ [P in K]?: T[] } & Record<string, unknown>) | "" };
+/**
+ * The API returns `"response": ""` (an empty string, not an object) instead of an empty list when
+ * there are no matches, and a bare object instead of a one-element list when there is exactly one.
+ */
+type NztaEnvelope<K extends string, T> = { response: ({ [P in K]?: T[] | T } & Record<string, unknown>) | "" };
+
+function asList<T>(value: T[] | T | undefined): T[] {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetchWithBackoff(`${BASE}${path}`, {
@@ -84,12 +92,12 @@ export async function getRoadEvents(regionId?: number): Promise<NztaRoadEvent[]>
   const path = regionId ? `/events/byregion/${regionId}/-1` : `/events/all/-1`;
   const body = await getJson<NztaEnvelope<"roadevent", NztaRoadEvent>>(path);
   if (!body.response || typeof body.response !== "object") return [];
-  return body.response.roadevent ?? [];
+  return asList(body.response.roadevent);
 }
 
 export async function getCameras(regionId?: number): Promise<NztaCamera[]> {
   const path = regionId ? `/cameras/byregion/${regionId}` : `/cameras/all`;
   const body = await getJson<NztaEnvelope<"camera", NztaCamera>>(path);
   if (!body.response || typeof body.response !== "object") return [];
-  return body.response.camera ?? [];
+  return asList(body.response.camera);
 }
