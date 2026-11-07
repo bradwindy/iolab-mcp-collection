@@ -305,11 +305,21 @@ setup.
 
 `.github/workflows/ci.yml` has a `deploy` job that redeploys the gateway whenever a push lands on
 `main` (after the build/lint/typecheck/test job passes). It's disabled by default in the sense that
-it fails fast without these repo secrets — add them under **Settings → Secrets and variables →
-Actions**:
+it fails fast without these secrets. Store them as **environment secrets**, not repository secrets:
 
-- `CLOUDFLARE_API_TOKEN` — a token scoped to **Workers Scripts: Edit** (account) and
-  **Workers Routes: Edit** (all zones); create one at **My Profile → API Tokens → Create Token**.
+1. **Settings → Environments → New environment**, name it `production` (the deploy job names it).
+2. Under **Deployment branches and tags**, choose **Selected branches and tags** and allow only
+   `main`. Optionally add yourself as a **Required reviewer**.
+3. Add the three secrets below under that environment's **Environment secrets**, and delete any
+   repository-level copies under **Settings → Secrets and variables → Actions**.
+
+Why: the job's `if:` that limits deploys to `main` lives in the workflow file, which anyone who can
+push a branch can edit. Repository secrets are handed to any push or same-repo pull-request run, so a
+branch-only workflow could read them. Environment secrets behind a main-only branch policy cannot be.
+
+- `CLOUDFLARE_API_TOKEN` — a token scoped to **Workers Scripts: Edit** (this account) and
+  **Workers Routes: Edit** on the one zone the gateway uses (not all zones); create one at
+  **My Profile → API Tokens → Create Token**.
 - `CLOUDFLARE_ACCOUNT_ID` — from `wrangler whoami`.
 - `DEPLOY_DOMAIN` — your bare base domain (e.g. `yourdomain.com`), substituted into
   `apps/gateway/wrangler.jsonc`'s `yourdomain.com` route placeholder at deploy time via
