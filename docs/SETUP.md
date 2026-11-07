@@ -113,7 +113,7 @@ too — those must stay reachable without an interactive login.
 |---|---|
 | `/authorize` | Behind Access (interactive login only) |
 | `/{slug}/mcp` (e.g. `/nz-govt/mcp`) | Public (bearer token **or** OAuth token checked in application code) |
-| `/token`, `/register` | Public (machine-to-machine) |
+| `/token`, `/register` | Public (machine-to-machine). Bodies over 16 KiB get a 413, and `/register` allows 20 registrations a minute per client IP (the `REGISTER_RATE_LIMITER` binding in `wrangler.jsonc`) |
 | `/.well-known/oauth-authorization-server` | Public (RFC 8414 discovery) |
 | `/.well-known/oauth-protected-resource*` | Public (RFC 9728 discovery, per path) |
 | `/admin`, `/admin/*` (the portal's dashboard/Connect/credential forms) | Behind the same Access application, **and** authorized again in code — see below |
@@ -255,6 +255,9 @@ Common failures:
 - **`invalid_client` / `redirect_uri mismatch` during the OAuth handshake** — claude.ai registers
   itself as a new DCR client on first connection; if you removed and re-added the connector, it
   registers a new client each time. Expected, not an error, unless it recurs on every request.
+- **`429 too_many_requests` from `/register`** — more than 20 client registrations from one IP in a
+  minute. Wait a minute. Raise `simple.limit` in `apps/gateway/wrangler.jsonc` only if a real client
+  needs it.
 - **A second connector's authorization silently breaks a first one that was working** — this is
   exactly the bug `revokeExistingGrants: false` in `packages/mcp-kit/src/oauth.ts` exists to prevent
   (the OAuth library's default revokes every prior grant for the same user+client on a new grant,

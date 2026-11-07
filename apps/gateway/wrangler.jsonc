@@ -48,6 +48,11 @@
     // Same shared credentials database every server and the portal already use — unchanged.
     { "binding": "CREDENTIALS_DB", "database_name": "nz-mcp-credentials", "database_id": "5c6248bf-f226-46b0-aa2b-a6a9bc2ca790" }
   ],
+  "ratelimits": [
+    // Per client IP, on anonymous POST /register only (see REGISTER_RATE_LIMITER in @iolab/mcp-kit's
+    // oauth.ts). A real connector registers once. Counts are per Cloudflare location and approximate.
+    { "name": "REGISTER_RATE_LIMITER", "namespace_id": "4201", "simple": { "limit": 20, "period": 60 } }
+  ],
   "routes": [{ "pattern": "mcp.yourdomain.com", "custom_domain": true }],
   "observability": { "enabled": true }
 }
