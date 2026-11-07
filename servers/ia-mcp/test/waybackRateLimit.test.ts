@@ -138,6 +138,27 @@ describe("Wayback rate limiting", () => {
     expect(result.structuredContent?.content).toContain("Via home");
   });
 
+  it("never sends the proxy key on a redirect hop that leaves the proxy's origin", async () => {
+    const seen: Array<{ host: string; key: string | null }> = [];
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input.toString());
+      seen.push({ host: url.host, key: new Headers(init?.headers).get("X-Wayback-Key") });
+      if (url.host === "wayback.example.com") {
+        return Promise.resolve(new Response(null, { status: 302, headers: { location: "https://elsewhere.example.net/landing" } }));
+      }
+      return Promise.resolve(new Response("<html><body><h1>Elsewhere</h1></body></html>", { status: 200, headers: { "content-type": "text/html" } }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const env = { ...fakeEnv(), WAYBACK_PROXY_URL: "https://wayback.example.com", WAYBACK_PROXY_KEY: "sekrit" } as Env;
+
+    await waybackReadPageHandler({ url: "https://example.org/", timestamp: "20150101" }, env);
+
+    expect(seen[0]).toEqual({ host: "wayback.example.com", key: "sekrit" });
+    const offProxy = seen.filter((hop) => hop.host !== "wayback.example.com");
+    expect(offProxy.length).toBeGreaterThan(0);
+    for (const hop of offProxy) expect(hop.key).toBeNull();
+  });
+
   it("puts the proxy's own 429 into the same cooldown", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("rate limited by wayback-proxy", {

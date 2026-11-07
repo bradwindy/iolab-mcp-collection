@@ -11,7 +11,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.29.0",
     "@iolab/ia-mcp": "workspace:*",
     "@iolab/mcp-kit": "workspace:*",
     "@iolab/nz-culture-mcp": "workspace:*",
@@ -21,17 +20,19 @@
     "@iolab/nz-markets-mcp": "workspace:*",
     "@iolab/nz-stats-mcp": "workspace:*",
     "@iolab/nz-transport-mcp": "workspace:*",
-    "@iolab/wikimedia-mcp": "workspace:*",
     "@iolab/portal": "workspace:*",
-    "agents": "^0.17.3",
-    "zod": "^4.1.10"
+    "@iolab/wikimedia-mcp": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "agents": "^0.33.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.4",
     "@cloudflare/workers-oauth-provider": "^0.8.1",
     "jose": "^6.2.3",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.12",
     "wrangler": "^4.110.0"
   }
 }

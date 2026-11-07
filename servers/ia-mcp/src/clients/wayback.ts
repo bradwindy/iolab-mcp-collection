@@ -84,7 +84,10 @@ async function viaProxy(proxyUrl: string, key: string, url: URL, init: RequestIn
   for (let hop = 0; ; hop++) {
     const headers = new Headers(init.headers);
     headers.set("User-Agent", USER_AGENT);
-    headers.set("X-Wayback-Key", key);
+    // The key is for the proxy only. A redirect hop that leaves the proxy's origin (anything other
+    // than a web.archive.org Location, which is mapped back onto the proxy below) must not carry it.
+    if (target.origin === proxy.origin) headers.set("X-Wayback-Key", key);
+    else headers.delete("X-Wayback-Key");
     const response = await fetchWithBackoff(target, { ...init, headers, redirect: "manual" }, RETRY_5XX_ONLY);
 
     const location = response.headers.get("location");

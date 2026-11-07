@@ -19,8 +19,12 @@ beforeAll(async () => {
 });
 afterAll(() => resetAccessJwtTesting());
 
+// app.request() resolves paths against http://localhost, so a same-origin form POST carries this Origin.
+const SAME_ORIGIN = "http://localhost";
+
 function withAccess(init: { body?: string; headers: Record<string, string>; method?: string }) {
-  return { ...init, headers: { ...init.headers, ...accessHeaders } };
+  const origin = init.method === "POST" ? { Origin: SAME_ORIGIN } : {};
+  return { ...init, headers: { ...origin, ...init.headers, ...accessHeaders } };
 }
 
 describe("GET /admin/servers/:slug", () => {
@@ -188,5 +192,33 @@ describe("POST /admin/servers/:slug", () => {
       testEnv(),
     );
     expect(res.status).toBe(403);
+  });
+
+  it("403s a cross-site form POST even with a valid Access JWT, and stores nothing", async () => {
+    const db = new FakeD1();
+    const env = testEnv({ credentialsDb: db });
+    const res = await app.request(
+      "/admin/servers/nz-geo-mcp",
+      withAccess({
+        method: "POST",
+        ...formBody({ key_name: "LINZ_API_KEY", value: "attacker-value" }),
+        headers: { ...formBody({ key_name: "LINZ_API_KEY", value: "x" }).headers, Origin: "https://evil.example" },
+      }),
+      env,
+    );
+    expect(res.status).toBe(403);
+    expect(await getCredential(db, "nz-geo-mcp", "LINZ_API_KEY", env.ENCRYPTION_KEY)).toBeNull();
+  });
+
+  it("403s a form POST with no Origin header", async () => {
+    const db = new FakeD1();
+    const env = testEnv({ credentialsDb: db });
+    const res = await app.request(
+      "/admin/servers/nz-geo-mcp",
+      { method: "POST", ...formBody({ key_name: "LINZ_API_KEY", value: "abc123" }), headers: { ...formBody({ key_name: "LINZ_API_KEY", value: "abc123" }).headers, ...accessHeaders } },
+      env,
+    );
+    expect(res.status).toBe(403);
+    expect(await getCredential(db, "nz-geo-mcp", "LINZ_API_KEY", env.ENCRYPTION_KEY)).toBeNull();
   });
 });
