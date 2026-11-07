@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { missingCredentialError, toolError, UpstreamHttpError, upstreamError } from "../src/errors.js";
 
 describe("UpstreamHttpError", () => {
@@ -51,5 +51,18 @@ describe("missingCredentialError", () => {
     expect(result.content[0]?.text).toBe(
       "The upstream API key 'LINZ_API_KEY' is not configured for nz-geo-mcp. Set it at https://mcp.example.com/admin/servers/nz-geo-mcp, then retry.",
     );
+  });
+});
+
+describe("upstreamError logging", () => {
+  it("never logs the query string, where some upstreams carry the API key", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = new Response(null, { status: 429, statusText: "Too Many Requests" });
+    Object.defineProperty(response, "url", { value: "https://data.linz.govt.nz/services/query/v1/vector.json?key=SECRET-KEY&layer=1" });
+    upstreamError("LINZ Data Service", response);
+    const logged = spy.mock.calls.flat().join(" ");
+    spy.mockRestore();
+    expect(logged).not.toContain("SECRET-KEY");
+    expect(logged).toContain("https://data.linz.govt.nz/services/query/v1/vector.json");
   });
 });

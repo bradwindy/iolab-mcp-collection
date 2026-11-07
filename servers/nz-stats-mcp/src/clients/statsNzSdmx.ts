@@ -108,9 +108,13 @@ export async function fetchSdmxData(params: {
     .split(".")
     .map((segment) => segment.split("+").map(encodeURIComponent).join("+"))
     .join(".");
-  const resourceId = params.version
-    ? `${params.agencyId},${params.dataflowId},${params.version}`
-    : `${params.agencyId},${params.dataflowId}`;
+  // Each part comes from the tool caller. Encoding keeps a value like "../.." inside its own path
+  // segment, so it can't reach another API path on this host with our subscription key attached.
+  // Real SDMX ids and versions ([A-Za-z0-9_@$.-]) are unchanged by it.
+  const resourceId = [params.agencyId, params.dataflowId, params.version]
+    .filter((part): part is string => Boolean(part))
+    .map(encodeURIComponent)
+    .join(",");
   const url = new URL(`${SDMX_BASE_URL}/data/${resourceId}/${encodedKey}`);
   url.searchParams.set("format", format);
   for (const [name, value] of Object.entries(params.extraQuery ?? {})) {
