@@ -19,6 +19,11 @@ export const app = new Hono<{ Bindings: Env }>();
 app.use("*", async (c, next) => {
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "no-referrer");
+  // No page here is meant to be framed. Without this, another site could load an /admin form in an
+  // invisible iframe and trick a click into a same-origin submit, which csrf() below can't tell
+  // apart from a real one (it would carry this origin's Origin and Sec-Fetch-Site).
+  c.header("X-Frame-Options", "DENY");
+  c.header("Content-Security-Policy", "frame-ancestors 'none'");
   await next();
 });
 
