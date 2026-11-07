@@ -1,0 +1,11 @@
+# Renovate owns routine version updates. See renovate.json.
+# open-pull-requests-limit: 0 pauses Dependabot version-update PRs only.
+# It does not disable Dependabot security updates, vulnerability alerts,
+# or any GitHub account or repository security setting.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
