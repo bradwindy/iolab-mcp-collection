@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { csrf } from "hono/csrf";
 // Deliberately the dedicated subpath, not the main "@iolab/mcp-kit" barrel: that barrel also
 // re-exports oauth.ts, which imports `@cloudflare/workers-oauth-provider` — whose dist bundle does
 // a bare `import ... from "cloudflare:workers"` at module scope. That breaks this package's own
@@ -18,6 +19,11 @@ export const app = new Hono<{ Bindings: Env }>();
 app.use("*", async (c, next) => {
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "no-referrer");
+  // No page here is meant to be framed. Without this, another site could load an /admin form in an
+  // invisible iframe and trick a click into a same-origin submit, which csrf() below can't tell
+  // apart from a real one (it would carry this origin's Origin and Sec-Fetch-Site).
+  c.header("X-Frame-Options", "DENY");
+  c.header("Content-Security-Policy", "frame-ancestors 'none'");
   await next();
 });
 
@@ -36,6 +42,13 @@ app.use("/admin/*", async (c, next) => {
   }
   await next();
 });
+
+// The Access check above answers "who", not "did they mean to send this". A page on another site
+// can still make the operator's browser POST a credential form here while an Access session is live,
+// if the CF_Authorization cookie is sent on cross-site requests (that depends on the Access app's
+// SameSite setting, which lives outside this repo). Rejecting form POSTs whose Origin (or
+// Sec-Fetch-Site) is not this origin closes that regardless of the cookie setting.
+app.use("/admin/*", csrf());
 
 app.get("/", getLanding);
 app.get("/admin", getDashboard);

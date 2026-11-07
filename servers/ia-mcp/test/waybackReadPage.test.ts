@@ -83,4 +83,35 @@ describe("ia_wayback_read_page", () => {
     expect((result.structuredContent?.content as string).length).toBe(500);
     expect(result.structuredContent?.next_char_offset).toBe(500);
   });
+
+  it("refuses a url whose dot-segments climb out of the capture path, and never fetches", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    for (const url of ["../../save/https://example.org/", "%2e%2e/%2e%2e/save/https://example.org/", "../../../cdx/search/cdx?url=x"]) {
+      const result = await waybackReadPageHandler({ url, timestamp: "20200101" }, fakeEnv());
+      expect(result.isError).toBe(true);
+      expect(result.content[0]?.text).toContain("outside the Wayback capture path");
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps a proxied hop on the proxy even when a Wayback Location's path starts with //", async () => {
+    const hosts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = new URL(input.toString());
+        hosts.push(url.host);
+        if (hosts.length === 1) {
+          // An absolute Wayback Location whose path begins with "//": resolving that path against the
+          // proxy URL would make "attacker.example" the host.
+          return Promise.resolve(new Response(null, { status: 302, headers: { location: "https://web.archive.org//attacker.example/x" } }));
+        }
+        return Promise.resolve(new Response("<html><body><p>x</p></body></html>", { status: 200, headers: { "content-type": "text/html" } }));
+      }),
+    );
+    const env = { ...fakeEnv(), WAYBACK_PROXY_URL: "https://wayback.example.com", WAYBACK_PROXY_KEY: "sekrit" } as Env;
+    await waybackReadPageHandler({ url: "https://example.org/", timestamp: "20200101" }, env);
+    expect(hosts).toEqual(["wayback.example.com", "wayback.example.com"]);
+  });
 });

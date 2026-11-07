@@ -40,11 +40,22 @@ export function rateLimitHint(response: Response): string {
   return `The upstream is rate-limiting this server. Wait ${wait} before calling it again; retrying straight away can extend the block.`;
 }
 
+function loggableUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    return `${u.origin}${u.pathname}${u.search ? "?…" : ""}`;
+  } catch {
+    return "(unparseable)";
+  }
+}
+
 /** Standard actionable error for an upstream HTTP failure. */
 export function upstreamError(source: string, response: Response, hint?: string): ToolTextResult {
   console.error(
     `[upstream-error] ${source} returned HTTP ${response.status} ${response.statusText}`,
-    `url=${response.url}`,
+    // Origin and path only: some upstreams take the API key as a query parameter (LINZ LDS's
+    // `?key=`), and a caller's raw query (SQL, filters) has no business in Workers Logs either.
+    `url=${loggableUrl(response.url)}`,
     // Logged so a 429 is diagnosable after the fact: a short throttle and an hours-long block
     // look identical to the caller, and only these headers tell them apart.
     `retry-after=${response.headers.get("retry-after") ?? "none"}`,

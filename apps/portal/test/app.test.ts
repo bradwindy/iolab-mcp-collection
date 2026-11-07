@@ -60,4 +60,12 @@ describe("security headers", () => {
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("referrer-policy")).toBe("no-referrer");
   });
+
+  it("forbid framing on every response, so an /admin form can't be clickjacked into a same-origin submit", async () => {
+    for (const path of ["/", "/admin", "/admin/connect", "/admin/servers/nz-geo-mcp", "/nope"]) {
+      const res = await app.request(path, {}, testEnv());
+      expect(res.headers.get("x-frame-options")).toBe("DENY");
+      expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    }
+  });
 });

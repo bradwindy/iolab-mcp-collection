@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { attribution, jsonResult, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
-import { archivedUrl, cdxTimestampToIso, waybackError } from "../clients/wayback.js";
+import { attribution, jsonResult, toolError, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
+import { archivedUrl, CapturePathEscapeError, cdxTimestampToIso, waybackError } from "../clients/wayback.js";
 import { fetchAndExtractPageWithFallback, LATEST_SENTINEL } from "../pageFetch.js";
 
 export const waybackReadPageInputShape = {
@@ -73,6 +73,7 @@ export async function waybackReadPageHandler(rawInput: unknown, env: Env): Promi
       attribution: attribution(page.source.name, { url: page.source.url }),
     });
   } catch (error) {
+    if (error instanceof CapturePathEscapeError) return toolError(error.message);
     if (error instanceof UpstreamHttpError) return waybackError(error);
     throw error;
   }

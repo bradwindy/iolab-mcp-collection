@@ -29,6 +29,81 @@ export interface OAuthMcpEnv extends AccessJwtEnv {
    * regardless of this flag, so the first real connector attempt confirms the assumption either way.
    */
   DISABLE_RESOURCE_ENFORCEMENT?: string;
+  /**
+   * Optional Workers Rate Limiting binding (`ratelimits` in wrangler.jsonc) applied per client IP
+   * to anonymous `POST /register`. Each registration is a 90-day `OAUTH_KV` write, so without it
+   * anyone can spend the account's KV write and storage quota, which the token store shares.
+   */
+  REGISTER_RATE_LIMITER?: RateLimiterLike;
+}
+
+/** The one method of a Workers `RateLimit` binding used here, typed structurally (see `OAUTH_KV`). */
+export interface RateLimiterLike {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
+/**
+ * Largest body accepted on the anonymous `POST /token` and `POST /register` endpoints. Real
+ * requests are a few hundred bytes. The library itself allows 1 MiB on /register, and nothing at
+ * all on /token, whose form parser does work that grows with the square of the field count.
+ */
+export const MAX_ANONYMOUS_OAUTH_BODY_BYTES = 16 * 1024;
+
+/** Reads at most `maxBytes` of the body, or returns null as soon as it is larger. */
+async function readCappedBody(request: Request, maxBytes: number): Promise<Uint8Array<ArrayBuffer> | null> {
+  const declared = Number(request.headers.get("Content-Length") ?? "0");
+  if (declared > maxBytes) return null;
+  if (!request.body) return new Uint8Array(0);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
+function oauthErrorResponse(status: number, error: string, description: string): Response {
+  return new Response(JSON.stringify({ error, error_description: description }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Limits for the two OAuth endpoints anyone can POST to without credentials. Returns the request to
+ * pass on (with its body already read, so the size cap holds even without a Content-Length), or the
+ * error response to send instead.
+ */
+async function guardAnonymousOAuthPost(
+  request: Request,
+  env: OAuthMcpEnv,
+  pathname: "/token" | "/register",
+): Promise<Request | Response> {
+  // Cloudflare's edge always sets CF-Connecting-IP and overwrites any client value.
+  const clientIp = request.headers.get("CF-Connecting-IP");
+  if (pathname === "/register" && env.REGISTER_RATE_LIMITER && clientIp) {
+    const { success } = await env.REGISTER_RATE_LIMITER.limit({ key: clientIp });
+    if (!success) return oauthErrorResponse(429, "too_many_requests", "Too many client registrations. Try again in a minute.");
+  }
+  const body = await readCappedBody(request, MAX_ANONYMOUS_OAUTH_BODY_BYTES);
+  if (body === null) {
+    return oauthErrorResponse(413, "invalid_request", `Request body must be at most ${MAX_ANONYMOUS_OAUTH_BODY_BYTES} bytes.`);
+  }
+  return new Request(request, { body });
 }
 
 type AuthorizeEnv = AccessJwtEnv & { OAUTH_PROVIDER: OAuthHelpers; DISABLE_RESOURCE_ENFORCEMENT?: string };
@@ -98,6 +173,24 @@ export function validateResourceForRegisteredPath(
 }
 
 /**
+ * `allowPlainPKCE: false` in the provider only rejects the literal method string "plain": a request
+ * with method "PLAIN", or with no code_challenge at all, still gets a code. OAuth 2.1 and the MCP
+ * authorization spec both require PKCE with S256, so enforce exactly that here, where the grant is made.
+ */
+export function validatePkceS256(
+  codeChallenge: string | undefined,
+  codeChallengeMethod: string | undefined,
+): { ok: true } | { ok: false; reason: string } {
+  if (!codeChallenge) {
+    return { ok: false, reason: "missing 'code_challenge' — PKCE with S256 is required" };
+  }
+  if (codeChallengeMethod !== "S256") {
+    return { ok: false, reason: "'code_challenge_method' must be S256" };
+  }
+  return { ok: true };
+}
+
+/**
  * Renders a consent page for `GET /authorize`: the caller is already Access-authenticated (verified
  * by the handler below before this runs), but has not yet said *which* client they mean to authorize.
  * Without this step, a single crafted link (or even a plain top-level redirect) to `/authorize` from an
@@ -133,6 +226,12 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(
       console.error(`[authorize:${ref}] GET: rejected — ${resourceCheck.reason}`);
       return new Response(`Invalid authorization request: ${resourceCheck.reason} (ref: ${ref})`, { status: 400 });
     }
+  }
+
+  const pkceCheck = validatePkceS256(oauthReqInfo.codeChallenge, oauthReqInfo.codeChallengeMethod);
+  if (!pkceCheck.ok) {
+    console.error(`[authorize:${ref}] GET: rejected — ${pkceCheck.reason}`);
+    return new Response(`Invalid authorization request: ${pkceCheck.reason} (ref: ${ref})`, { status: 400 });
   }
 
   const clientInfo = await env.OAUTH_PROVIDER.lookupClient(oauthReqInfo.clientId);
@@ -291,6 +390,12 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
       console.error(`[authorize:${ref}] POST: rejected — ${resourceCheck.reason}`);
       return new Response(`Invalid authorization request: ${resourceCheck.reason} (ref: ${ref})`, { status: 400 });
     }
+  }
+
+  const pkceCheck = validatePkceS256(oauthReqInfo.codeChallenge, oauthReqInfo.codeChallengeMethod);
+  if (!pkceCheck.ok) {
+    console.error(`[authorize:${ref}] POST: rejected — ${pkceCheck.reason}`);
+    return new Response(`Invalid authorization request: ${pkceCheck.reason} (ref: ${ref})`, { status: 400 });
   }
 
   let redirectTo: string;
@@ -470,17 +575,23 @@ export function buildMultiServerOAuthWorker<Env extends OAuthMcpEnv>(
     authorizeEndpoint: "/authorize",
     tokenEndpoint: "/token",
     clientRegistrationEndpoint: "/register",
-    // OAuth 2.1 drops plain PKCE; only accept/advertise S256.
+    // OAuth 2.1 drops plain PKCE; only advertise S256. This flag alone doesn't enforce it (see
+    // validatePkceS256), so /authorize also rejects anything but an S256 challenge.
     allowPlainPKCE: false,
     defaultHandler: createAccessAuthorizeHandler<Env>(portal, registeredResourcePaths),
   });
 
   return {
-    fetch(request, env, ctx) {
+    async fetch(request, env, ctx) {
       const url = new URL(request.url);
       const direct = mcpHandlers.get(url.pathname);
       if (direct && bearerTokenMatches(request, env.MCP_SHARED_TOKEN)) {
         return direct.fetch(request, env, ctx);
+      }
+      if (request.method === "POST" && (url.pathname === "/token" || url.pathname === "/register")) {
+        const guarded = await guardAnonymousOAuthPost(request, env, url.pathname);
+        if (guarded instanceof Response) return guarded;
+        return provider.fetch(guarded, env, ctx);
       }
       return provider.fetch(request, env, ctx);
     },

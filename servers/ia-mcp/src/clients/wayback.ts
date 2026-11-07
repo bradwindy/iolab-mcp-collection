@@ -59,7 +59,9 @@ export async function waybackFetch(env: Env, url: string | URL, init: RequestIni
     env.WAYBACK_PROXY_URL && env.WAYBACK_PROXY_KEY
       ? await viaProxy(env.WAYBACK_PROXY_URL, env.WAYBACK_PROXY_KEY, new URL(url), init)
       : await iaFetch(env, url, init, RETRY_5XX_ONLY);
-  if (response.status === 429) {
+  // Only Wayback (or the proxy, whose responses carry a web.archive.org url) may start the
+  // server-wide cooldown. A 429 from any other host a redirect reached must not lock every client out.
+  if (response.status === 429 && (!response.url || new URL(response.url).host === "web.archive.org")) {
     const seconds = retryAfterSeconds(response);
     await env.MCP_CACHE.put(COOLDOWN_KEY, String(Date.now() + seconds * 1000), { expirationTtl: seconds });
   }
@@ -78,13 +80,19 @@ export async function waybackFetch(env: Env, url: string | URL, init: RequestIni
  */
 async function viaProxy(proxyUrl: string, key: string, url: URL, init: RequestInit): Promise<Response> {
   const proxy = new URL(proxyUrl);
-  let target = new URL(url.pathname + url.search, proxy);
+  // Always proxy.origin + path, never new URL(path, proxy): a path starting with "//" would otherwise
+  // be read as a network-path reference and send this request to whatever host follows it.
+  const onProxy = (u: URL) => new URL(`${proxy.origin}${u.pathname}${u.search}`);
+  let target = onProxy(url);
   const follow = init.redirect !== "manual";
 
   for (let hop = 0; ; hop++) {
     const headers = new Headers(init.headers);
     headers.set("User-Agent", USER_AGENT);
-    headers.set("X-Wayback-Key", key);
+    // The key is for the proxy only. Every hop stays on the proxy's origin (see below), and this
+    // check keeps it that way should that ever change.
+    if (target.origin === proxy.origin) headers.set("X-Wayback-Key", key);
+    else headers.delete("X-Wayback-Key");
     const response = await fetchWithBackoff(target, { ...init, headers, redirect: "manual" }, RETRY_5XX_ONLY);
 
     const location = response.headers.get("location");
@@ -92,9 +100,13 @@ async function viaProxy(proxyUrl: string, key: string, url: URL, init: RequestIn
       await response.body?.cancel();
       const next = new URL(location, target);
       // Belt and braces: should the proxy ever pass an absolute Wayback Location through,
-      // keep the next hop on the proxy rather than going direct.
-      target = next.host === "web.archive.org" ? new URL(next.pathname + next.search, proxy) : next;
-      continue;
+      // keep the next hop on the proxy rather than going direct. Anything else (a Location naming
+      // some other host) is not followed at all: the Worker never fetches a host the proxy and the
+      // archive did not vouch for, and the caller gets the redirect response instead.
+      if (next.origin === proxy.origin || next.host === "web.archive.org") {
+        target = onProxy(next);
+        continue;
+      }
     }
 
     Object.defineProperty(response, "url", { value: `https://web.archive.org${target.pathname}${target.search}` });
@@ -260,6 +272,27 @@ export type ArchivedPage = {
   contentType: string;
 };
 
+/** Thrown when a caller-supplied page URL would resolve outside `/web/<timestamp>id_/` on web.archive.org. */
+export class CapturePathEscapeError extends Error {}
+
+/**
+ * Builds `https://web.archive.org/web/<timestamp>id_/<url>` and refuses a `url` whose dot-segments
+ * (`../`, `%2e%2e/`) would climb out of the capture path once the URL is normalised — fetch() resolves
+ * those, so `../../save/https://example.org/` would otherwise hit Save Page Now (or any other
+ * web.archive.org endpoint) with the operator's IA S3 credential, from a read-only tool.
+ */
+export function captureRequestUrl(url: string, timestamp: string): string {
+  const prefix = `/web/${timestamp}id_/`;
+  const requestUrl = `https://web.archive.org${prefix}${url}`;
+  const parsed = new URL(requestUrl);
+  if (parsed.host !== "web.archive.org" || !parsed.pathname.startsWith(prefix)) {
+    throw new CapturePathEscapeError(
+      `The url '${url}' is not a plain page URL: it resolves outside the Wayback capture path. Pass the original page's URL, e.g. https://example.org/page.`,
+    );
+  }
+  return requestUrl;
+}
+
 /**
  * Fetches the raw, unrewritten HTML of a capture via the `id_` modifier. Confirmed live: this
  * always 302s to the nearest *actual* capture at or before the requested timestamp — e.g.
@@ -268,7 +301,7 @@ export type ArchivedPage = {
  * agent could cite a date the content isn't actually from.
  */
 export async function fetchArchivedPage(env: Env, url: string, timestamp: string): Promise<ArchivedPage> {
-  const requestUrl = `https://web.archive.org/web/${timestamp}id_/${url}`;
+  const requestUrl = captureRequestUrl(url, timestamp);
   const response = await waybackFetch(env, requestUrl, { redirect: "follow" });
   if (!response.ok) throw new UpstreamHttpError(SOURCE, response);
 

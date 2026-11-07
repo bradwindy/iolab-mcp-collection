@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ckanCacheKey, handleDatagovtError, UpstreamActionError, UpstreamFetchError } from "../src/clients/datagovt.js";
 import { UpstreamHttpError } from "@iolab/mcp-kit";
 
@@ -59,5 +59,23 @@ describe("actionUrl", () => {
     );
     expect(url.toString()).toBe("https://proxy.example.test/__datagovt/api/3/action/datastore_search");
     expect(headers["X-Wayback-Key"]).toBe("k");
+  });
+});
+
+describe("proxy redirect handling", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("never follows a redirect while the proxy key is attached", async () => {
+    const { getDataset } = await import("../src/clients/datagovt.js");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: "https://elsewhere.example.net/" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getDataset({ WAYBACK_PROXY_URL: "https://proxy.example.test", WAYBACK_PROXY_KEY: "k" }, "some-dataset"),
+    ).rejects.toBeInstanceOf(UpstreamHttpError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).redirect).toBe("manual");
   });
 });
