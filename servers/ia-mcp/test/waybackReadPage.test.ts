@@ -114,4 +114,33 @@ describe("ia_wayback_read_page", () => {
     await waybackReadPageHandler({ url: "https://example.org/", timestamp: "20200101" }, env);
     expect(hosts).toEqual(["wayback.example.com", "wayback.example.com"]);
   });
+
+  it("follows the proxy's own absolute http://host:8080 Location back onto the proxy's https origin", async () => {
+    const seen: Array<{ url: string; key: string | null }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(input.toString());
+        seen.push({ url: url.toString(), key: new Headers(init?.headers).get("X-Wayback-Key") });
+        if (seen.length === 1) {
+          // What nginx actually sends: proxy_redirect makes it relative, then absolute_redirect
+          // re-adds the request's Host, the listener's port and the tunnel's plain-http scheme.
+          return Promise.resolve(
+            new Response(null, { status: 302, headers: { location: "http://wayback.example.com:8080/web/20241231120000id_/https://example.org/" } }),
+          );
+        }
+        return Promise.resolve(new Response("<html><body><h1>Followed</h1></body></html>", { status: 200, headers: { "content-type": "text/html" } }));
+      }),
+    );
+    const env = { ...fakeEnv(), WAYBACK_PROXY_URL: "https://wayback.example.com", WAYBACK_PROXY_KEY: "sekrit" } as Env;
+
+    const result = await waybackReadPageHandler({ url: "https://example.org/", timestamp: "2024" }, env);
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent?.actual_timestamp).toBe("20241231120000");
+    expect(seen).toEqual([
+      { url: "https://wayback.example.com/web/2024id_/https://example.org/", key: "sekrit" },
+      { url: "https://wayback.example.com/web/20241231120000id_/https://example.org/", key: "sekrit" },
+    ]);
+  });
 });

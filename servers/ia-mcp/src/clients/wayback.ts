@@ -103,7 +103,10 @@ async function viaProxy(proxyUrl: string, key: string, url: URL, init: RequestIn
       // keep the next hop on the proxy rather than going direct. Anything else (a Location naming
       // some other host) is not followed at all: the Worker never fetches a host the proxy and the
       // archive did not vouch for, and the caller gets the redirect response instead.
-      if (next.origin === proxy.origin || next.host === "web.archive.org") {
+      // nginx turns the proxy's relative Locations into absolute ones on its own listener
+      // (http://<proxy host>:8080/...), so the proxy is matched by hostname and every hop is put
+      // back on the proxy's own https origin. The key never travels over that http:// form.
+      if (next.hostname === proxy.hostname || next.host === "web.archive.org") {
         target = onProxy(next);
         continue;
       }
