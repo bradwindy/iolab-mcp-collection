@@ -5,7 +5,6 @@
   "automergeType": "pr",
   "platformAutomerge": false,
   "ignoreTests": false,
-  "internalChecksFilter": "none",
   "rebaseWhen": "behind-base-branch",
   "lockFileMaintenance": {
     "automerge": false
@@ -28,7 +27,7 @@
     },
     {
       "description": "0.x and 1.0.0 prereleases stay manual, since any bump can break.",
-      "matchCurrentVersion": "/^v?(?:\\^|~|>=|<=)?(?:0(?:\\.|$)|1\\.0\\.0-)/",
+      "matchCurrentVersion": "/^v?(?:0\\.|1\\.0\\.0-)/",
       "automerge": false
     },
     {
