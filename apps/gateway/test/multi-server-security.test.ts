@@ -282,6 +282,48 @@ describe("multi-server OAuth security", () => {
     });
   });
 
+  describe("PKCE S256 enforcement at /authorize", () => {
+    // allowPlainPKCE: false in the provider only rejects the exact string "plain"; these pin that the
+    // gateway itself refuses every other non-S256 shape before a grant can be made.
+    async function authorizeWithPkce(challenge: string | null, method: string | null): Promise<Response> {
+      const client = await registerClient();
+      const [redirectUri] = client.redirect_uris;
+      const authorizeUrl = new URL(`${ORIGIN}/authorize`);
+      authorizeUrl.searchParams.set("response_type", "code");
+      authorizeUrl.searchParams.set("client_id", client.client_id);
+      authorizeUrl.searchParams.set("redirect_uri", redirectUri!);
+      authorizeUrl.searchParams.set("state", crypto.randomUUID());
+      authorizeUrl.searchParams.set("resource", resourceFor("nz-govt"));
+      if (challenge !== null) authorizeUrl.searchParams.set("code_challenge", challenge);
+      if (method !== null) authorizeUrl.searchParams.set("code_challenge_method", method);
+      return exports.default.fetch(
+        new Request(authorizeUrl, { headers: { "Cf-Access-Jwt-Assertion": await signAccessJwt() } }),
+      );
+    }
+
+    it("rejects code_challenge_method=S256 with no code_challenge (the provider would skip PKCE at /token)", async () => {
+      const response = await authorizeWithPkce(null, "S256");
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain("code_challenge");
+    });
+
+    it("rejects a request with neither PKCE parameter", async () => {
+      const response = await authorizeWithPkce(null, null);
+      expect(response.status).toBe(400);
+    });
+
+    it("rejects code_challenge_method=PLAIN (the provider's own check is case-sensitive)", async () => {
+      const response = await authorizeWithPkce("a-plain-challenge-value-that-is-long-enough-43c", "PLAIN");
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain("S256");
+    });
+
+    it("accepts an S256 challenge", async () => {
+      const response = await authorizeWithPkce(await base64UrlSha256("pkce-ok-verifier-1234567890"), "S256");
+      expect(response.status).toBe(200);
+    });
+  });
+
   describe("revokeExistingGrants: false (finding A)", () => {
     it("authorizing the same client_id for a second resource does not revoke the first resource's grant", async () => {
       const client = await registerClient();

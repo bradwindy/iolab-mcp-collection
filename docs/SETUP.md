@@ -113,7 +113,7 @@ too — those must stay reachable without an interactive login.
 |---|---|
 | `/authorize` | Behind Access (interactive login only) |
 | `/{slug}/mcp` (e.g. `/nz-govt/mcp`) | Public (bearer token **or** OAuth token checked in application code) |
-| `/token`, `/register` | Public (machine-to-machine) |
+| `/token`, `/register` | Public (machine-to-machine). Bodies over 16 KiB get a 413, and `/register` allows 20 registrations a minute per client IP (the `REGISTER_RATE_LIMITER` binding in `wrangler.jsonc`) |
 | `/.well-known/oauth-authorization-server` | Public (RFC 8414 discovery) |
 | `/.well-known/oauth-protected-resource*` | Public (RFC 9728 discovery, per path) |
 | `/admin`, `/admin/*` (the portal's dashboard/Connect/credential forms) | Behind the same Access application, **and** authorized again in code — see below |
@@ -255,6 +255,9 @@ Common failures:
 - **`invalid_client` / `redirect_uri mismatch` during the OAuth handshake** — claude.ai registers
   itself as a new DCR client on first connection; if you removed and re-added the connector, it
   registers a new client each time. Expected, not an error, unless it recurs on every request.
+- **`429 too_many_requests` from `/register`** — more than 20 client registrations from one IP in a
+  minute. Wait a minute. Raise `simple.limit` in `apps/gateway/wrangler.jsonc` only if a real client
+  needs it.
 - **A second connector's authorization silently breaks a first one that was working** — this is
   exactly the bug `revokeExistingGrants: false` in `packages/mcp-kit/src/oauth.ts` exists to prevent
   (the OAuth library's default revokes every prior grant for the same user+client on a new grant,
@@ -305,11 +308,21 @@ setup.
 
 `.github/workflows/ci.yml` has a `deploy` job that redeploys the gateway whenever a push lands on
 `main` (after the build/lint/typecheck/test job passes). It's disabled by default in the sense that
-it fails fast without these repo secrets — add them under **Settings → Secrets and variables →
-Actions**:
+it fails fast without these secrets. Store them as **environment secrets**, not repository secrets:
 
-- `CLOUDFLARE_API_TOKEN` — a token scoped to **Workers Scripts: Edit** (account) and
-  **Workers Routes: Edit** (all zones); create one at **My Profile → API Tokens → Create Token**.
+1. **Settings → Environments → New environment**, name it `production` (the deploy job names it).
+2. Under **Deployment branches and tags**, choose **Selected branches and tags** and allow only
+   `main`. Optionally add yourself as a **Required reviewer**.
+3. Add the three secrets below under that environment's **Environment secrets**, and delete any
+   repository-level copies under **Settings → Secrets and variables → Actions**.
+
+Why: the job's `if:` that limits deploys to `main` lives in the workflow file, which anyone who can
+push a branch can edit. Repository secrets are handed to any push or same-repo pull-request run, so a
+branch-only workflow could read them. Environment secrets behind a main-only branch policy cannot be.
+
+- `CLOUDFLARE_API_TOKEN` — a token scoped to **Workers Scripts: Edit** (this account) and
+  **Workers Routes: Edit** on the one zone the gateway uses (not all zones); create one at
+  **My Profile → API Tokens → Create Token**.
 - `CLOUDFLARE_ACCOUNT_ID` — from `wrangler whoami`.
 - `DEPLOY_DOMAIN` — your bare base domain (e.g. `yourdomain.com`), substituted into
   `apps/gateway/wrangler.jsonc`'s `yourdomain.com` route placeholder at deploy time via

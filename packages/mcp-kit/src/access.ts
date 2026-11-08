@@ -67,6 +67,14 @@ function extractAccessJwt(request: Request): string | null {
  * audience), and "email mismatch" are otherwise indistinguishable from the outside.
  */
 export async function verifyAccessJwt(request: Request, env: AccessJwtEnv): Promise<{ email: string } | null> {
+  // Fail closed on missing config: jose skips the audience check entirely when `audience` is
+  // undefined, and only requires *some* aud when it is "", so an unset ACCESS_AUD secret would accept
+  // the operator's Access JWT minted for any other Access application in the same team.
+  if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD || !env.ACCESS_EMAIL) {
+    console.error("[access-jwt] ACCESS_TEAM_DOMAIN, ACCESS_AUD or ACCESS_EMAIL is not set; refusing every request.");
+    return null;
+  }
+
   const token = extractAccessJwt(request);
   if (!token) {
     console.warn("[access-jwt] no Cf-Access-Jwt-Assertion header or CF_Authorization cookie on request.");

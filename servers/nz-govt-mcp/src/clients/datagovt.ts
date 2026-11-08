@@ -174,7 +174,10 @@ async function callAction<T>(env: DatagovtEnv, action: string, query: Record<str
 
   let response: Response;
   try {
-    response = await fetchWithBackoff(url, { headers }, { retryOn: shouldRetryCkanResponse });
+    // Through the proxy, never follow a redirect: fetch would re-send X-Wayback-Key to wherever the
+    // Location points. A 3xx then surfaces as a non-OK upstream error below instead.
+    const redirect: RequestInit["redirect"] = "X-Wayback-Key" in headers ? "manual" : "follow";
+    response = await fetchWithBackoff(url, { headers, redirect }, { retryOn: shouldRetryCkanResponse });
   } catch (error) {
     console.error(
       `[datagovt] ${action} fetch failed:`,

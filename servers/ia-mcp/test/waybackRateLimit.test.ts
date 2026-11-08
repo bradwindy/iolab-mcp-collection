@@ -138,6 +138,41 @@ describe("Wayback rate limiting", () => {
     expect(result.structuredContent?.content).toContain("Via home");
   });
 
+  it("never follows a redirect off the proxy and the archive, so the key never leaves the proxy", async () => {
+    const seen: Array<{ host: string; key: string | null }> = [];
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input.toString());
+      seen.push({ host: url.host, key: new Headers(init?.headers).get("X-Wayback-Key") });
+      if (url.host === "wayback.example.com") {
+        return Promise.resolve(new Response(null, { status: 302, headers: { location: "https://elsewhere.example.net/landing" } }));
+      }
+      return Promise.resolve(new Response("<html><body><h1>Elsewhere</h1></body></html>", { status: 200, headers: { "content-type": "text/html" } }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const env = { ...fakeEnv(), WAYBACK_PROXY_URL: "https://wayback.example.com", WAYBACK_PROXY_KEY: "sekrit" } as Env;
+
+    await waybackReadPageHandler({ url: "https://example.org/", timestamp: "20150101" }, env);
+
+    expect(seen).toEqual([{ host: "wayback.example.com", key: "sekrit" }]);
+  });
+
+  it("does not start the cooldown for a 429 from a host other than web.archive.org", async () => {
+    const foreign429 = () => {
+      const response = tooManyRequests("3600");
+      Object.defineProperty(response, "url", { value: "https://elsewhere.example.net/landing" });
+      return response;
+    };
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(foreign429()));
+    vi.stubGlobal("fetch", fetchMock);
+    const env = fakeEnv();
+
+    await waybackSearchCapturesHandler({ url: "example.org" }, env);
+    await waybackSearchCapturesHandler({ url: "other.example.org" }, env);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await env.MCP_CACHE.get("ia:wayback:cooldown-until")).toBeNull();
+  });
+
   it("puts the proxy's own 429 into the same cooldown", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("rate limited by wayback-proxy", {

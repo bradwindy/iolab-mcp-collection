@@ -71,6 +71,18 @@ describe("nz_stats_query_dataflow", () => {
     expect(result.structuredContent?.version).toBe("latest");
   });
 
+  it("keeps a path-like agency_id, dataflow_id or version inside the /data/ resource segment", async () => {
+    await seedSubscriptionKey(env);
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await queryDataflowHandler({ dataflow_id: "../../dataflow/all/all?x=", agency_id: "../..", version: "1.0/../.." }, env);
+
+    const requested = new URL(String(fetchMock.mock.calls[0]?.[0] as URL | string));
+    expect(requested.pathname).toMatch(/\/data\/[^/]+\/all$/);
+    expect(requested.searchParams.get("x")).toBeNull();
+  });
+
   it("passes through a custom dimension_key, agency_id, and version", async () => {
     await seedSubscriptionKey(env);
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse());

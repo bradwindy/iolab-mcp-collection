@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { attribution, jsonResult, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
-import { queryCdx, waybackError } from "../clients/wayback.js";
+import { attribution, jsonResult, toolError, UpstreamHttpError, type ToolTextResult } from "@iolab/mcp-kit";
+import { CapturePathEscapeError, queryCdx, waybackError } from "../clients/wayback.js";
 import { fetchAndExtractPage } from "../pageFetch.js";
 
 export const waybackDiffCapturesInputShape = {
@@ -88,6 +88,7 @@ export async function waybackDiffCapturesHandler(rawInput: unknown, env: Env): P
       attribution: attribution("Internet Archive Wayback Machine", { url: "https://web.archive.org/" }),
     });
   } catch (error) {
+    if (error instanceof CapturePathEscapeError) return toolError(error.message);
     if (error instanceof UpstreamHttpError) return waybackError(error);
     throw error;
   }

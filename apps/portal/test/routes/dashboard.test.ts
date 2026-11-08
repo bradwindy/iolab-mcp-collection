@@ -15,6 +15,16 @@ describe("GET /admin", () => {
   });
   afterAll(() => resetAccessJwtTesting());
 
+  it("refuses even a valid Access JWT when ACCESS_AUD is unset (fails closed, not open)", async () => {
+    // jose skips the audience check when `audience` is undefined, so without the explicit guard a
+    // missing secret would accept a token minted for any Access application in the same team.
+    for (const missing of ["ACCESS_AUD", "ACCESS_TEAM_DOMAIN", "ACCESS_EMAIL"] as const) {
+      const env = { ...testEnv(), [missing]: undefined };
+      const res = await app.request("/admin", { headers }, env);
+      expect(res.status, missing).toBe(403);
+    }
+  });
+
   it("renders every server in the manifest", async () => {
     const res = await app.request("/admin", { headers }, testEnv());
     const body = await res.text();
