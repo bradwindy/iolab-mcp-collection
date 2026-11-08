@@ -98,8 +98,8 @@ importers:
         specifier: 0.8.1
         version: 0.8.1
       jose:
-        specifier: 6.2.3
-        version: 6.2.3
+        specifier: 6.2.14
+        version: 6.2.14
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -123,8 +123,8 @@ importers:
         version: 4.13.17
     devDependencies:
       jose:
-        specifier: 6.2.3
-        version: 6.2.3
+        specifier: 6.2.14
+        version: 6.2.14
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -1829,6 +1829,9 @@ packages:
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
+  jose@6.2.14:
+    resolution: {integrity: sha512-3JasLuki1NRLQvY4wCoC37KZk4qxoBx2k2aFqLxT84IezqW0bkJKnNtxnZj/Fu1xsQivoc/lytxaRHJoGLjJ1A==}
+
   jose@6.2.3:
     resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
@@ -2969,7 +2972,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
-      jose: 6.2.3
+      jose: 6.2.14
       pkce-challenge: 5.0.1
       zod: 4.6.7
 
@@ -2990,7 +2993,7 @@ snapshots:
       express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.13.17
-      jose: 6.2.3
+      jose: 6.2.14
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
@@ -3705,6 +3708,8 @@ snapshots:
   is-promise@4.0.0: {}
 
   isexe@2.0.0: {}
+
+  jose@6.2.14: {}
 
   jose@6.2.3: {}
 
