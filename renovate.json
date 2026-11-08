@@ -1,10 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Open dependency PRs immediately and automerge only minor, patch, pinDigest, and digest updates after seven days when PR CI has run them. Majors, 0.x, 1.0.0 prereleases, pins, pnpm, Node, lockfile maintenance, security updates, and deploy-only Actions stay manual.",
   "extends": ["config:best-practices", ":semanticCommits"],
-  "dependencyDashboard": true,
   "enabledManagers": ["npm", "github-actions"],
-  "prCreation": "immediate",
   "automergeType": "pr",
   "platformAutomerge": false,
   "ignoreTests": false,
@@ -14,57 +11,35 @@
     "automerge": false
   },
   "vulnerabilityAlerts": {
-    "enabled": true,
     "automerge": false
   },
   "packageRules": [
     {
-      "description": "Open npm and GitHub Actions PRs while renovate/stability-days is still pending, so CI can fail before automerge. This overrides the strict filter from security:minimumReleaseAgeNpm.",
-      "matchManagers": ["npm", "github-actions"],
-      "internalChecksFilter": "none"
-    },
-    {
-      "description": "Automerge only minor, patch, pinDigest, and digest updates after seven days. Pin is intentionally absent.",
+      "description": "Minor, patch and digest updates automerge once the CI build job passes and the release is 7 days old. The build job runs typecheck, lint, workerd tests, build and a wrangler deploy dry run.",
       "matchManagers": ["npm", "github-actions"],
       "matchUpdateTypes": ["minor", "patch", "pinDigest", "digest"],
       "automerge": true,
-      "automergeType": "pr",
-      "platformAutomerge": false,
-      "ignoreTests": false,
-      "minimumReleaseAge": "7 days",
-      "internalChecksFilter": "none"
+      "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Major updates stay manual.",
+      "description": "Majors stay manual.",
       "matchUpdateTypes": ["major"],
       "automerge": false
     },
     {
-      "description": "Pre-1.0 releases and 1.0.0 prereleases stay manual, including patch. A semver range misses prereleases, and GitHub Actions versioning does not apply less-than ranges.",
-      "matchManagers": ["npm", "github-actions"],
+      "description": "0.x and 1.0.0 prereleases stay manual, since any bump can break.",
       "matchCurrentVersion": "/^v?(?:\\^|~|>=|<=)?(?:0(?:\\.|$)|1\\.0\\.0-)/",
       "automerge": false
     },
     {
-      "description": "Pin updates stay manual. They have no release timestamp, so a seven-day age would stay pending forever. The npm preset clears that age, and clearing it would automerge on the first green build.",
+      "description": "Pins have no release date, so the 7-day wait cannot apply. They stay manual.",
       "matchUpdateTypes": ["pin"],
       "automerge": false
     },
     {
-      "description": "CI installs pnpm from the pnpm/action-setup version input. A packageManager-only bump is not the version the workflow runs.",
-      "matchDepNames": ["pnpm"],
-      "automerge": false,
-      "prBodyNotes": [
-        "The PR workflow installs the pnpm version pinned under pnpm/action-setup in .github/workflows/ci.yml. Update that pin and packageManager together so CI actually runs the proposed pnpm."
-      ]
-    },
-    {
-      "description": "Node runtime changes stay manual. A green PR job does not prove the production Worker runtime.",
-      "matchDepNames": ["node"],
-      "automerge": false,
-      "prBodyNotes": [
-        "Node is the CI runtime. Merging it is a reviewed runtime decision. A green PR build is not a production Worker deploy."
-      ]
+      "description": "CI installs pnpm from the pnpm/action-setup version input, and Node is the Worker build runtime. Both stay manual.",
+      "matchDepNames": ["pnpm", "node"],
+      "automerge": false
     }
   ]
 }
