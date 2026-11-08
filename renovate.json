@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices", ":semanticCommits"],
+  "enabledManagers": ["npm", "github-actions"],
+  "automergeType": "pr",
+  "platformAutomerge": false,
+  "ignoreTests": false,
+  "rebaseWhen": "behind-base-branch",
+  "lockFileMaintenance": {
+    "automerge": false
+  },
+  "vulnerabilityAlerts": {
+    "automerge": false
+  },
+  "packageRules": [
+    {
+      "description": "Minor, patch and digest updates automerge once the CI build job passes and the release is 7 days old. The build job runs typecheck, lint, workerd tests, build and a wrangler deploy dry run.",
+      "matchManagers": ["npm", "github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "pinDigest", "digest"],
+      "automerge": true,
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Majors stay manual.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    },
+    {
+      "description": "0.x and 1.0.0 prereleases stay manual, since any bump can break.",
+      "matchCurrentVersion": "/^v?(?:0\\.|1\\.0\\.0-)/",
+      "automerge": false
+    },
+    {
+      "description": "Pins have no release date, so the 7-day wait cannot apply. They stay manual.",
+      "matchUpdateTypes": ["pin"],
+      "automerge": false
+    },
+    {
+      "description": "CI installs pnpm from the pnpm/action-setup version input, and Node is the Worker build runtime. Both stay manual.",
+      "matchDepNames": ["pnpm", "node"],
+      "automerge": false
+    }
+  ]
+}
