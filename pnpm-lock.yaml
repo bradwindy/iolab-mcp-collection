@@ -95,8 +95,8 @@ importers:
         specifier: 0.23.0
         version: 0.23.0(@types/node@22.20.5)(@vitest/runner@4.1.12)(@vitest/snapshot@4.1.12)(vitest@4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(vite@8.1.4(@types/node@22.20.5)(esbuild@0.28.2)(yaml@2.9.0)))
       '@cloudflare/workers-oauth-provider':
-        specifier: 0.8.1
-        version: 0.8.1
+        specifier: 0.10.4
+        version: 0.10.4
       jose:
         specifier: 6.2.15
         version: 6.2.15
@@ -144,8 +144,8 @@ importers:
   packages/mcp-kit:
     dependencies:
       '@cloudflare/workers-oauth-provider':
-        specifier: ^0.8.1
-        version: 0.8.1
+        specifier: ^0.10.0
+        version: 0.10.4
       jose:
         specifier: ^6.2.3
         version: 6.2.15
@@ -681,8 +681,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-oauth-provider@0.8.1':
-    resolution: {integrity: sha512-zB4In0X1O5Vhc+Eb1s3ZP8wiqxLt2Hg1cqkLjZE2qQW1LNc4cOs1YEqYqtIKqG91yEBgpFIMBNYiafHk3OWj4Q==}
+  '@cloudflare/workers-oauth-provider@0.10.4':
+    resolution: {integrity: sha512-KIS54OMew3ZtlnWqbqGYaX+7deCu9CY/lFy5R84VSNYT8W1oPir9ANRmiVTvyUaQL1hCgE0NGXImR6IyZ1VZfw==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2952,7 +2952,7 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20261101.1':
     optional: true
 
-  '@cloudflare/workers-oauth-provider@0.8.1': {}
+  '@cloudflare/workers-oauth-provider@0.10.4': {}
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
