@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.8.1",
+    "@cloudflare/workers-oauth-provider": "0.10.4",
     "jose": "^6.2.3",
     "zod": "^4.6.7"
   },

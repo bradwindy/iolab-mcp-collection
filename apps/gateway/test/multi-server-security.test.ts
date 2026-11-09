@@ -1,5 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { validatePkceS256 } from "@iolab/mcp-kit";
 import { __setAccessJwksResolverForTesting } from "@iolab/mcp-kit/access";
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
 
@@ -283,10 +284,15 @@ describe("multi-server OAuth security", () => {
   });
 
   describe("PKCE S256 enforcement at /authorize", () => {
-    // allowPlainPKCE: false in the provider only rejects the exact string "plain"; these pin that the
-    // gateway itself refuses every other non-S256 shape before a grant can be made.
-    async function authorizeWithPkce(challenge: string | null, method: string | null): Promise<Response> {
-      const client = await registerClient();
+    // These pin that no non-S256 PKCE shape gets a grant. Since workers-oauth-provider 0.10 the library
+    // rejects every non-S256 method itself, and a missing challenge for public clients; validatePkceS256
+    // covers a confidential client with no PKCE at all.
+    async function authorizeWithPkce(
+      challenge: string | null,
+      method: string | null,
+      clientBody: Record<string, unknown> = {},
+    ): Promise<Response> {
+      const client = await registerClient(clientBody);
       const [redirectUri] = client.redirect_uris;
       const authorizeUrl = new URL(`${ORIGIN}/authorize`);
       authorizeUrl.searchParams.set("response_type", "code");
@@ -301,7 +307,7 @@ describe("multi-server OAuth security", () => {
       );
     }
 
-    it("rejects code_challenge_method=S256 with no code_challenge (the provider would skip PKCE at /token)", async () => {
+    it("rejects code_challenge_method=S256 with no code_challenge", async () => {
       const response = await authorizeWithPkce(null, "S256");
       expect(response.status).toBe(400);
       expect(await response.text()).toContain("code_challenge");
@@ -312,10 +318,76 @@ describe("multi-server OAuth security", () => {
       expect(response.status).toBe(400);
     });
 
-    it("rejects code_challenge_method=PLAIN (the provider's own check is case-sensitive)", async () => {
+    // Since workers-oauth-provider 0.10, parseAuthRequest itself rejects any method other than
+    // "plain"/"S256", so this reaches the client as the library's message rather than ours.
+    it("rejects code_challenge_method=PLAIN", async () => {
       const response = await authorizeWithPkce("a-plain-challenge-value-that-is-long-enough-43c", "PLAIN");
       expect(response.status).toBe(400);
-      expect(await response.text()).toContain("S256");
+      expect(await response.text()).toContain("Unsupported PKCE code_challenge_method");
+    });
+
+    it("rejects code_challenge_method=plain", async () => {
+      const response = await authorizeWithPkce("a-plain-challenge-value-that-is-long-enough-43c", "plain");
+      expect(response.status).toBe(400);
+    });
+
+    // The library only rejects a missing challenge for public clients, so a confidential client with
+    // no PKCE is stopped by validatePkceS256 alone. This pins that the handler still calls it.
+    it("rejects a confidential client with neither PKCE parameter", async () => {
+      const response = await authorizeWithPkce(null, null, { token_endpoint_auth_method: "client_secret_basic" });
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain("PKCE with S256 is required");
+    });
+
+    it("rejects a confidential client that drops PKCE between the consent page and POST /authorize", async () => {
+      const client = await registerClient({ token_endpoint_auth_method: "client_secret_basic" });
+      const [redirectUri] = client.redirect_uris;
+      if (!redirectUri) throw new Error("registration response missing redirect_uris");
+      const accessJwt = await signAccessJwt();
+      const authorizeUrl = new URL(`${ORIGIN}/authorize`);
+      authorizeUrl.searchParams.set("response_type", "code");
+      authorizeUrl.searchParams.set("client_id", client.client_id);
+      authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+      authorizeUrl.searchParams.set("state", crypto.randomUUID());
+      authorizeUrl.searchParams.set("resource", resourceFor("nz-govt"));
+      authorizeUrl.searchParams.set("code_challenge", await base64UrlSha256("pkce-dropped-verifier-1234567890"));
+      authorizeUrl.searchParams.set("code_challenge_method", "S256");
+      const consentResponse = await exports.default.fetch(
+        new Request(authorizeUrl, { headers: { "Cf-Access-Jwt-Assertion": accessJwt } }),
+      );
+      expect(consentResponse.status).toBe(200);
+      const csrfToken = extractCsrfToken(consentResponse);
+
+      const approveBody = new URLSearchParams(authorizeUrl.searchParams);
+      approveBody.delete("code_challenge");
+      approveBody.delete("code_challenge_method");
+      approveBody.set("csrf_token", csrfToken);
+      const response = await exports.default.fetch(
+        new Request(`${ORIGIN}/authorize`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            "Cf-Access-Jwt-Assertion": accessJwt,
+            Cookie: `__Host-OAUTH_CSRF=${csrfToken}`,
+          },
+          body: approveBody,
+          redirect: "manual",
+        }),
+      );
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain("PKCE with S256 is required");
+    });
+
+    // The test client is public, so the library rejects the bad requests above before our own check
+    // runs and the end-to-end tests no longer prove validatePkceS256 works. Test it directly.
+    it("validatePkceS256 accepts only an S256 method with a challenge", () => {
+      expect(validatePkceS256("challenge", "S256")).toEqual({ ok: true });
+      expect(validatePkceS256(undefined, "S256").ok).toBe(false);
+      expect(validatePkceS256("", "S256").ok).toBe(false);
+      expect(validatePkceS256("challenge", "PLAIN").ok).toBe(false);
+      expect(validatePkceS256("challenge", "plain").ok).toBe(false);
+      expect(validatePkceS256("challenge", "s256").ok).toBe(false);
+      expect(validatePkceS256("challenge", undefined).ok).toBe(false);
     });
 
     it("accepts an S256 challenge", async () => {
