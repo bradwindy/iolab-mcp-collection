@@ -11,7 +11,7 @@
 // throughout this codebase, e.g. tool handlers' `(rawInput, env: Env)`) and the separate
 // `Cloudflare.Env` (used by `import { env } from "cloudflare:workers"`, which this package's own
 // test files use to reach the gateway's real MCP_CACHE/CREDENTIALS_DB bindings under
-// vitest-pool-workers). They don't merge with each other, so every field is declared on both.
+// vitest-plugin). They don't merge with each other, so every field is declared on both.
 import type { CacheNamespace } from "@iolab/mcp-kit";
 import type { D1LikeDatabase } from "@iolab/credentials";
 
@@ -21,7 +21,7 @@ export {};
  * TTL cache for slow-changing upstream responses (see CACHE_TTL in @iolab/mcp-kit), widened past
  * the plain get/put CacheNamespace shape every other server uses: this server's own test suite
  * (test/helpers/cache.ts's `clearCache`) has to purge MCP_CACHE between tests within the same
- * file, since vitest-pool-workers under Vitest 4 isolates storage per test *file*, not per test —
+ * file, since vitest-plugin under Vitest 4 isolates storage per test *file*, not per test —
  * see that helper's doc comment — which needs the KV list+delete surface a cache-aside get/put
  * interface doesn't.
  */
@@ -35,7 +35,7 @@ type StatsCacheNamespace = CacheNamespace & {
  * widened past the plain `prepare()` D1LikeDatabase shape every other server uses: this server's
  * own test suite (test/helpers/credentials.ts) runs a raw `CREATE TABLE IF NOT EXISTS` via
  * `exec()` against the real D1 binding to mirror the production schema locally, since — like
- * MCP_CACHE above — vitest-pool-workers under Vitest 4 doesn't guarantee a clean table between
+ * MCP_CACHE above — vitest-plugin under Vitest 4 doesn't guarantee a clean table between
  * tests in the same file.
  */
 type StatsCredentialsDb = D1LikeDatabase & {

@@ -1,7 +1,7 @@
 /**
  * Empties the shared MCP_CACHE KV namespace.
  *
- * @cloudflare/vitest-pool-workers isolates storage per test *file* under Vitest 4 (isolated
+ * @cloudflare/vitest-plugin (formerly @cloudflare/vitest-pool-workers) isolates storage per test *file* under Vitest 4 (isolated
  * per-test storage, and the `isolatedStorage`/`singleWorker` options, were removed when the
  * pool moved to Vitest 4 — see
  * https://developers.cloudflare.com/workers/testing/vitest-integration/migration-guides/migrate-from-vitest-3-to-vitest-4/).

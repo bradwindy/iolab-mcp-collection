@@ -5,7 +5,7 @@ const CREATE_TABLE_SQL =
 
 /**
  * Mirrors the production `credentials` table schema (see the nz-mcp-collection shared D1
- * database) inside the local test D1 instance. vitest-pool-workers isolates storage per test
+ * database) inside the local test D1 instance. vitest-plugin isolates storage per test
  * *file*, not per test (Vitest 4), so CREDENTIALS_DB is NOT guaranteed empty here — this uses
  * `CREATE TABLE IF NOT EXISTS` so it's a no-op on later calls within the same file. Any test
  * that queries CREDENTIALS_DB — including ones exercising the "credential not set" path, where

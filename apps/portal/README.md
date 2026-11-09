@@ -48,7 +48,7 @@ local iteration. Don't expose a local dev server publicly.
 
 ## Testing
 
-`pnpm exec vitest run` — plain Vitest (not `@cloudflare/vitest-pool-workers`), using a fake `D1LikeDatabase`
+`pnpm exec vitest run` — plain Vitest (not `@cloudflare/vitest-plugin`), using a fake `D1LikeDatabase`
 matching `@iolab/credentials`' interface (mirrored from `packages/credentials/test/store.test.ts`),
 Hono's own `app.request()` test helper, and a locally-signed Access JWT (`test/support/accessJwt.ts`,
 reusing the same JWKS-override test seam `@iolab/mcp-kit`'s own OAuth tests use) for the `/admin/*`

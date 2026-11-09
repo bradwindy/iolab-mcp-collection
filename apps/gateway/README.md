@@ -28,7 +28,7 @@ pnpm exec wrangler dev
 
 ## Testing
 
-`pnpm exec vitest run` — against a real `workerd` runtime via `@cloudflare/vitest-pool-workers`,
+`pnpm exec vitest run` — against a real `workerd` runtime via `@cloudflare/vitest-plugin`,
 pointed at this package's own `wrangler.jsonc`. `test/oauth.test.ts` and
 `test/multi-server-security.test.ts` are the consolidated OAuth flow and multi-server-specific
 security suites (see their own top comments for what moved from where); `test/bearer.test.ts` and

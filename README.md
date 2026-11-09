@@ -161,7 +161,7 @@ docs/
 TypeScript, [Zod](https://zod.dev) v4 schemas, the official
 [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) via Cloudflare's
 [Agents SDK](https://developers.cloudflare.com/agents/), [Hono](https://hono.dev) for the portal,
-[Vitest](https://vitest.dev) + [`@cloudflare/vitest-pool-workers`](https://developers.cloudflare.com/workers/testing/vitest-integration/)
+[Vitest](https://vitest.dev) + [`@cloudflare/vitest-plugin`](https://developers.cloudflare.com/workers/testing/vitest-integration/)
 for tests (running against a real `workerd` runtime, not mocks, except the portal — see
 [CLAUDE.md](CLAUDE.md)), pnpm workspaces.
 
