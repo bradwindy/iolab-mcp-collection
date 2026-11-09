@@ -7,7 +7,7 @@
 // just the members this server's own code and tests actually use: `DurableObject` (for `this.env`
 // on the agent) and the `env` export (for this package's own test files, which do
 // `import { env } from "cloudflare:workers"` to reach the gateway's real MCP_CACHE/CREDENTIALS_DB
-// bindings under vitest-pool-workers).
+// bindings under vitest-plugin).
 //
 // This has to live in its own file, with no top-level import/export. A `declare module "..."`
 // block written inside a file that's already an ES module (env.d.ts, because of its own

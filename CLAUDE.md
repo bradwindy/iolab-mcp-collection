@@ -17,7 +17,7 @@ pnpm workspace monorepo (`packages/*`, `apps/*`, `servers/*`). Root scripts run 
   after touching its `wrangler.jsonc`; a stale `worker-configuration.d.ts` is a common source of
   false type errors there.
 - `pnpm run test` — per package: `vitest run`. Every package except `apps/portal` runs against a real
-  `workerd` runtime via `@cloudflare/vitest-pool-workers`, not mocks — including `servers/*`, whose
+  `workerd` runtime via `@cloudflare/vitest-plugin`, not mocks — including `servers/*`, whose
   `vitest.config.ts` points `wrangler.configPath` at `../../apps/gateway/wrangler.jsonc` (they have no
   wrangler config of their own; see Architecture). `apps/portal`'s tests run under plain Node vitest
   instead, since its Hono app can be exercised directly via `.request()` with no Workers runtime

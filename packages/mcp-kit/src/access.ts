@@ -4,7 +4,7 @@ import type { JWTVerifyGetKey } from "jose";
 // Deliberately its own module, separate from oauth.ts: that file imports
 // `@cloudflare/workers-oauth-provider`, whose dist bundle does a bare `import ... from
 // "cloudflare:workers"` at module scope. That resolves fine inside a real Worker (or
-// `@cloudflare/vitest-pool-workers`), but breaks any consumer running under plain Node — like the
+// `@cloudflare/vitest-plugin`), but breaks any consumer running under plain Node — like the
 // portal's Hono app tests, which exercise the /admin/* access guard directly via `app.request()`
 // with no Workers runtime at all. `@iolab/mcp-kit`'s main barrel still re-exports oauth.ts (so
 // gateway/server code gets everything from one import), but that pulls in `cloudflare:workers`

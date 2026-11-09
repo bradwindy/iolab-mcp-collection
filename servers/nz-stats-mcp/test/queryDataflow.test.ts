@@ -29,7 +29,7 @@ function jsonResponse() {
 }
 
 describe("nz_stats_query_dataflow", () => {
-  // MCP_CACHE persists across tests within this file (vitest-pool-workers isolates storage
+  // MCP_CACHE persists across tests within this file (vitest-plugin isolates storage
   // per file, not per test, under Vitest 4 — see clearCache's doc comment), so it must be
   // reset between tests that rely on a fresh cache to observe their own fetch mock.
   afterEach(async () => {
