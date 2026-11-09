@@ -173,9 +173,14 @@ export function validateResourceForRegisteredPath(
 }
 
 /**
- * `allowPlainPKCE: false` in the provider only rejects the literal method string "plain": a request
- * with method "PLAIN", or with no code_challenge at all, still gets a code. OAuth 2.1 and the MCP
- * authorization spec both require PKCE with S256, so enforce exactly that here, where the grant is made.
+ * OAuth 2.1 and the MCP authorization spec both require PKCE with S256, so enforce exactly that here,
+ * where the grant is made. Before workers-oauth-provider 0.10, `allowPlainPKCE: false` only rejected
+ * the literal method string "plain", so "PLAIN" or a request with no code_challenge still got a code.
+ * With `allowPlainPKCE: false` the library now rejects every non-S256 method in `parseAuthRequest`
+ * (a challenge with no method counts as plain) and a method with no challenge, but it rejects a
+ * request with no PKCE parameters at all only for public clients (token_endpoint_auth_method "none").
+ * A confidential client sending no PKCE still reaches this check, so it remains the gate for the full
+ * S256 rule.
  */
 export function validatePkceS256(
   codeChallenge: string | undefined,
@@ -575,8 +580,8 @@ export function buildMultiServerOAuthWorker<Env extends OAuthMcpEnv>(
     authorizeEndpoint: "/authorize",
     tokenEndpoint: "/token",
     clientRegistrationEndpoint: "/register",
-    // OAuth 2.1 drops plain PKCE; only advertise S256. This flag alone doesn't enforce it (see
-    // validatePkceS256), so /authorize also rejects anything but an S256 challenge.
+    // OAuth 2.1 drops plain PKCE; only advertise S256. /authorize also re-checks for an S256
+    // challenge itself (see validatePkceS256), so this rule never rests on the library alone.
     allowPlainPKCE: false,
     defaultHandler: createAccessAuthorizeHandler<Env>(portal, registeredResourcePaths),
   });
