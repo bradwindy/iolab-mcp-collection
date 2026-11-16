@@ -1,4 +1,4 @@
-import { env, exports } from "cloudflare:workers";
+import { exports } from "cloudflare:workers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { validatePkceS256 } from "@iolab/mcp-kit";
 import { __setAccessJwksResolverForTesting } from "@iolab/mcp-kit/access";
@@ -109,7 +109,15 @@ describe("multi-server OAuth security", () => {
   });
 
   /** Runs a full DCR-free authorize→token flow for `resource` against `client`, returning the access token. */
-  async function getToken(client: RegisteredClient, resource: string | undefined): Promise<string> {
+  async function getToken(client: RegisteredClient, resource: string): Promise<string> {
+    return (await getTokens(client, resource)).accessToken;
+  }
+
+  /** As `getToken`, but also returns the refresh token. */
+  async function getTokens(
+    client: RegisteredClient,
+    resource: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const [redirectUri] = client.redirect_uris;
     if (!redirectUri) throw new Error("registration response missing redirect_uris");
 
@@ -123,7 +131,7 @@ describe("multi-server OAuth security", () => {
     authorizeUrl.searchParams.set("state", crypto.randomUUID());
     authorizeUrl.searchParams.set("code_challenge", codeChallenge);
     authorizeUrl.searchParams.set("code_challenge_method", "S256");
-    if (resource !== undefined) authorizeUrl.searchParams.set("resource", resource);
+    authorizeUrl.searchParams.set("resource", resource);
 
     const consentResponse = await exports.default.fetch(
       new Request(authorizeUrl, { headers: { "Cf-Access-Jwt-Assertion": accessJwt } }),
@@ -161,9 +169,11 @@ describe("multi-server OAuth security", () => {
         }),
       }),
     );
-    const body = (await tokenResponse.json()) as { access_token?: string };
-    if (!body.access_token) throw new Error(`token endpoint returned no access_token: ${JSON.stringify(body)}`);
-    return body.access_token;
+    const body = (await tokenResponse.json()) as { access_token?: string; refresh_token?: string };
+    if (!body.access_token || !body.refresh_token) {
+      throw new Error(`token endpoint returned no access_token or refresh_token: ${JSON.stringify(body)}`);
+    }
+    return { accessToken: body.access_token, refreshToken: body.refresh_token };
   }
 
   /** Runs GET+POST /authorize (no completed token exchange) and returns the POST response, for
@@ -198,74 +208,70 @@ describe("multi-server OAuth security", () => {
 
       const wrongPathResponse = await pingMcp("nz-geo", token);
       expect(wrongPathResponse.status).toBe(401);
-      expect(wrongPathResponse.headers.get("www-authenticate")).toContain("Invalid audience");
+      expect(wrongPathResponse.headers.get("www-authenticate")).toContain('error="invalid_token"');
 
       const rightPathResponse = await pingMcp("nz-govt", token);
       expect(rightPathResponse.status).not.toBe(401);
     });
 
-    it("PINNED: with enforcement disabled, a token issued without a resource parameter is NOT audience-restricted — usable at every registered path", async () => {
-      // Pins the library's own underlying behaviour (packages/mcp-kit/src/oauth.ts's docstring on
-      // `validateResourceForRegisteredPath`): `handleApiRequest` only checks a token's audience
-      // when the token *has* one. Our own enforcement closes this in the default configuration —
-      // see the "per-path resource enforcement" describe block below — but this test proves the
-      // residual gap the DISABLE_RESOURCE_ENFORCEMENT escape hatch reopens is exactly what its
-      // docstring says it is, so a future library upgrade can't silently change it unnoticed.
-      // `env` (from `cloudflare:workers`) is typed as `Cloudflare.Env`, which only carries the
-      // wrangler.jsonc-declared bindings — not the hand-typed secrets augmenting the global `Env`
-      // in src/env.d.ts. Cast for this one mutable-config test rather than widening that type for
-      // every other consumer of `cloudflare:workers`'s `env`.
-      const mutableEnv = env as unknown as Env;
-      const original = mutableEnv.DISABLE_RESOURCE_ENFORCEMENT;
-      mutableEnv.DISABLE_RESOURCE_ENFORCEMENT = "true";
-      try {
-        const client = await registerClient();
-        const token = await getToken(client, undefined);
+    it("a refresh cannot move a /nz-govt/mcp grant onto /nz-geo/mcp", async () => {
+      const client = await registerClient();
+      const { refreshToken } = await getTokens(client, resourceFor("nz-govt"));
 
-        expect((await pingMcp("nz-govt", token)).status).not.toBe(401);
-        expect((await pingMcp("nz-geo", token)).status).not.toBe(401);
-        expect((await pingMcp("nz-markets", token)).status).not.toBe(401);
-      } finally {
-        if (original === undefined) delete mutableEnv.DISABLE_RESOURCE_ENFORCEMENT;
-        else mutableEnv.DISABLE_RESOURCE_ENFORCEMENT = original;
-      }
+      const response = await exports.default.fetch(
+        new Request(`${ORIGIN}/token`, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: refreshToken,
+            client_id: client.client_id,
+            resource: resourceFor("nz-geo"),
+          }),
+        }),
+      );
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as { access_token?: string }).access_token).toBeUndefined();
     });
   });
 
+  // Since workers-oauth-provider 1.x the library enforces all of these itself: the authorization
+  // server declares each /{slug}/mcp as its own resource, with no default, so parseAuthRequest
+  // refuses anything that does not name exactly one of them.
   describe("per-path resource enforcement at /authorize (finding B)", () => {
     it("rejects a missing resource parameter", async () => {
       const client = await registerClient();
       const response = await attemptAuthorize(client, undefined);
       expect(response.status).toBe(400);
-      expect(await response.text()).toContain("missing 'resource' parameter");
+      expect(await response.text()).toContain("resource parameter is required");
     });
 
     it("rejects multiple resource parameters", async () => {
       const client = await registerClient();
       const response = await attemptAuthorize(client, [resourceFor("nz-govt"), resourceFor("nz-geo")]);
       expect(response.status).toBe(400);
-      expect(await response.text()).toContain("multiple 'resource' parameters");
+      expect(await response.text()).toContain("must name exactly one configured protected resource");
     });
 
     it("rejects a cross-origin resource", async () => {
       const client = await registerClient();
       const response = await attemptAuthorize(client, ["https://attacker.example.com/nz-govt/mcp"]);
       expect(response.status).toBe(400);
-      expect(await response.text()).toContain("does not match this server");
+      expect(await response.text()).toContain("must name exactly one configured protected resource");
     });
 
     it("rejects an origin-only resource (no path)", async () => {
       const client = await registerClient();
       const response = await attemptAuthorize(client, [ORIGIN]);
       expect(response.status).toBe(400);
-      expect(await response.text()).toContain("origin-only");
+      expect(await response.text()).toContain("must name exactly one configured protected resource");
     });
 
     it("rejects a resource path that isn't a registered server", async () => {
       const client = await registerClient();
       const response = await attemptAuthorize(client, [`${ORIGIN}/not-a-real-server/mcp`]);
       expect(response.status).toBe(400);
-      expect(await response.text()).toContain("is not a registered MCP server");
+      expect(await response.text()).toContain("must name exactly one configured protected resource");
     });
 
     it("accepts a resource exactly matching a registered server path", async () => {
@@ -318,8 +324,8 @@ describe("multi-server OAuth security", () => {
       expect(response.status).toBe(400);
     });
 
-    // Since workers-oauth-provider 0.10, parseAuthRequest itself rejects any method other than
-    // "plain"/"S256", so this reaches the client as the library's message rather than ours.
+    // parseAuthRequest itself rejects any method other than S256 (1.2 removed plain entirely), so
+    // this reaches the client as the library's message rather than ours.
     it("rejects code_challenge_method=PLAIN", async () => {
       const response = await authorizeWithPkce("a-plain-challenge-value-that-is-long-enough-43c", "PLAIN");
       expect(response.status).toBe(400);

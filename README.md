@@ -50,7 +50,7 @@ research questions it can answer.
                             https://mcp.yourdomain.com
                     ┌───────────────────▼───────────────────────┐
                     │              apps/gateway                   │
-                    │   ONE Worker · ONE OAuthProvider             │
+                    │   ONE Worker · ONE OAuth authorization server│
                     │                                              │
                     │   /authorize /token /register /.well-known/* │
                     │   /{slug}/mcp  ×9  (bearer OR OAuth token,   │
@@ -79,8 +79,8 @@ research questions it can answer.
 ```
 
 - **Gateway** (`apps/gateway`): the one deployed Worker. Owns the `wrangler.jsonc`, the one shared
-  `@cloudflare/workers-oauth-provider` instance (`buildMultiServerOAuthWorker`,
-  `packages/mcp-kit/src/oauth.ts`), and the Durable Object bindings for every registered server.
+  `@cloudflare/workers-oauth-provider` authorization server with a resource server per MCP path
+  (`buildMultiServerOAuthWorker`, `packages/mcp-kit/src/oauth.ts`), and the Durable Object bindings for every registered server.
   Replaces what used to be eight independent Workers (one portal + seven servers), each with its own
   OAuth authorization server and `OAUTH_KV` namespace.
 - **Portal** (`apps/portal`): mounted by the gateway under `/admin/*`, not its own deployable Worker.

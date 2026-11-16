@@ -20,8 +20,3 @@ ACCESS_AUD=replace-with-the-authorize-access-application-aud-tag
 # Shown on the Connect page as a reminder of who Cloudflare Access allows through, and the one
 # email verifyAccessJwt accepts.
 ACCESS_EMAIL=you@example.com
-
-# Leave unset. Only set to the exact string "true" during cutover if a real OAuth client turns out
-# not to send an RFC 8707 `resource` parameter the way claude.ai is expected to — see
-# packages/mcp-kit/src/oauth.ts's OAuthMcpEnv docstring.
-# DISABLE_RESOURCE_ENFORCEMENT=true

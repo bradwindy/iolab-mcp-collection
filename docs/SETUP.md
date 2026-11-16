@@ -157,7 +157,6 @@ This is the **entire** secrets table now — one Worker, set once, not once per 
 | `ACCESS_TEAM_DOMAIN` | Verify the Access JWT's issuer (shared by `/authorize` and `/admin/*`) |
 | `ACCESS_AUD` | Verify the Access JWT's audience |
 | `ACCESS_EMAIL` | The one operator email `/authorize` and `/admin/*` accept |
-| `DISABLE_RESOURCE_ENFORCEMENT` | Leave unset — see §7 below |
 | `WAYBACK_PROXY_URL` / `WAYBACK_PROXY_KEY` | Optional. Route ia-mcp's Wayback Machine calls through a home proxy, since Wayback rate-limits Cloudflare IPs. Leave unset to call Wayback directly. See `servers/ia-mcp/README.md` |
 
 ### If a custom domain's certificate gets stuck on "pending validation"
@@ -210,15 +209,16 @@ collection is built for one operator; it does not support authorizing multiple d
 
 Collapsing eight Workers into one removes the isolation the old layout had "for free": each server
 used to have its **own** `OAUTH_KV`, so a leak or bug in one server's OAuth storage couldn't touch
-another's issued tokens. One shared authorization server means one shared token store now — the
-`/authorize` endpoint mitigates this by requiring an RFC 8707 `resource` parameter naming exactly one
-registered server, and rejecting a token whose `resource` doesn't match the server it's used against
-(cross-origin, origin-only, missing, multiple, or unregistered-path `resource` values are all
-rejected with a 400 before a grant is even created). claude.ai sends this parameter; this is not
-something you need to configure. If a real client turns out not to send it, set
-`DISABLE_RESOURCE_ENFORCEMENT=true` via `wrangler secret put` as a cutover escape hatch — but every
-`/authorize` request logs the raw `resource` value(s) it observed regardless, specifically so you can
-confirm the assumption from Workers Logs before ever needing that escape hatch.
+another's issued tokens. One shared authorization server means one shared token store now. It
+mitigates this by treating each `/{slug}/mcp` URL as its own RFC 8707 resource: `/authorize` requires
+a `resource` parameter naming exactly one registered server (cross-origin, origin-only, missing,
+several different, or unregistered-path values are all rejected with a 400 before a grant is created), and
+each server accepts only tokens issued for its own URL. claude.ai and Cursor send this parameter;
+this is not something you need to configure. Every `/authorize` request logs the raw `resource`
+value(s) it observed, so a client that doesn't send one shows up in Workers Logs.
+
+If you upgraded from a release that had a `DISABLE_RESOURCE_ENFORCEMENT` secret, it no longer does
+anything: `wrangler secret delete DISABLE_RESOURCE_ENFORCEMENT`.
 
 ## 8. Verification / troubleshooting
 

@@ -19,7 +19,7 @@ const CREDENTIALS_SCHEMA = `
 
 // The portal itself has a thorough unit-level test suite (apps/portal/test/**) exercising its Hono
 // app directly via `.request()`. These are lighter integration checks that the mount actually works
-// through the REAL composed fetch handler — OAuthProvider's defaultHandler routing, not a shortcut —
+// through the REAL composed fetch handler — buildMultiServerOAuthWorker's routing, not a shortcut —
 // since that's the one thing the portal's own tests can't see.
 const ORIGIN = "https://mcp.example.com";
 const ACCESS_TEAM_DOMAIN = "test-team.cloudflareaccess.com";
@@ -80,9 +80,9 @@ describe("portal mounted in the gateway", () => {
         body: new URLSearchParams({ grant_type: "authorization_code", code: "bogus" }),
       }),
     );
-    // Reaches the OAuth provider's token endpoint (which rejects the bogus code), not the portal's
-    // 404 page — proves apiHandlers/well-known/token/register routing takes priority over the
-    // portal defaultHandler mount, exactly as buildMultiServerOAuthWorker intends.
+    // Reaches the authorization server's token endpoint (which rejects the bogus code), not the
+    // portal's 404 page — proves MCP/well-known/token/register routing takes priority over the
+    // portal, exactly as buildMultiServerOAuthWorker intends.
     expect(response.status).not.toBe(404);
   });
 });

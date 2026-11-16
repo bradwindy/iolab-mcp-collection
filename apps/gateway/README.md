@@ -12,7 +12,7 @@ The one deployed Cloudflare Worker for the whole collection. Owns:
   `wrangler.jsonc`'s `durable_objects.bindings[].class_name` must resolve against a top-level export
   of this module.
 - `src/env.d.ts` — the one place every secret (`MCP_SHARED_TOKEN`, `PORTAL_URL`, `ENCRYPTION_KEY`,
-  `BASE_DOMAIN`, `ACCESS_*`, `DISABLE_RESOURCE_ENFORCEMENT`) is hand-typed. No `servers/*` package or
+  `BASE_DOMAIN`, `ACCESS_*`, `WAYBACK_PROXY_*`) is hand-typed. No `servers/*` package or
   `apps/portal` declares these anymore — see [`CLAUDE.md`](../../CLAUDE.md) for the full split.
 
 See [`docs/SETUP.md`](../../docs/SETUP.md) for provisioning and deploying your own instance, and the
@@ -25,6 +25,10 @@ pnpm exec wrangler types
 cp .dev.vars.example .dev.vars   # fill in real values — never commit .dev.vars
 pnpm exec wrangler dev
 ```
+
+`wrangler dev` serves **https** (`dev.local_protocol` in `wrangler.jsonc`), at `https://localhost:8787`
+with a self-signed certificate (`curl -k`). The OAuth library refuses a plain-http issuer on any host
+but localhost, and the Worker sees the route's hostname here, so plain http would only redirect.
 
 ## Testing
 

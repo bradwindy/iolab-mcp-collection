@@ -639,8 +639,38 @@ describe("path routing", () => {
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
       }),
     );
-    // Not a registered apiHandler path or the OAuth provider's own routes: falls through to the
-    // portal's Hono app (mounted as defaultHandler), whose own notFound handler renders a 404.
+    // Not a registered MCP path or an authorization-server route: falls through to the portal's
+    // Hono app, whose own notFound handler renders a 404.
     expect(response.status).toBe(404);
+  });
+
+  // workers-oauth-provider 1.x refuses a non-https issuer, so plain http on the real hostname must be
+  // redirected before the OAuth roles are built, not crash with a 500.
+  it("redirects plain http to https instead of failing", async () => {
+    for (const path of ["/", "/.well-known/oauth-authorization-server", "/nz-govt/mcp"]) {
+      const response = await exports.default.fetch(new Request(`http://mcp.example.com${path}`, { redirect: "manual" }));
+      expect(response.status).toBe(308);
+      expect(response.headers.get("location")).toBe(`https://mcp.example.com${path}`);
+    }
+  });
+
+  it("redirects plain http even when it carries the shared token", async () => {
+    const response = await exports.default.fetch(
+      new Request("http://mcp.example.com/nz-govt/mcp", {
+        method: "POST",
+        headers: { authorization: "Bearer test-shared-token", "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+        redirect: "manual",
+      }),
+    );
+    expect(response.status).toBe(308);
+  });
+
+  it("serves OAuth over plain http on loopback, for wrangler dev", async () => {
+    const response = await exports.default.fetch(new Request("http://localhost:8787/nz-govt/mcp"));
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain(
+      'resource_metadata="http://localhost:8787/.well-known/oauth-protected-resource/nz-govt/mcp"',
+    );
   });
 });

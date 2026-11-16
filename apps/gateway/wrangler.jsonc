@@ -54,5 +54,9 @@
     { "name": "REGISTER_RATE_LIMITER", "namespace_id": "4201", "simple": { "limit": 20, "period": 60 } }
   ],
   "routes": [{ "pattern": "mcp.yourdomain.com", "custom_domain": true }],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // `wrangler dev` serves https so the Worker sees an https URL. workers-oauth-provider 1.x refuses
+  // a plain-http issuer on any non-loopback host, and under `wrangler dev` the Worker sees the route's
+  // hostname, not localhost, so plain http would only ever hit the http->https redirect.
+  "dev": { "local_protocol": "https" }
 }

@@ -1,4 +1,4 @@
-import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
+import { OAuthAuthorizationServer, OAuthResourceServer } from "@cloudflare/workers-oauth-provider";
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { bearerTokenMatches } from "./auth.js";
 import { verifyAccessJwt } from "./access.js";
@@ -20,15 +20,12 @@ export interface OAuthMcpEnv extends AccessJwtEnv {
   // never calls its methods itself, so (matching CacheNamespace's minimal-structural-type
   // convention above) it isn't worth depending on @cloudflare/workers-types just to name it.
   OAUTH_KV: unknown;
-  OAUTH_PROVIDER: OAuthHelpers;
   /**
-   * Escape hatch for cutover: set to the exact string `"true"` to disable the per-path `resource`
-   * enforcement in `/authorize` (see `validateResourceForRegisteredPath`) if a real client turns
-   * out not to send an RFC 8707 `resource` parameter the way claude.ai is expected to. Unset (the
-   * default) enforces it. Every `/authorize` request logs the raw `resource` value(s) it observed
-   * regardless of this flag, so the first real connector attempt confirms the assumption either way.
+   * Set by `buildMultiServerOAuthWorker` on the env it hands the `/authorize` handler only (from
+   * `OAuthAuthorizationServer.getOAuthApi`). Never set on the env MCP agents see, so
+   * optional here: only `/authorize` code (typed with `AuthorizeEnv`) may rely on it.
    */
-  DISABLE_RESOURCE_ENFORCEMENT?: string;
+  OAUTH_PROVIDER?: OAuthHelpers;
   /**
    * Optional Workers Rate Limiting binding (`ratelimits` in wrangler.jsonc) applied per client IP
    * to anonymous `POST /register`. Each registration is a 90-day `OAUTH_KV` write, so without it
@@ -41,6 +38,12 @@ export interface OAuthMcpEnv extends AccessJwtEnv {
 export interface RateLimiterLike {
   limit(options: { key: string }): Promise<{ success: boolean }>;
 }
+
+/** The authorization server's endpoints. Kept at their 0.x paths, so advertised metadata is unchanged. */
+const AUTHORIZE_ENDPOINT = "/authorize";
+const TOKEN_ENDPOINT = "/token";
+const REGISTRATION_ENDPOINT = "/register";
+const AUTHORIZATION_SERVER_METADATA_PATH = "/.well-known/oauth-authorization-server";
 
 /**
  * Largest body accepted on the anonymous `POST /token` and `POST /register` endpoints. Real
@@ -91,11 +94,11 @@ function oauthErrorResponse(status: number, error: string, description: string):
 async function guardAnonymousOAuthPost(
   request: Request,
   env: OAuthMcpEnv,
-  pathname: "/token" | "/register",
+  pathname: typeof TOKEN_ENDPOINT | typeof REGISTRATION_ENDPOINT,
 ): Promise<Request | Response> {
   // Cloudflare's edge always sets CF-Connecting-IP and overwrites any client value.
   const clientIp = request.headers.get("CF-Connecting-IP");
-  if (pathname === "/register" && env.REGISTER_RATE_LIMITER && clientIp) {
+  if (pathname === REGISTRATION_ENDPOINT && env.REGISTER_RATE_LIMITER && clientIp) {
     const { success } = await env.REGISTER_RATE_LIMITER.limit({ key: clientIp });
     if (!success) return oauthErrorResponse(429, "too_many_requests", "Too many client registrations. Try again in a minute.");
   }
@@ -106,7 +109,7 @@ async function guardAnonymousOAuthPost(
   return new Request(request, { body });
 }
 
-type AuthorizeEnv = AccessJwtEnv & { OAUTH_PROVIDER: OAuthHelpers; DISABLE_RESOURCE_ENFORCEMENT?: string };
+type AuthorizeEnv = AccessJwtEnv & { OAUTH_PROVIDER: OAuthHelpers };
 
 const CSRF_COOKIE_NAME = "__Host-OAUTH_CSRF";
 
@@ -131,56 +134,12 @@ function generateFlowRef(): string {
 }
 
 /**
- * Guards the finding that one shared authorization server now covers every `/{slug}/mcp` path:
- * `handleApiRequest` only checks a token's audience when the token *has* one, which requires the
- * client to have sent an RFC 8707 `resource` parameter — and even then, `audienceMatches` treats an
- * origin-only audience (no path) as matching every path (`pathname === "/" || pathname === ""`).
- * Neither the OAuth spec nor the library forces a client to pick a specific, correctly-scoped
- * `resource`, so this enforces it ourselves at the one place a request can supply it: `/authorize`.
- * Requires exactly one `resource`, same-origin, whose path is one of the servers actually
- * registered — otherwise a token minted here would be usable at every other server in the fleet.
- */
-export function validateResourceForRegisteredPath(
-  resource: string | string[] | undefined,
-  requestOrigin: string,
-  registeredResourcePaths: ReadonlySet<string>,
-): { ok: true } | { ok: false; reason: string } {
-  if (resource === undefined) {
-    return { ok: false, reason: "missing 'resource' parameter — must name exactly one registered MCP server" };
-  }
-  if (Array.isArray(resource)) {
-    return { ok: false, reason: "multiple 'resource' parameters — must name exactly one registered MCP server" };
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(resource);
-  } catch {
-    return { ok: false, reason: `'resource' is not an absolute URI: ${resource}` };
-  }
-  if (parsed.origin !== requestOrigin) {
-    return { ok: false, reason: `'resource' origin (${parsed.origin}) does not match this server (${requestOrigin})` };
-  }
-  if (parsed.pathname === "/" || parsed.pathname === "") {
-    return {
-      ok: false,
-      reason: "'resource' is origin-only (no path) — this library treats that as matching every server's path",
-    };
-  }
-  if (!registeredResourcePaths.has(parsed.pathname)) {
-    return { ok: false, reason: `'resource' path (${parsed.pathname}) is not a registered MCP server` };
-  }
-  return { ok: true };
-}
-
-/**
  * OAuth 2.1 and the MCP authorization spec both require PKCE with S256, so enforce exactly that here,
- * where the grant is made. Before workers-oauth-provider 0.10, `allowPlainPKCE: false` only rejected
- * the literal method string "plain", so "PLAIN" or a request with no code_challenge still got a code.
- * With `allowPlainPKCE: false` the library now rejects every non-S256 method in `parseAuthRequest`
- * (a challenge with no method counts as plain) and a method with no challenge, but it rejects a
- * request with no PKCE parameters at all only for public clients (token_endpoint_auth_method "none").
- * A confidential client sending no PKCE still reaches this check, so it remains the gate for the full
- * S256 rule.
+ * where the grant is made. Since workers-oauth-provider 1.2 the library refuses every method other
+ * than S256 (a challenge with no method counts as plain) and a method with no challenge, but it
+ * refuses a request with no PKCE parameters at all only for public clients (token_endpoint_auth_method
+ * "none"). A confidential client sending no PKCE still reaches this check, so it remains the gate for
+ * the full S256 rule.
  */
 export function validatePkceS256(
   codeChallenge: string | undefined,
@@ -205,10 +164,9 @@ export function validatePkceS256(
  * a `__Host-` cookie set on this response and echoed back as a hidden field on submit — the "double
  * submit cookie" pattern) additionally stops a forged cross-site POST from skipping the click entirely.
  */
-async function renderAuthorizeConsent<Env extends AuthorizeEnv>(
+async function renderAuthorizeConsent(
   request: Request,
-  env: Env,
-  registeredResourcePaths: ReadonlySet<string>,
+  env: AuthorizeEnv,
 ): Promise<Response> {
   const ref = generateFlowRef();
   const url = new URL(request.url);
@@ -223,14 +181,6 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(
       `Invalid authorization request: ${err instanceof Error ? err.message : "unknown error"} (ref: ${ref})`,
       { status: 400 },
     );
-  }
-
-  if (env.DISABLE_RESOURCE_ENFORCEMENT !== "true") {
-    const resourceCheck = validateResourceForRegisteredPath(oauthReqInfo.resource, url.origin, registeredResourcePaths);
-    if (!resourceCheck.ok) {
-      console.error(`[authorize:${ref}] GET: rejected — ${resourceCheck.reason}`);
-      return new Response(`Invalid authorization request: ${resourceCheck.reason} (ref: ${ref})`, { status: 400 });
-    }
   }
 
   const pkceCheck = validatePkceS256(oauthReqInfo.codeChallenge, oauthReqInfo.codeChallengeMethod);
@@ -324,11 +274,10 @@ async function renderAuthorizeConsent<Env extends AuthorizeEnv>(
 }
 
 /** Completes `POST /authorize` after the consent form is submitted: validates the CSRF token, then grants. */
-async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
+async function completeAuthorizeConsent(
   request: Request,
-  env: Env,
+  env: AuthorizeEnv,
   identity: { email: string },
-  registeredResourcePaths: ReadonlySet<string>,
 ): Promise<Response> {
   const formData = await request.formData();
   const flowRefField = formData.get("flow_ref");
@@ -372,6 +321,8 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
   }
   console.log(`[authorize:${ref}] POST: resource param(s) observed:`, JSON.stringify(reconstructedUrl.searchParams.getAll("resource")));
 
+  // Re-parsed here, not trusted from the GET: every hidden field is client-controlled. The library's
+  // parseAuthRequest re-checks the `resource` (exactly one registered server) and the redirect URI.
   let oauthReqInfo: AuthRequest;
   try {
     oauthReqInfo = await env.OAUTH_PROVIDER.parseAuthRequest(new Request(reconstructedUrl));
@@ -381,20 +332,6 @@ async function completeAuthorizeConsent<Env extends AuthorizeEnv>(
       `Invalid authorization request: ${err instanceof Error ? err.message : "unknown error"} (ref: ${ref})`,
       { status: 400 },
     );
-  }
-
-  // Re-validated here, not just on GET: the hidden `resource` field is client-controlled and could
-  // be tampered with between the two requests (a scripted client can skip rendering the page at all).
-  if (env.DISABLE_RESOURCE_ENFORCEMENT !== "true") {
-    const resourceCheck = validateResourceForRegisteredPath(
-      oauthReqInfo.resource,
-      new URL(request.url).origin,
-      registeredResourcePaths,
-    );
-    if (!resourceCheck.ok) {
-      console.error(`[authorize:${ref}] POST: rejected — ${resourceCheck.reason}`);
-      return new Response(`Invalid authorization request: ${resourceCheck.reason} (ref: ${ref})`, { status: 400 });
-    }
   }
 
   const pkceCheck = validatePkceS256(oauthReqInfo.codeChallenge, oauthReqInfo.codeChallengeMethod);
@@ -482,7 +419,7 @@ function renderRedirectPage(redirectTo: string, ref: string): Response {
 }
 
 /**
- * The OAuth provider's `defaultHandler`: serves `/authorize`, gated by the one Cloudflare Access
+ * Everything `buildMultiServerOAuthWorker` doesn't route to an OAuth role: serves `/authorize`, gated by the one Cloudflare Access
  * application scoped to that path, and delegates every other non-API path (the portal UI, and
  * anything else) to `portal`. `GET /authorize` renders a consent page (see `renderAuthorizeConsent`);
  * `POST /authorize` (the page's own form submit) completes the grant. Access authentication is
@@ -491,16 +428,15 @@ function renderRedirectPage(redirectTo: string, ref: string): Response {
  * `docs/SETUP.md` — this hostname can no longer be entirely covered by one Access application, since
  * `/token`, `/register`, and `/.well-known/*` must stay public for machine-to-machine calls).
  */
-export function createAccessAuthorizeHandler<Env extends AuthorizeEnv>(
+export function createAccessAuthorizeHandler<Env extends AccessJwtEnv & { OAUTH_PROVIDER?: OAuthHelpers }>(
   portal: { fetch(request: Request, env: Env, ctx: unknown): Response | Promise<Response> },
-  registeredResourcePaths: ReadonlySet<string>,
 ): {
   fetch(request: Request, env: Env, ctx: unknown): Promise<Response>;
 } {
   return {
     async fetch(request, env, ctx) {
       const url = new URL(request.url);
-      if (url.pathname !== "/authorize") {
+      if (url.pathname !== AUTHORIZE_ENDPOINT) {
         return portal.fetch(request, env, ctx);
       }
 
@@ -517,8 +453,15 @@ export function createAccessAuthorizeHandler<Env extends AuthorizeEnv>(
         });
       }
 
-      if (request.method === "GET") return renderAuthorizeConsent(request, env, registeredResourcePaths);
-      if (request.method === "POST") return completeAuthorizeConsent(request, env, identity, registeredResourcePaths);
+      const helpers = env.OAUTH_PROVIDER;
+      if (!helpers) {
+        // buildMultiServerOAuthWorker sets this for /authorize; reaching here without it is a wiring bug.
+        console.error("[authorize] OAUTH_PROVIDER is not set on this request's env.");
+        return new Response("Server error: OAuth is not configured for this request.", { status: 500 });
+      }
+      const authorizeEnv: AuthorizeEnv = { ...env, OAUTH_PROVIDER: helpers };
+      if (request.method === "GET") return renderAuthorizeConsent(request, authorizeEnv);
+      if (request.method === "POST") return completeAuthorizeConsent(request, authorizeEnv, identity);
       return new Response("Method not allowed", { status: 405 });
     },
   };
@@ -548,22 +491,64 @@ export interface McpServerRegistration<Env> {
   binding: string;
 }
 
+/** The OAuth roles for one origin: the shared authorization server and one resource server per MCP path. */
+interface OAuthRoles<Env> {
+  authorizationServer: OAuthAuthorizationServer<Env>;
+  /** Keyed by `/{slug}/mcp`. */
+  resourceServers: Map<string, OAuthResourceServer<Env, OAuthProps>>;
+}
+
+/** Paths the authorization server itself answers (RFC 8414 metadata, token and revocation, DCR). */
+const AUTHORIZATION_SERVER_PATHS: ReadonlySet<string> = new Set([
+  AUTHORIZATION_SERVER_METADATA_PATH,
+  TOKEN_ENDPOINT,
+  REGISTRATION_ENDPOINT,
+]);
+const PROTECTED_RESOURCE_METADATA_PREFIX = "/.well-known/oauth-protected-resource";
+
+/** Most origins the roles cache keeps. Production serves one; this only stops unbounded growth. */
+const MAX_CACHED_ORIGINS = 4;
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "[::1]" || /^127\.\d+\.\d+\.\d+$/.test(hostname);
+}
+
+/** `/{slug}/mcp` that `pathname` is, or sits under (`/{slug}/mcp/...`), if any. */
+function findMcpPath(pathname: string, mcpPaths: Iterable<string>): string | undefined {
+  for (const mcpPath of mcpPaths) {
+    if (pathname === mcpPath || pathname.startsWith(`${mcpPath}/`)) return mcpPath;
+  }
+  return undefined;
+}
+
 /**
  * Wraps every MCP server's `McpAgent` class with one shared OAuth 2.1 + PKCE authorization server
- * (via `@cloudflare/workers-oauth-provider`), path-routed at `/{slug}/mcp`, while preserving the
+ * (via `@cloudflare/workers-oauth-provider` 1.x), path-routed at `/{slug}/mcp`, while preserving the
  * existing static bearer token for server-to-server clients (Claude Code) that can't complete an
  * interactive login. Requests to a registered `/{slug}/mcp` path carrying the exact
- * `MCP_SHARED_TOKEN` bypass the OAuth provider entirely; every other request — including a
- * token-less or wrong-token request to one of those paths — flows through the provider, which
- * returns the spec-correct `401 + WWW-Authenticate: Bearer resource_metadata=…` (path-suffixed per
- * RFC 9728, derived automatically per request by the library — no per-server config needed) that
- * triggers claude.ai's OAuth handshake, and serves `/token`, `/register`, `/authorize`, and the
- * `.well-known` discovery documents — all shared, at the hostname root, across every server.
+ * `MCP_SHARED_TOKEN` bypass OAuth entirely.
  *
- * One authorization server for every server means one token store (`OAUTH_KV`): a bug or leak in
- * OAuth storage is no longer isolated per server, unlike the previous one-Worker-per-server layout.
- * The per-path `resource`/audience enforcement in `createAccessAuthorizeHandler` is what partially
- * replaces that isolation — see its docstring and `docs/SETUP.md`.
+ * The library's role classes do the rest. One `OAuthAuthorizationServer` declares every
+ * `https://<host>/{slug}/mcp` as a separate resource, and serves `/token`, `/register` and
+ * `/.well-known/oauth-authorization-server`. Each path gets its own `OAuthResourceServer`, which
+ * publishes `/.well-known/oauth-protected-resource/{slug}/mcp`, answers a token-less request with
+ * `401 + WWW-Authenticate: Bearer resource_metadata=…` (what triggers claude.ai's OAuth handshake),
+ * and accepts only tokens whose audience is exactly its own resource. `/authorize` and the portal
+ * are `createAccessAuthorizeHandler`.
+ *
+ * Per-server token isolation therefore comes from the library: `parseAuthRequest` and
+ * `completeAuthorization` refuse an authorization whose `resource` is missing, repeated with
+ * different values, or not one declared server (an origin-only value covers none of them), and each
+ * resource server refuses another server's token. This replaced a hand-written check on 0.x, whose
+ * single `OAuthProvider` treated an origin-only audience as valid on every path.
+ *
+ * Why not one `OAuthProvider` with an origin-wide resource: in 1.x a token's audience is compared
+ * exactly, and every grant made under 0.x carries its own `/{slug}/mcp` path. An origin resource
+ * would sign out every existing connector and make each new token valid on every server.
+ *
+ * The roles are built per origin, because the hostname is a secret read only at request time.
+ * One token store (`OAUTH_KV`) still serves every server, so a bug or leak in OAuth storage is not
+ * isolated per server — see `docs/SETUP.md`.
  */
 export function buildMultiServerOAuthWorker<Env extends OAuthMcpEnv>(
   servers: readonly McpServerRegistration<Env>[],
@@ -573,32 +558,106 @@ export function buildMultiServerOAuthWorker<Env extends OAuthMcpEnv>(
   const mcpHandlers = new Map<string, ReturnType<McpAgentClass<Env>["serve"]>>(
     servers.map((s) => [`/${s.slug}/mcp`, s.agent.serve(`/${s.slug}/mcp`, { binding: s.binding })]),
   );
-  const registeredResourcePaths = new Set(mcpHandlers.keys());
+  const authorizeHandler = createAccessAuthorizeHandler<Env>(portal);
+  const rolesByOrigin = new Map<string, OAuthRoles<Env>>();
 
-  const provider = new OAuthProvider<Env>({
-    apiHandlers: Object.fromEntries(mcpHandlers),
-    authorizeEndpoint: "/authorize",
-    tokenEndpoint: "/token",
-    clientRegistrationEndpoint: "/register",
-    // OAuth 2.1 drops plain PKCE; only advertise S256. /authorize also re-checks for an S256
-    // challenge itself (see validatePkceS256), so this rule never rests on the library alone.
-    allowPlainPKCE: false,
-    defaultHandler: createAccessAuthorizeHandler<Env>(portal, registeredResourcePaths),
-  });
+  function rolesFor(origin: string): OAuthRoles<Env> {
+    const cached = rolesByOrigin.get(origin);
+    if (cached) {
+      // Re-insert on every hit, so Map order is least-recently-used first.
+      rolesByOrigin.delete(origin);
+      rolesByOrigin.set(origin, cached);
+      return cached;
+    }
+    const resources = [...mcpHandlers.keys()].map((path) => `${origin}${path}`);
+    const authorizationServer = new OAuthAuthorizationServer<Env>({
+      issuer: origin,
+      resources,
+      // No defaultResource: an authorization request must name its server. No legacyGrantResource:
+      // every production grant made under 0.x already carries one (checked 2026-11-16).
+      authorizeEndpoint: AUTHORIZE_ENDPOINT,
+      // Kept at /token (1.x would default to /oauth/token) so the advertised metadata, and every
+      // client that cached it, stays the same as under 0.x.
+      tokenEndpoint: TOKEN_ENDPOINT,
+      clientRegistrationEndpoint: REGISTRATION_ENDPOINT,
+    });
+    const resourceServers = new Map(
+      [...mcpHandlers].map(([path, handler]) => [
+        path,
+        new OAuthResourceServer<Env, OAuthProps>({
+          resourceMetadata: { resource: `${origin}${path}`, authorization_servers: [origin] },
+          validateToken: (env) => (resource, token) => authorizationServer.validateToken<OAuthProps>(resource, token, env),
+          handler,
+        }),
+      ]),
+    );
+    const roles = { authorizationServer, resourceServers };
+    // Evict the least recently used origin only, so a client cycling extra hostnames or ports can't
+    // knock the busy real origin's roles out of the cache.
+    const oldest = rolesByOrigin.keys().next();
+    if (rolesByOrigin.size >= MAX_CACHED_ORIGINS && !oldest.done) rolesByOrigin.delete(oldest.value);
+    rolesByOrigin.set(origin, roles);
+    return roles;
+  }
 
   return {
     async fetch(request, env, ctx) {
       const url = new URL(request.url);
+
+      // 1.x only accepts an https issuer and resource (http only on loopback, for `wrangler dev`), so
+      // plain http on the real hostname is sent to https rather than failing the constructor. This
+      // runs before the shared-token bypass too, so no request is ever served over plain http.
+      if (url.protocol === "http:" && !isLoopbackHost(url.hostname)) {
+        url.protocol = "https:";
+        return Response.redirect(url.toString(), 308);
+      }
+
       const direct = mcpHandlers.get(url.pathname);
       if (direct && bearerTokenMatches(request, env.MCP_SHARED_TOKEN)) {
         return direct.fetch(request, env, ctx);
       }
-      if (request.method === "POST" && (url.pathname === "/token" || url.pathname === "/register")) {
-        const guarded = await guardAnonymousOAuthPost(request, env, url.pathname);
-        if (guarded instanceof Response) return guarded;
-        return provider.fetch(guarded, env, ctx);
+
+      const mcpPath = findMcpPath(url.pathname, mcpHandlers.keys());
+      const isProtectedResourceMetadata =
+        url.pathname === PROTECTED_RESOURCE_METADATA_PREFIX || url.pathname.startsWith(`${PROTECTED_RESOURCE_METADATA_PREFIX}/`);
+      const needsOAuth =
+        mcpPath !== undefined ||
+        isProtectedResourceMetadata ||
+        AUTHORIZATION_SERVER_PATHS.has(url.pathname) ||
+        url.pathname === AUTHORIZE_ENDPOINT;
+      // The landing page and the portal need no OAuth role, so they never build or wait on one.
+      if (!needsOAuth) return authorizeHandler.fetch(request, env, ctx);
+
+      let roles: OAuthRoles<Env>;
+      try {
+        roles = rolesFor(url.origin);
+      } catch (err) {
+        // The library refused this origin as an issuer or resource (isLoopbackHost and its own rule
+        // disagree on some host). Refuse the request rather than answering with an unhandled 500.
+        console.error(`[oauth] cannot serve OAuth on origin ${url.origin}:`, err instanceof Error ? err.message : err);
+        return new Response("OAuth is not available on this origin.", { status: 421 });
       }
-      return provider.fetch(request, env, ctx);
+
+      if (mcpPath) return roles.resourceServers.get(mcpPath)!.fetch(request, env, ctx);
+
+      if (isProtectedResourceMetadata) {
+        const metadataPath = findMcpPath(url.pathname.slice(PROTECTED_RESOURCE_METADATA_PREFIX.length), mcpHandlers.keys());
+        if (metadataPath) return roles.resourceServers.get(metadataPath)!.fetch(request, env, ctx);
+        return new Response(null, { status: 404 });
+      }
+
+      if (AUTHORIZATION_SERVER_PATHS.has(url.pathname)) {
+        if (request.method === "POST" && (url.pathname === TOKEN_ENDPOINT || url.pathname === REGISTRATION_ENDPOINT)) {
+          const guarded = await guardAnonymousOAuthPost(request, env, url.pathname);
+          if (guarded instanceof Response) return guarded;
+          return roles.authorizationServer.fetch(guarded, env, ctx);
+        }
+        return roles.authorizationServer.fetch(request, env, ctx);
+      }
+
+      // Only /authorize is left. The helpers go on a copy, so helpers bound to this origin's
+      // authorization server never leak onto the shared env object MCP agents and later requests see.
+      return authorizeHandler.fetch(request, { ...env, OAUTH_PROVIDER: roles.authorizationServer.getOAuthApi(env) }, ctx);
     },
   };
 }
