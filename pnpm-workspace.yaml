@@ -7,7 +7,7 @@ packages:
 # Nov 2026). Each stays inside the major the parent package already asks for. Drop an entry once
 # the lockfile resolves past it on its own.
 overrides:
-  fast-uri@3: ^3.1.9
+  fast-uri@3: ^4.0.0
   ip-address@10: ^10.7.4
   qs@6: ^6.16.1
   body-parser@2: ^2.4.0
