@@ -10,6 +10,7 @@
     "automerge": false
   },
   "vulnerabilityAlerts": {
+    "enabled": true,
     "automerge": false
   },
   "packageRules": [
@@ -39,6 +40,21 @@
       "description": "CI installs pnpm from the pnpm/action-setup version input, and Node is the Worker build runtime. Both stay manual.",
       "matchDepNames": ["pnpm", "node"],
       "automerge": false
+    },
+    {
+      "description": "Overrides in pnpm-workspace.yaml are security floors for transitive dependencies. A major bump forces the parent onto a version it may not support, so only minor and patch updates are proposed. Raise a floor's major by hand. Security-fix PRs still come through, because vulnerabilityAlerts.enabled is applied after packageRules.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["pnpm-workspace.overrides"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "For a 0.x floor (such as sharp@0) a minor bump is the breaking step, so it is blocked too.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["pnpm-workspace.overrides"],
+      "matchCurrentValue": "/^[\\^~]?0\\./",
+      "matchUpdateTypes": ["minor"],
+      "enabled": false
     }
   ]
 }
