@@ -30,7 +30,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.6.1",
     "@cloudflare/workers-oauth-provider": "1.2.4",
-    "jose": "6.2.16",
+    "jose": "6.2.17",
     "typescript": "6.0.3",
     "vitest": "5.1.0",
     "workers-oauth-provider-v0": "npm:@cloudflare/workers-oauth-provider@0.10.4",
