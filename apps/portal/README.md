@@ -2,7 +2,7 @@
 
 The credential-management web app for the collection. Not an MCP server, and not its own deployable
 Worker anymore — a plain [Hono](https://hono.dev) app (`"exports": { ".": "./src/app.ts" }`) mounted
-by `apps/gateway` as the OAuth provider's `defaultHandler`, under `/admin/*`. See
+by `apps/gateway` behind its OAuth routing (`buildMultiServerOAuthWorker`), under `/admin/*`. See
 [`README.md`](../../README.md#architecture) at the repo root for how this fits with the gateway and
 the 7 MCP servers.
 

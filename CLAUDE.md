@@ -56,7 +56,8 @@ server plus the credential-management portal, sharing three packages:
   build it ever sees a real upstream key.
 - **`apps/portal`** — the credential-management dashboard, Connect page, and per-server credential
   forms. **Not its own deployable Worker anymore** — it's a library (`"exports": { ".": "./src/app.ts"
-  }`) that `apps/gateway` mounts as the OAuth provider's `defaultHandler`, under `/admin/*`. It
+  }`) that `apps/gateway` mounts behind its OAuth routing
+  (`buildMultiServerOAuthWorker`), under `/admin/*`. It
   authorizes its own routes in code (`verifyAccessJwt` from `@iolab/mcp-kit/access`, checked as Hono
   middleware on `/admin/*`) rather than relying on Cloudflare Access to cover the whole hostname — see
   the note on Access scoping below. `/` (outside `/admin`) is a separate, minimal, public landing page
@@ -66,24 +67,28 @@ Each server (`servers/*`) is a Durable-Object-backed `McpAgent` (Cloudflare Agen
 its own Worker — it's a package exporting only an `McpAgent` subclass (`"exports": { ".":
 "./src/agent.ts" }`), registered into the gateway's server list (`apps/gateway/src/servers.ts`) and
 served over Streamable HTTP at `/{slug}/mcp` (e.g. `/nz-govt/mcp`) by
-`buildMultiServerOAuthWorker` — one shared `OAuthProvider` instance for every registered server, not
-one per server. `/{slug}/mcp` accepts either the shared `MCP_SHARED_TOKEN` bearer (checked first, as a
-per-path bypass — this is what Claude Code uses, since it connects server-to-server and can't complete
+`buildMultiServerOAuthWorker` — one shared `OAuthAuthorizationServer` for every registered server, plus
+one `OAuthResourceServer` per `/{slug}/mcp` (`@cloudflare/workers-oauth-provider` 1.x role classes).
+`/{slug}/mcp` accepts either the shared `MCP_SHARED_TOKEN` bearer (checked first, as a per-path bypass
+— this is what Claude Code uses, since it connects server-to-server and can't complete
 an interactive login) or an OAuth access token from the one shared authorization server (what
 claude.ai's custom-connector flow uses, now working identically for every registered server with no
-per-server opt-in). The OAuth provider's `/authorize` endpoint and the portal's `/admin`, `/admin/*`
+per-server opt-in). The `/authorize` endpoint and the portal's `/admin`, `/admin/*`
 are the only paths gated by Cloudflare Access (one Access application, one AUD), with `/admin/*` also
 re-checked in application code; everything else (`/{slug}/mcp`, `/token`, `/register`, the
 `.well-known` discovery documents) stays public for machine-to-machine calls; see `docs/SETUP.md`.
 
 **Collapsing to one authorization server removed the per-server OAuth-token isolation the old layout
-had "for free."** `/authorize` mitigates this by requiring an RFC 8707 `resource` parameter naming
-exactly one registered server's `/{slug}/mcp` path (`validateResourceForRegisteredPath` in
-`packages/mcp-kit/src/oauth.ts`) — missing, multiple, cross-origin, origin-only, or
-unregistered-path `resource` values are all rejected before a grant is created. This is deliberately
-on by default; `DISABLE_RESOURCE_ENFORCEMENT=true` is a documented cutover escape hatch, not something
-to reach for casually. `completeAuthorization` also always passes `revokeExistingGrants: false` — the
-library's default (revoke every prior grant for the same user+client on a new grant) would otherwise
+had "for free."** The authorization server declares each `https://<host>/{slug}/mcp` as its own RFC 8707
+resource with no default, so the library refuses an authorization whose `resource` is missing,
+repeated with different values, cross-origin, origin-only or unregistered, and each resource server
+refuses another server's token. Do **not** replace this with one `OAuthProvider` and an origin-wide
+`resource`: every existing grant is bound to its own `/{slug}/mcp` path (1.x compares audiences
+exactly), so that would sign out every connector and make each token valid on every server.
+`apps/gateway/test/oauth-v0-sessions.test.ts` creates sessions with the old 0.10.4 library (aliased
+as `workers-oauth-provider-v0`) and proves they still work, on their own path only.
+`completeAuthorization` also always passes `revokeExistingGrants: false` — the library's default
+(revoke every prior grant for the same user+client on a new grant) would otherwise
 let authorizing connector B silently kill connector A's already-working token, since every registered
 server now shares one `userId` (the operator email) and possibly one DCR `client_id` across
 connectors. Both of these are regression-tested in `apps/gateway/test/multi-server-security.test.ts` —

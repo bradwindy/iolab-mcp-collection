@@ -95,8 +95,8 @@ importers:
         specifier: 1.6.1
         version: 1.6.1(@types/node@26.6.6)(vitest@5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.0)))
       '@cloudflare/workers-oauth-provider':
-        specifier: 0.10.4
-        version: 0.10.4
+        specifier: 1.2.4
+        version: 1.2.4
       jose:
         specifier: 6.2.17
         version: 6.2.17
@@ -106,6 +106,9 @@ importers:
       vitest:
         specifier: 5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.0))
+      workers-oauth-provider-v0:
+        specifier: npm:@cloudflare/workers-oauth-provider@0.10.4
+        version: '@cloudflare/workers-oauth-provider@0.10.4'
       wrangler:
         specifier: 4.158.0
         version: 4.158.0(@types/node@26.6.6)
@@ -144,8 +147,8 @@ importers:
   packages/mcp-kit:
     dependencies:
       '@cloudflare/workers-oauth-provider':
-        specifier: 0.10.4
-        version: 0.10.4
+        specifier: 1.2.4
+        version: 1.2.4
       jose:
         specifier: ^6.2.3
         version: 6.2.17
@@ -675,6 +678,9 @@ packages:
 
   '@cloudflare/workers-oauth-provider@0.10.4':
     resolution: {integrity: sha512-KIS54OMew3ZtlnWqbqGYaX+7deCu9CY/lFy5R84VSNYT8W1oPir9ANRmiVTvyUaQL1hCgE0NGXImR6IyZ1VZfw==}
+
+  '@cloudflare/workers-oauth-provider@1.2.4':
+    resolution: {integrity: sha512-ayo6Z8DBHdAxwDpplFU8BrEoxoSn6wNo+E7ypTENRHUOc8R89A8/+nZ+a8pMZjjXzF0JXfpYXhw/7qqG+DC18Q==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2767,6 +2773,8 @@ snapshots:
     optional: true
 
   '@cloudflare/workers-oauth-provider@0.10.4': {}
+
+  '@cloudflare/workers-oauth-provider@1.2.4': {}
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:

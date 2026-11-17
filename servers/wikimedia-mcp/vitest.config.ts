@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   // See servers/nz-govt-mcp/vitest.config.ts for why: this server has no wrangler.jsonc of its
   // own, so tests run against the shared gateway config, whose module scope constructs every
-  // registered agent plus the shared OAuthProvider.
+  // registered agent plus the shared OAuth wrapper.
   test: { testTimeout: 15000 },
   plugins: [
     cloudflareTest({

@@ -36,8 +36,8 @@ declare global {
     WAYBACK_PROXY_URL?: string;
     /** Shared secret for that proxy (`X-Wayback-Key`). Set via `wrangler secret put WAYBACK_PROXY_KEY`. */
     WAYBACK_PROXY_KEY?: string;
-    /** Injected by @cloudflare/workers-oauth-provider; see `buildMultiServerOAuthWorker` in @iolab/mcp-kit. */
-    OAUTH_PROVIDER: OAuthHelpers;
+    /** Set per request for /authorize only; see `buildMultiServerOAuthWorker` in @iolab/mcp-kit. */
+    OAUTH_PROVIDER?: OAuthHelpers;
     /**
      * This gateway's Cloudflare Zero Trust team domain, e.g. `myteam.cloudflareaccess.com`, used
      * to verify the Access JWT on /authorize and (via the portal's own check) /admin/*.
@@ -54,11 +54,5 @@ declare global {
      * portal's own check, to use /admin/*). Set via `wrangler secret put ACCESS_EMAIL`.
      */
     ACCESS_EMAIL: string;
-    /**
-     * Escape hatch for cutover — see OAuthMcpEnv in @iolab/mcp-kit's oauth.ts for the full
-     * explanation. Leave unset; only set to the exact string "true" if a real OAuth client turns
-     * out not to send an RFC 8707 `resource` parameter the way claude.ai is expected to.
-     */
-    DISABLE_RESOURCE_ENFORCEMENT?: string;
   }
 }

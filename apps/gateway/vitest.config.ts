@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   // See servers/*/vitest.config.ts for why: constructing every registered agent plus the shared
-  // OAuthProvider at module scope is real cold-start cost, and under heavy concurrent CI load the
+  // OAuth wrapper at module scope is real cold-start cost, and under heavy concurrent CI load the
   // default 5s test timeout has been observed to trip on nothing more than resource contention.
   test: { testTimeout: 15000 },
   plugins: [
