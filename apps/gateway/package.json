@@ -34,6 +34,6 @@
     "typescript": "6.0.3",
     "vitest": "5.1.0",
     "workers-oauth-provider-v0": "npm:@cloudflare/workers-oauth-provider@0.10.4",
-    "wrangler": "4.160.1"
+    "wrangler": "4.161.0"
   }
 }
