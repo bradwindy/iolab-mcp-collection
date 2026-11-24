@@ -2,6 +2,7 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:best-practices", ":semanticCommits"],
   "enabledManagers": ["npm", "github-actions"],
+  "ignoreDeps": ["workers-oauth-provider-v0"],
   "automergeType": "pr",
   "platformAutomerge": false,
   "ignoreTests": false,
@@ -15,11 +16,15 @@
   },
   "packageRules": [
     {
+      "description": "No update PR before its release is 7 days old. pnpm-workspace.yaml sets the same wait (minimumReleaseAge), so a PR for a newer release could not resolve its lockfile anyway. Version pins (updateType pin) are left out, as in the pin rule below. Digest updates kept the 7-day wait they already had. Security-alert PRs skip this wait; one for a fix under 7 days old needs a minimumReleaseAgeExclude entry in pnpm-workspace.yaml.",
+      "matchUpdateTypes": ["major", "minor", "patch", "pinDigest", "digest"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
       "description": "Minor, patch and digest updates automerge once the CI build job passes and the release is 7 days old. The build job runs typecheck, lint, workerd tests, build and a wrangler deploy dry run.",
       "matchManagers": ["npm", "github-actions"],
       "matchUpdateTypes": ["minor", "patch", "pinDigest", "digest"],
-      "automerge": true,
-      "minimumReleaseAge": "7 days"
+      "automerge": true
     },
     {
       "description": "Majors stay manual.",
@@ -54,6 +59,11 @@
       "matchDepTypes": ["pnpm-workspace.overrides"],
       "matchCurrentValue": "/^[\\^~]?0\\./",
       "matchUpdateTypes": ["minor"],
+      "enabled": false
+    },
+    {
+      "description": "Why ignoreDeps lists workers-oauth-provider-v0: it is a test-only npm alias pinned to @cloudflare/workers-oauth-provider 0.10.4 on purpose, so apps/gateway/test/oauth-v0-sessions.test.ts can create sessions with the old library and prove they still work on 1.x. Updating it would defeat that test. ignoreDeps also stops security-alert PRs, which bypass packageRules; this rule only records the reason.",
+      "matchDepNames": ["workers-oauth-provider-v0"],
       "enabled": false
     }
   ]

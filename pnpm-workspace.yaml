@@ -21,3 +21,17 @@ overrides:
   source-map-js@1: ^1.2.2
   browserslist@4: ^4.28.7
   baseline-browser-mapping@2: ^2.11.0
+
+# Only resolve versions published at least 7 days ago (in minutes), matching Renovate's own 7-day
+# wait. This also covers what Renovate does not: lock file maintenance, and the transitive
+# dependencies a Renovate bump pulls in. A security fix younger than this needs a
+# minimumReleaseAgeExclude entry (e.g. `- pkg@1.2.3`) until it ages; remove the entry afterwards.
+minimumReleaseAge: 10080
+
+# Dependency build scripts pnpm may run. Anything not listed stays blocked, and pnpm 11 and later fail the
+# install on an undecided one (ERR_PNPM_IGNORED_BUILDS). esbuild and workerd use postinstall to check
+# their platform binary. core-js-pure's postinstall only prints a funding message.
+allowBuilds:
+  esbuild: true
+  workerd: true
+  core-js-pure: false
